@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UrlPatternType {
+  HOME
+  BLOG
+  LANDING
+  STATIC
+  UTILITY
+  OTHER
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model Url {
+  id           String         @id @default(cuid())
+  sourceUrl    String         @unique
+  path         String
+  lang         String
+  patternType  UrlPatternType
+  slug         String
+  groupKey     String
+  sourceLastmod DateTime?
+  priority     Float?
+  changefreq   String?
+  isHidden     Boolean        @default(false)
+  isManual     Boolean        @default(false)
+  isActive     Boolean        @default(true)
+  firstSeenAt  DateTime       @default(now())
+  lastSeenAt   DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([patternType])
+  @@index([groupKey])
+  @@index([isHidden])
+  @@index([isActive])
+}
+
+model SyncRun {
+  id           String     @id @default(cuid())
+  status       SyncStatus @default(RUNNING)
+  startedAt    DateTime   @default(now())
+  finishedAt   DateTime?
+  totalFetched Int?
+  added        Int?
+  updated      Int?
+  removed      Int?
+  errorMessage String?
+
+  @@index([startedAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}

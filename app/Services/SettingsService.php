@@ -1,0 +1,50 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Setting;
+use InvalidArgumentException;
+
+class SettingsService
+{
+    private const KEY_SYNC_INTERVAL_HOURS = 'sync_interval_hours';
+    private const KEY_SOURCE_SITEMAP_URL = 'source_sitemap_url';
+
+    public function getSyncIntervalHours(): int
+    {
+        $stored = $this->get(self::KEY_SYNC_INTERVAL_HOURS);
+        if ($stored !== null) {
+            return (int) $stored;
+        }
+
+        return (int) config('sitemap.default_sync_interval_hours');
+    }
+
+    public function setSyncIntervalHours(int $hours): void
+    {
+        if ($hours <= 0) {
+            throw new InvalidArgumentException('Sync interval must be a positive number of hours');
+        }
+        $this->set(self::KEY_SYNC_INTERVAL_HOURS, (string) $hours);
+    }
+
+    public function getSourceSitemapUrl(): string
+    {
+        return $this->get(self::KEY_SOURCE_SITEMAP_URL) ?? config('sitemap.source_sitemap_url');
+    }
+
+    public function setSourceSitemapUrl(string $url): void
+    {
+        $this->set(self::KEY_SOURCE_SITEMAP_URL, $url);
+    }
+
+    private function get(string $key): ?string
+    {
+        return Setting::query()->find($key)?->value;
+    }
+
+    private function set(string $key, string $value): void
+    {
+        Setting::query()->updateOrCreate(['key' => $key], ['value' => $value]);
+    }
+}

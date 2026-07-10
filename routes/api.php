@@ -1,0 +1,24 @@
+<?php
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\SyncController;
+use App\Http\Controllers\Api\UrlsController;
+use Illuminate\Support\Facades\Route;
+
+Route::post('/auth/login', [AuthController::class, 'login']);
+
+Route::middleware('auth.token')->group(function () {
+    Route::get('/settings', [SettingsController::class, 'show']);
+    Route::put('/settings', [SettingsController::class, 'update']);
+
+    Route::post('/sync/run', [SyncController::class, 'run']);
+    Route::get('/sync/runs', [SyncController::class, 'history']);
+    Route::get('/sync/status', [SyncController::class, 'status']);
+
+    Route::get('/urls', [UrlsController::class, 'index']);
+    Route::post('/urls', [UrlsController::class, 'store']);
+    Route::patch('/urls/bulk-visibility', [UrlsController::class, 'bulkVisibility']);
+    Route::patch('/urls/{url}', [UrlsController::class, 'update']);
+    Route::delete('/urls/{url}', [UrlsController::class, 'destroy']);
+});

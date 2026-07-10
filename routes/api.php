@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/login', [AuthController::class, 'login']);
 
 Route::middleware('auth.token')->group(function () {
+    Route::patch('/auth/credentials', [AuthController::class, 'updateCredentials']);
+
     Route::get('/settings', [SettingsController::class, 'show']);
     Route::put('/settings', [SettingsController::class, 'update']);
 

@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
-#[Fillable([
-    'source_url', 'path', 'lang', 'pattern_type', 'slug', 'group_key',
-    'source_lastmod', 'priority', 'changefreq', 'is_hidden', 'is_manual',
-    'is_active', 'first_seen_at', 'last_seen_at',
-])]
 class Url extends Model
 {
     public const PATTERN_TYPES = ['HOME', 'BLOG', 'LANDING', 'STATIC', 'UTILITY', 'OTHER'];
+
+    protected $fillable = [
+        'source_url', 'path', 'lang', 'pattern_type', 'slug', 'group_key',
+        'source_lastmod', 'priority', 'changefreq', 'is_hidden', 'is_manual',
+        'is_active', 'first_seen_at', 'last_seen_at',
+    ];
 
     protected function casts(): array
     {

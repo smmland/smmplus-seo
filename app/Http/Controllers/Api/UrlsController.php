@@ -37,7 +37,8 @@ class UrlsController extends Controller
         if (isset($data['lang'])) $query->where('lang', $data['lang']);
         if (isset($data['hidden'])) $query->where('is_hidden', $data['hidden']);
         if (isset($data['active'])) $query->where('is_active', $data['active']);
-        if (isset($data['search'])) $query->where('source_url', 'ilike', '%' . $data['search'] . '%');
+        // MySQL/MariaDB's default collation (utf8mb4_unicode_ci) is already case-insensitive for LIKE.
+        if (isset($data['search'])) $query->where('source_url', 'like', '%' . $data['search'] . '%');
 
         $total = (clone $query)->count();
         $items = $query->orderBy('source_url')

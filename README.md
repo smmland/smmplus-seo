@@ -1,7 +1,7 @@
 # SMM Plus SEO — Sitemap Sync & Control Panel (Laravel backend)
 
 Fetches `smm.plus`'s sitemap, categorizes every URL by shape (home/blog/landing/static/utility),
-stores it in PostgreSQL, and republishes a categorized sitemap index with hreflang alternates
+stores it in MySQL/MariaDB, and republishes a categorized sitemap index with hreflang alternates
 linking locale variants together. Runs on a dedicated subdomain (`seo.smm.plus`), independent of
 the main site's codebase (no access to it is required or used).
 

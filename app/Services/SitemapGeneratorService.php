@@ -25,7 +25,7 @@ class SitemapGeneratorService
     private const CACHE_TTL_SECONDS = 86400;
 
     /**
-     * @return array{index:string, categories:array<string,string>, generated_at:string}
+     * @return array{index:string, categories:array<string,?string>, generated_at:string}
      */
     public function generate(): array
     {
@@ -55,7 +55,9 @@ class SitemapGeneratorService
 
         foreach (self::CATEGORIES as $category) {
             $list = $byCategory[$category];
-            $categories[$category] = $this->buildUrlsetXml($list, $byGroupKey);
+            // An empty <urlset> is technically well-formed but Google Search Console flags it
+            // as an error ("couldn't fetch" / no valid URLs), so skip publishing it entirely.
+            $categories[$category] = $list->isNotEmpty() ? $this->buildUrlsetXml($list, $byGroupKey) : null;
             $categoryLastmod[$category] = $list
                 ->pluck('source_lastmod')
                 ->filter()
@@ -63,7 +65,7 @@ class SitemapGeneratorService
         }
 
         $result = [
-            'index' => $this->buildIndexXml($categoryLastmod),
+            'index' => $this->buildIndexXml($categoryLastmod, $categories),
             'categories' => $categories,
             'generated_at' => now()->toIso8601String(),
         ];
@@ -139,7 +141,10 @@ class SitemapGeneratorService
         return $doc->saveXML();
     }
 
-    private function buildIndexXml(array $categoryLastmod): string
+    /**
+     * @param  array<string,?string>  $categories
+     */
+    private function buildIndexXml(array $categoryLastmod, array $categories): string
     {
         $base = rtrim(config('app.url'), '/');
 
@@ -150,6 +155,10 @@ class SitemapGeneratorService
         $doc->appendChild($index);
 
         foreach (self::CATEGORIES as $category) {
+            if ($categories[$category] === null) {
+                continue;
+            }
+
             $sitemapNode = $doc->createElement('sitemap');
             $index->appendChild($sitemapNode);
             $sitemapNode->appendChild($doc->createElement('loc', "{$base}/sitemap-{$category}.xml"));

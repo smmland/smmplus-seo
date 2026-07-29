@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Clusters\Seo;
 use App\Services\SettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -15,9 +14,9 @@ class Settings extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static ?string $cluster = Seo::class;
-
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
+
+    protected static ?string $navigationGroup = 'SEO';
 
     protected static string $view = 'filament.pages.settings';
 

@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Clusters\Seo;
 use App\Filament\Resources\SyncRunResource\Pages;
 use App\Models\SyncRun;
 use Filament\Resources\Resource;
@@ -13,9 +12,9 @@ class SyncRunResource extends Resource
 {
     protected static ?string $model = SyncRun::class;
 
-    protected static ?string $cluster = Seo::class;
-
     protected static ?string $navigationIcon = 'heroicon-o-arrow-path';
+
+    protected static ?string $navigationGroup = 'SEO';
 
     protected static ?string $navigationLabel = 'Sync History';
 

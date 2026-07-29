@@ -17,9 +17,9 @@ class GeneralSettings extends Page implements HasForms
 
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
 
-    protected static ?string $navigationLabel = 'تنظیمات کلی';
+    protected static ?string $navigationLabel = 'General Settings';
 
-    protected static ?string $title = 'تنظیمات کلی';
+    protected static ?string $title = 'General Settings';
 
     protected static string $view = 'filament.pages.general-settings';
 
@@ -39,23 +39,23 @@ class GeneralSettings extends Page implements HasForms
         return $form
             ->schema([
                 TextInput::make('email')
-                    ->label('ایمیل ادمین')
+                    ->label('Admin email')
                     ->email()
                     ->required(),
 
                 TextInput::make('newPassword')
-                    ->label('رمز عبور جدید')
+                    ->label('New password')
                     ->password()
                     ->revealable()
                     ->minLength(8)
-                    ->helperText('در صورتی که نمی‌خواهید رمز عبور تغییر کند، این فیلد را خالی بگذارید.'),
+                    ->helperText('Leave this field empty if you don\'t want to change the password.'),
 
                 TextInput::make('currentPassword')
-                    ->label('رمز عبور فعلی')
+                    ->label('Current password')
                     ->password()
                     ->revealable()
                     ->required()
-                    ->helperText('برای تایید تغییرات، رمز عبور فعلی خود را وارد کنید.'),
+                    ->helperText('Enter your current password to confirm these changes.'),
             ])
             ->statePath('data');
     }
@@ -68,7 +68,7 @@ class GeneralSettings extends Page implements HasForms
 
         if (! Hash::check($data['currentPassword'], $user->password)) {
             Notification::make()
-                ->title('رمز عبور فعلی اشتباه است')
+                ->title('Current password is incorrect')
                 ->danger()
                 ->send();
 
@@ -90,7 +90,7 @@ class GeneralSettings extends Page implements HasForms
         ]);
 
         Notification::make()
-            ->title('تنظیمات ذخیره شد')
+            ->title('Settings saved')
             ->success()
             ->send();
     }

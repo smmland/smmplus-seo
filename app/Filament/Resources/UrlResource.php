@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Clusters\Seo;
 use App\Filament\Resources\UrlResource\Pages;
 use App\Models\Url;
 use App\Services\SitemapGeneratorService;
@@ -15,9 +16,9 @@ class UrlResource extends Resource
 {
     protected static ?string $model = Url::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $cluster = Seo::class;
 
-    protected static ?string $navigationGroup = 'Sitemap';
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     protected static ?string $navigationLabel = 'URLs';
 

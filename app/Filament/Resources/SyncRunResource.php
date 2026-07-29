@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Clusters\Seo;
 use App\Filament\Resources\SyncRunResource\Pages;
 use App\Models\SyncRun;
 use Filament\Resources\Resource;
@@ -12,9 +13,9 @@ class SyncRunResource extends Resource
 {
     protected static ?string $model = SyncRun::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-arrow-path';
+    protected static ?string $cluster = Seo::class;
 
-    protected static ?string $navigationGroup = 'Sitemap';
+    protected static ?string $navigationIcon = 'heroicon-o-arrow-path';
 
     protected static ?string $navigationLabel = 'Sync History';
 
@@ -43,16 +44,12 @@ class SyncRunResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('total_fetched')
                     ->label('Fetched')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('added')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('updated')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('removed')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('error_message')
                     ->limit(80)

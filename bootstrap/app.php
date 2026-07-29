@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\ApiTokenMiddleware;
+use App\Http\Middleware\HandleGatewayCors;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,7 +15,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias(['auth.token' => ApiTokenMiddleware::class]);
+        $middleware->alias([
+            'auth.token' => ApiTokenMiddleware::class,
+            'gateway.cors' => HandleGatewayCors::class,
+        ]);
+
+        // Laravel's default global CORS middleware falls back to a wildcard allowed-origin
+        // policy without a published config/cors.php, which would silently override the
+        // origin allowlist HandleGatewayCors enforces below. Nothing else in this app needs
+        // browser-based cross-origin access, so drop it rather than let it clobber that.
+        $middleware->remove(\Illuminate\Http\Middleware\HandleCors::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

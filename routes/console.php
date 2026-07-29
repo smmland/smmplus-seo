@@ -12,3 +12,7 @@ Artisan::command('inspire', function () {
 // interval (Setting: sync_interval_hours), so changing it in the panel takes effect
 // without touching this file or the server crontab.
 Schedule::command('sitemap:sync')->everyFifteenMinutes()->withoutOverlapping();
+
+// Keeps the gateway request log (one row per free-service request) from growing
+// unbounded on a busy gateway.
+Schedule::command('gateway:prune-logs')->daily();

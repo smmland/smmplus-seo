@@ -39,7 +39,7 @@ class GatewayStats extends Page
     {
         GatewayBlockedIp::query()->updateOrCreate(
             ['ip' => $ip],
-            ['is_active' => true, 'note' => 'Blocked from statistics page'],
+            ['is_active' => true, 'blocked_until' => null, 'note' => 'Blocked from statistics page'],
         );
 
         unset($this->topIps);

@@ -63,6 +63,17 @@ class GatewayBlockedIpResource extends Resource
                     ->boolean()
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('blocked_until')
+                    ->label('Auto-expires')
+                    ->dateTime()
+                    ->placeholder('Never (manual)')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('offense_count')
+                    ->label('Offenses')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Added')
                     ->dateTime()
@@ -80,7 +91,11 @@ class GatewayBlockedIpResource extends Resource
                     ->label(fn (GatewayBlockedIp $record) => $record->is_active ? 'Unblock' : 'Block')
                     ->icon(fn (GatewayBlockedIp $record) => $record->is_active ? 'heroicon-o-lock-open' : 'heroicon-o-lock-closed')
                     ->color(fn (GatewayBlockedIp $record) => $record->is_active ? 'success' : 'danger')
-                    ->action(fn (GatewayBlockedIp $record) => $record->update(['is_active' => ! $record->is_active])),
+                    ->action(fn (GatewayBlockedIp $record) => $record->update(
+                        // Re-blocking manually from here is a permanent block, not a timed
+                        // auto-block, so clear any leftover expiry from a past auto-block.
+                        $record->is_active ? ['is_active' => false] : ['is_active' => true, 'blocked_until' => null],
+                    )),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
@@ -89,7 +104,7 @@ class GatewayBlockedIpResource extends Resource
                     Tables\Actions\BulkAction::make('block')
                         ->label('Block')
                         ->icon('heroicon-o-lock-closed')
-                        ->action(fn ($records) => GatewayBlockedIp::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => true]))
+                        ->action(fn ($records) => GatewayBlockedIp::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => true, 'blocked_until' => null]))
                         ->deselectRecordsAfterCompletion(),
 
                     Tables\Actions\BulkAction::make('unblock')

@@ -122,7 +122,7 @@ class GatewayRequestLogResource extends Resource
                     ->action(function (GatewayRequestLog $record) {
                         GatewayBlockedIp::query()->updateOrCreate(
                             ['ip' => $record->ip],
-                            ['is_active' => true, 'note' => 'Blocked from request log'],
+                            ['is_active' => true, 'blocked_until' => null, 'note' => 'Blocked from request log'],
                         );
 
                         Notification::make()

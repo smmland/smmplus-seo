@@ -2,8 +2,12 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\GatewayStats\OutcomeBreakdownChart;
+use App\Filament\Pages\GatewayStats\RequestsOverTimeChart;
+use App\Filament\Pages\GatewayStats\ServiceVolumeChart;
 use App\Models\GatewayBlockedIp;
 use App\Models\GatewayRequestLog;
+use App\Support\GatewayStatsPeriod;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Carbon;
@@ -24,6 +28,28 @@ class GatewayStats extends Page
     #[Url]
     public string $period = 'today';
 
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            RequestsOverTimeChart::class,
+            OutcomeBreakdownChart::class,
+            ServiceVolumeChart::class,
+        ];
+    }
+
+    public function getHeaderWidgetsColumns(): int | string | array
+    {
+        return [
+            'default' => 1,
+            'lg' => 2,
+        ];
+    }
+
+    public function getWidgetData(): array
+    {
+        return ['period' => $this->period];
+    }
+
     public function updatedPeriod(): void
     {
         unset(
@@ -33,6 +59,8 @@ class GatewayStats extends Page
             $this->topIps,
             $this->ipServiceBreakdown,
         );
+
+        $this->dispatch('gateway-period-updated', period: $this->period);
     }
 
     public function blockIp(string $ip): void
@@ -49,12 +77,7 @@ class GatewayStats extends Page
 
     private function periodStart(): ?Carbon
     {
-        return match ($this->period) {
-            'today' => now()->startOfDay(),
-            '7days' => now()->subDays(7),
-            '30days' => now()->subDays(30),
-            default => null,
-        };
+        return GatewayStatsPeriod::start($this->period);
     }
 
     private function baseQuery()

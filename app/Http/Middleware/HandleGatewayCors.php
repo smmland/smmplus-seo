@@ -14,10 +14,16 @@ class HandleGatewayCors
     public function handle(Request $request, Closure $next): Response
     {
         $origin = $request->headers->get('Origin', '');
-        $isAllowedOrigin = in_array($origin, $this->settings->getAllowedOrigins(), true);
+        $isAllowedOrigin = $origin !== '' && in_array($origin, $this->settings->getAllowedOrigins(), true);
 
         if ($request->getMethod() === 'OPTIONS') {
             $response = response('', 204);
+        } elseif (! $isAllowedOrigin) {
+            // CORS headers alone only stop a browser from *reading* a cross-origin response -
+            // the request still reaches the server either way. Reject outright here so a
+            // disallowed origin (or a non-browser caller with no Origin header at all) can't
+            // trigger a real order or consume rate-limit quota in the first place.
+            return response()->json(['ok' => false, 'error' => 'Origin not allowed'], 403);
         } else {
             $response = $next($request);
         }

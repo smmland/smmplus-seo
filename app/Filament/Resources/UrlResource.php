@@ -1,0 +1,178 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\UrlResource\Pages;
+use App\Models\Url;
+use App\Services\SitemapGeneratorService;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+
+class UrlResource extends Resource
+{
+    protected static ?string $model = Url::class;
+
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    protected static ?string $navigationGroup = 'Sitemap';
+
+    protected static ?string $navigationLabel = 'URLs';
+
+    protected static ?string $recordTitleAttribute = 'source_url';
+
+    public static function form(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Section::make()
+                ->schema([
+                    Forms\Components\TextInput::make('source_url')
+                        ->label('URL')
+                        ->url()
+                        ->required()
+                        ->maxLength(2048)
+                        ->unique(ignoreRecord: true)
+                        // Only editable on create - once synced/classified, editing the URL itself
+                        // would desync path/slug/group_key, which only the classifier should own.
+                        ->disabled(fn (?Url $record) => $record !== null)
+                        ->dehydrated(),
+
+                    Forms\Components\Select::make('pattern_type')
+                        ->label('Category')
+                        ->options(array_combine(Url::PATTERN_TYPES, Url::PATTERN_TYPES))
+                        ->required()
+                        ->helperText('Changing this on an existing URL marks it as manually-managed, so future syncs will no longer auto-reclassify it.'),
+
+                    Forms\Components\TextInput::make('lang')
+                        ->label('Language code')
+                        ->maxLength(8)
+                        ->visible(fn (?Url $record) => $record === null)
+                        ->helperText('Leave blank to auto-detect from the URL path (e.g. /ar/... -> ar).'),
+
+                    Forms\Components\Toggle::make('is_hidden')
+                        ->label('Hidden from sitemap')
+                        ->visible(fn (?Url $record) => $record !== null),
+
+                    Forms\Components\TextInput::make('priority')
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(1)
+                        ->step(0.1)
+                        ->visible(fn (?Url $record) => $record !== null),
+
+                    Forms\Components\TextInput::make('changefreq')
+                        ->maxLength(20)
+                        ->visible(fn (?Url $record) => $record !== null),
+                ])
+                ->columns(1),
+        ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('source_url')
+                    ->label('URL')
+                    ->searchable()
+                    ->sortable()
+                    ->limit(60)
+                    ->copyable()
+                    ->url(fn (Url $record) => $record->source_url, shouldOpenInNewTab: true),
+
+                Tables\Columns\TextColumn::make('pattern_type')
+                    ->label('Category')
+                    ->badge()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('lang')
+                    ->label('Lang')
+                    ->badge()
+                    ->color('gray')
+                    ->sortable(),
+
+                Tables\Columns\ToggleColumn::make('is_hidden')
+                    ->label('Hidden')
+                    ->afterStateUpdated(fn () => app(SitemapGeneratorService::class)->generate()),
+
+                Tables\Columns\IconColumn::make('is_active')
+                    ->label('Active')
+                    ->boolean()
+                    ->sortable(),
+
+                Tables\Columns\IconColumn::make('is_manual')
+                    ->label('Manual')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('group_key')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('source_lastmod')
+                    ->label('Last modified')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->defaultSort('source_url')
+            ->filters([
+                Tables\Filters\SelectFilter::make('pattern_type')
+                    ->label('Category')
+                    ->options(array_combine(Url::PATTERN_TYPES, Url::PATTERN_TYPES)),
+
+                Tables\Filters\SelectFilter::make('lang')
+                    ->label('Language')
+                    ->options(fn () => Url::query()->distinct()->orderBy('lang')->pluck('lang', 'lang')->all()),
+
+                Tables\Filters\TernaryFilter::make('is_hidden')
+                    ->label('Visibility')
+                    ->trueLabel('Hidden only')
+                    ->falseLabel('Visible only'),
+
+                Tables\Filters\TernaryFilter::make('is_active')
+                    ->label('Active')
+                    ->trueLabel('Active only')
+                    ->falseLabel('Inactive only (removed from source)'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    // Mirrors the API rule: only manually-added or already-inactive rows can be deleted;
+                    // anything still coming from the source sitemap should be hidden instead.
+                    ->visible(fn (Url $record) => $record->is_manual || ! $record->is_active)
+                    ->after(fn () => app(SitemapGeneratorService::class)->generate()),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('hide')
+                        ->label('Hide from sitemap')
+                        ->icon('heroicon-o-eye-slash')
+                        ->action(function ($records) {
+                            Url::query()->whereIn('id', $records->pluck('id'))->update(['is_hidden' => true]);
+                            app(SitemapGeneratorService::class)->generate();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
+                    Tables\Actions\BulkAction::make('show')
+                        ->label('Show in sitemap')
+                        ->icon('heroicon-o-eye')
+                        ->action(function ($records) {
+                            Url::query()->whereIn('id', $records->pluck('id'))->update(['is_hidden' => false]);
+                            app(SitemapGeneratorService::class)->generate();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                ]),
+            ]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListUrls::route('/'),
+            'create' => Pages\CreateUrl::route('/create'),
+            'edit' => Pages\EditUrl::route('/{record}/edit'),
+        ];
+    }
+}

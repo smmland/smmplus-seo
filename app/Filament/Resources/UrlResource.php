@@ -107,6 +107,11 @@ class UrlResource extends Resource
                     ->boolean()
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                Tables\Columns\IconColumn::make('auto_hidden_for_translation')
+                    ->label('Hidden (untranslated)')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('group_key')
                     ->toggleable(isToggledHiddenByDefault: true),
 
@@ -136,6 +141,11 @@ class UrlResource extends Resource
                     ->label('Active')
                     ->trueLabel('Active only')
                     ->falseLabel('Inactive only (removed from source)'),
+
+                Tables\Filters\TernaryFilter::make('auto_hidden_for_translation')
+                    ->label('Hidden for translation')
+                    ->trueLabel('Auto-hidden (untranslated) only')
+                    ->falseLabel('Not auto-hidden'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

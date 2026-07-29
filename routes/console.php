@@ -20,3 +20,8 @@ Schedule::command('gateway:prune-logs')->daily();
 // Detects IPs over the configurable daily request threshold and blocks them with an
 // escalating cool-down (gated on Gateway Settings: auto_block_enabled).
 Schedule::command('gateway:auto-block-ips')->everyFiveMinutes()->withoutOverlapping();
+
+// Each blog URL is only actually re-checked once its own recheck interval has elapsed
+// (Translation Settings), so running this hourly just means newly-published or
+// newly-translated posts don't wait long to be picked up.
+Schedule::command('translation:refresh-blog-status')->hourly()->withoutOverlapping();

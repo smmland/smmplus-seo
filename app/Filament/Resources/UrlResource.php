@@ -124,6 +124,7 @@ class UrlResource extends Resource
 
                 Tables\Filters\SelectFilter::make('lang')
                     ->label('Language')
+                    ->multiple()
                     ->options(fn () => Url::query()->distinct()->orderBy('lang')->pluck('lang', 'lang')->all()),
 
                 Tables\Filters\TernaryFilter::make('is_hidden')

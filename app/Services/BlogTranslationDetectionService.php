@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Language;
 use App\Models\Url;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 class BlogTranslationDetectionService
@@ -37,33 +38,26 @@ class BlogTranslationDetectionService
      * $limit bounds how many URLs get fetched in one call, most-overdue first - this runs on a
      * host with no queue workers and a real PHP execution time limit, so an unbounded fetch loop
      * (one HTTP request per URL) is a genuine timeout risk once there are more than a couple
-     * dozen blog URLs. A large backlog just gets worked off across several runs instead.
+     * dozen blog URLs. A large backlog just gets worked off across several runs instead - either
+     * by the hourly schedule, or by clicking "Run now" again (or use pendingCount() below /
+     * refreshOne() for a single URL, to check without waiting on the batch).
      *
      * @return array{checked:int, hidden:int, unhidden:int, errors:int}
      */
     public function refresh(bool $force = false, int $limit = 200): array
     {
-        $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
+        $defaultLang = $this->defaultLang();
         $autoHideEnabled = $this->settings->isAutoHideEnabled();
         $cutoff = now()->subHours($this->settings->getRecheckIntervalHours());
 
-        $candidates = Url::query()
-            ->where('pattern_type', 'BLOG')
-            ->where('is_active', true)
-            ->where('lang', '!=', $defaultLang)
-            ->when(! $force, fn ($q) => $q->where(
-                fn ($q) => $q->whereNull('translation_checked_at')->orWhere('translation_checked_at', '<=', $cutoff),
-            ))
+        $candidates = $this->dueQuery($defaultLang, $force ? null : $cutoff)
             ->orderByRaw('translation_checked_at is not null')
             ->orderBy('translation_checked_at')
             ->limit($limit)
             ->get()
             ->groupBy('group_key');
 
-        $checked = 0;
-        $hidden = 0;
-        $unhidden = 0;
-        $errors = 0;
+        $totals = ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 0];
 
         foreach ($candidates as $groupKey => $rows) {
             $defaultRow = Url::query()
@@ -75,61 +69,141 @@ class BlogTranslationDetectionService
                 continue;
             }
 
-            [$defaultTitle, $defaultNote] = $this->fetchTitle($defaultRow->source_url);
+            [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
 
             if ($defaultTitle === null) {
-                $errors += $rows->count();
+                $totals['errors'] += $rows->count();
 
                 continue;
             }
 
             foreach ($rows as $row) {
-                // An admin removed a hide we'd set, but never got a chance to record it because
-                // this row wasn't due for a check yet. Back off for this run - just record the
-                // title-check result and leave is_hidden alone - so the override actually holds
-                // for a cycle instead of being immediately undone by the same run that noticed it.
-                $wasOverridden = $row->auto_hidden_for_translation && ! $row->is_hidden;
-                if ($wasOverridden) {
-                    $row->auto_hidden_for_translation = false;
-                }
-
-                [$title, $note] = $this->fetchTitle($row->source_url);
-                $checked++;
-
-                if ($title === null) {
-                    $errors++;
-                    $row->translation_check_note = $note;
-                    $row->save();
-
-                    continue;
-                }
-
-                $isTranslated = $this->normalize($title) !== $this->normalize($defaultTitle);
-
-                $row->translation_title = $title;
-                $row->is_translated = $isTranslated;
-                $row->translation_checked_at = now();
-                $row->translation_check_note = $note ?? $defaultNote;
-
-                if (! $wasOverridden) {
-                    if ($isTranslated) {
-                        if ($row->auto_hidden_for_translation) {
-                            $row->is_hidden = false;
-                            $row->auto_hidden_for_translation = false;
-                            $unhidden++;
-                        }
-                    } elseif ($autoHideEnabled && ! $row->is_hidden) {
-                        $row->is_hidden = true;
-                        $row->auto_hidden_for_translation = true;
-                        $hidden++;
-                    }
-                }
-
-                $row->save();
+                $this->mergeTotals($totals, $this->checkRow($row, $defaultTitle, $autoHideEnabled));
             }
         }
 
-        return compact('checked', 'hidden', 'unhidden', 'errors');
+        return $totals;
+    }
+
+    /**
+     * Same check as refresh(), but for exactly one URL - fetched immediately, ignoring the
+     * recheck cycle and the batch limit. For manually re-verifying a single link from the admin
+     * panel instead of waiting for its turn in the batch.
+     *
+     * @return array{checked:int, hidden:int, unhidden:int, errors:int}
+     */
+    public function refreshOne(Url $row): array
+    {
+        $defaultLang = $this->defaultLang();
+
+        if ($row->lang === $defaultLang) {
+            return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 0];
+        }
+
+        $defaultRow = Url::query()
+            ->where('group_key', $row->group_key)
+            ->where('lang', $defaultLang)
+            ->first();
+
+        if (! $defaultRow) {
+            return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 1];
+        }
+
+        [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
+
+        if ($defaultTitle === null) {
+            return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 1];
+        }
+
+        return $this->checkRow($row, $defaultTitle, $this->settings->isAutoHideEnabled());
+    }
+
+    /**
+     * How many non-default-language blog URLs are currently due for a check, so the settings
+     * page can show real progress instead of leaving you guessing whether one batch run covered
+     * everything.
+     */
+    public function pendingCount(): int
+    {
+        $cutoff = now()->subHours($this->settings->getRecheckIntervalHours());
+
+        return $this->dueQuery($this->defaultLang(), $cutoff)->count();
+    }
+
+    private function defaultLang(): string
+    {
+        return Language::query()->where('is_default', true)->value('code') ?? 'en';
+    }
+
+    private function dueQuery(string $defaultLang, ?Carbon $cutoff)
+    {
+        return Url::query()
+            ->where('pattern_type', 'BLOG')
+            ->where('is_active', true)
+            ->where('lang', '!=', $defaultLang)
+            ->when($cutoff, fn ($q) => $q->where(
+                fn ($q) => $q->whereNull('translation_checked_at')->orWhere('translation_checked_at', '<=', $cutoff),
+            ));
+    }
+
+    /**
+     * @return array{checked:int, hidden:int, unhidden:int, errors:int}
+     */
+    private function checkRow(Url $row, string $defaultTitle, bool $autoHideEnabled): array
+    {
+        $totals = ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 0];
+
+        // An admin removed a hide we'd set, but never got a chance to record it because this row
+        // wasn't due for a check yet. Back off for this run - just record the title-check result
+        // and leave is_hidden alone - so the override actually holds for a cycle instead of being
+        // immediately undone by the same run that noticed it.
+        $wasOverridden = $row->auto_hidden_for_translation && ! $row->is_hidden;
+        if ($wasOverridden) {
+            $row->auto_hidden_for_translation = false;
+        }
+
+        [$title, $note] = $this->fetchTitle($row->source_url);
+        $totals['checked']++;
+
+        if ($title === null) {
+            $totals['errors']++;
+            $row->translation_check_note = $note;
+            $row->save();
+
+            return $totals;
+        }
+
+        $isTranslated = $this->normalize($title) !== $this->normalize($defaultTitle);
+
+        $row->translation_title = $title;
+        $row->is_translated = $isTranslated;
+        $row->translation_checked_at = now();
+        $row->translation_check_note = $note;
+
+        if (! $wasOverridden) {
+            if ($isTranslated) {
+                if ($row->auto_hidden_for_translation) {
+                    $row->is_hidden = false;
+                    $row->auto_hidden_for_translation = false;
+                    $totals['unhidden']++;
+                }
+            } elseif ($autoHideEnabled && ! $row->is_hidden) {
+                $row->is_hidden = true;
+                $row->auto_hidden_for_translation = true;
+                $totals['hidden']++;
+            }
+        }
+
+        $row->save();
+
+        return $totals;
+    }
+
+    private function mergeTotals(array &$totals, array $delta): void
+    {
+        foreach ($delta as $key => $value) {
+            $totals[$key] += $value;
+        }
     }
 
     /**

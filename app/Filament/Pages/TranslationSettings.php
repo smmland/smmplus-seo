@@ -11,6 +11,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Livewire\Attributes\Computed;
 
 class TranslationSettings extends Page implements HasForms
 {
@@ -76,12 +77,21 @@ class TranslationSettings extends Page implements HasForms
     {
         // Bounded well below what would risk a PHP execution timeout on this host - a large
         // backlog is worked off a batch at a time by clicking again, or by the hourly schedule.
+        // The pending count below shows whether everything's actually been covered yet.
         $this->lastRunResult = $detector->refresh(force: true, limit: 40);
+
+        unset($this->pendingCount);
 
         Notification::make()
             ->title('Translation check complete')
             ->body("Checked {$this->lastRunResult['checked']}, hid {$this->lastRunResult['hidden']}, unhid {$this->lastRunResult['unhidden']}, errors {$this->lastRunResult['errors']}.")
             ->success()
             ->send();
+    }
+
+    #[Computed]
+    public function pendingCount(): int
+    {
+        return app(BlogTranslationDetectionService::class)->pendingCount();
     }
 }

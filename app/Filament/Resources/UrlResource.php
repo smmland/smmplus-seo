@@ -3,10 +3,13 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UrlResource\Pages;
+use App\Models\Language;
 use App\Models\Url;
+use App\Services\BlogTranslationDetectionService;
 use App\Services\SitemapGeneratorService;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -72,8 +75,13 @@ class UrlResource extends Resource
 
     public static function table(Table $table): Table
     {
+        $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('#')
+                    ->rowIndex(),
+
                 Tables\Columns\TextColumn::make('source_url')
                     ->label('URL')
                     ->searchable()
@@ -170,6 +178,34 @@ class UrlResource extends Resource
                     ->falseLabel('Not auto-hidden'),
             ])
             ->actions([
+                Tables\Actions\Action::make('recheckTranslation')
+                    ->label('Recheck')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->visible(fn (Url $record) => $record->pattern_type === 'BLOG' && $record->lang !== $defaultLang)
+                    ->action(function (Url $record) {
+                        $result = app(BlogTranslationDetectionService::class)->refreshOne($record);
+                        $record->refresh();
+
+                        if ($result['errors'] > 0) {
+                            Notification::make()
+                                ->title('Could not check this URL')
+                                ->body($record->translation_check_note ?? 'No default-language URL found for this topic.')
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        $notification = Notification::make()
+                            ->title($record->is_translated ? 'Translated' : 'Still untranslated')
+                            ->body($record->translation_check_note);
+
+                        $record->is_translated ? $notification->success() : $notification->warning();
+
+                        $notification->send();
+                    }),
+
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()
                     // Mirrors the API rule: only manually-added or already-inactive rows can be deleted;

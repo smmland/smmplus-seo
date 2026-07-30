@@ -115,9 +115,11 @@ class BlogTranslationQueue extends Page
             return;
         }
 
+        $titleNote = $result['articleTitle'] ? "Title: \"{$result['articleTitle']}\". " : '';
+
         Notification::make()
             ->title('Content extracted')
-            ->body("Images: {$result['imagesDownloaded']} downloaded ({$result['imagesInlined']} were base64 and got relinked), {$result['stylesConverted']} inline styles converted to classes.")
+            ->body("{$titleNote}Images: {$result['imagesDownloaded']} downloaded ({$result['imagesInlined']} were base64 and got relinked), {$result['stylesConverted']} inline styles converted to classes.")
             ->success()
             ->actions([
                 NotificationAction::make('preview')
@@ -126,6 +128,9 @@ class BlogTranslationQueue extends Page
                 NotificationAction::make('content')
                     ->label('Open content file')
                     ->url($result['contentUrl'], shouldOpenInNewTab: true),
+                NotificationAction::make('meta')
+                    ->label('Open SEO meta')
+                    ->url($result['metaUrl'], shouldOpenInNewTab: true),
             ])
             ->send();
     }

@@ -16,9 +16,23 @@ class BlogContentExtractionService
         'Accept-Language' => 'en-US,en;q=0.9',
     ];
 
-    // Tried in order - the site's article template wraps title + cover image + body in
-    // "article-card"; falling back to just "post-body" if the template ever changes shape.
-    private const CONTENT_CLASSES = ['article-card', 'post-body'];
+    // Only the article body - the title is captured separately (it needs its own translation
+    // handling, not lumped in with the body content) and so is everything outside it.
+    private const CONTENT_CLASS = 'post-body';
+
+    private const TITLE_CLASS = 'article-title';
+
+    // (attribute, value) pairs identifying each <meta> tag worth translating for SEO. Excludes
+    // meta that isn't actual translatable text - og:url/og:image/twitter:image/twitter:card,
+    // canonical, hreflang - those are structural/technical, not content.
+    private const META_FIELDS = [
+        'metaDescription' => ['name', 'description'],
+        'metaKeywords' => ['name', 'keywords'],
+        'ogTitle' => ['property', 'og:title'],
+        'ogDescription' => ['property', 'og:description'],
+        'twitterTitle' => ['name', 'twitter:title'],
+        'twitterDescription' => ['name', 'twitter:description'],
+    ];
 
     // CSS declarations ("property:value") that map to one fixed Tailwind utility class,
     // rather than an arbitrary-value one.
@@ -82,13 +96,16 @@ class BlogContentExtractionService
     ];
 
     /**
-     * Fetches the live English page, pulls out just the article content (title, cover image,
-     * body - not the site chrome around it), downloads every image it references into
-     * storage/app/public/blog/{slug}/images/, rewrites any base64-embedded images to link to
-     * the downloaded copy, converts the (very repetitive, Google-Docs-exported) inline styles
-     * into Tailwind utility classes, and saves the result.
+     * Fetches the live English page and pulls out, as three separate pieces:
+     *  - the article body only (".post-body") - images downloaded and inline-styles converted
+     *    to Tailwind classes;
+     *  - the on-page article title (".article-title") - kept apart from the body, since it's
+     *    translated/tracked as its own field, not body content;
+     *  - the SEO-relevant <meta> text (title tag, description, keywords, OG/Twitter title+description)
+     *    - the fields Google actually shows or reads per language, not structural tags like
+     *      canonical/hreflang/og:image.
      *
-     * @return array{ok: bool, error?: string, imagesDownloaded?: int, imagesInlined?: int, stylesConverted?: int, contentPath?: string, previewUrl?: string, contentUrl?: string}
+     * @return array{ok: bool, error?: string, imagesDownloaded?: int, imagesInlined?: int, stylesConverted?: int, contentPath?: string, metaPath?: string, previewUrl?: string, contentUrl?: string, articleTitle?: ?string}
      */
     public function extract(Url $englishRow): array
     {
@@ -108,11 +125,17 @@ class BlogContentExtractionService
         libxml_clear_errors();
 
         $xpath = new \DOMXPath($doc);
-        $container = $this->locateContentNode($xpath);
+        $container = $this->firstElementByClass($xpath, self::CONTENT_CLASS);
 
         if (! $container) {
-            return ['ok' => false, 'error' => 'Could not find the article content container on the page (expected a "'.implode('" or "', self::CONTENT_CLASSES).'" element).'];
+            return ['ok' => false, 'error' => 'Could not find the article content container on the page (expected a "'.self::CONTENT_CLASS.'" element).'];
         }
+
+        $titleNode = $this->firstElementByClass($xpath, self::TITLE_CLASS);
+        $articleTitle = $titleNode ? $this->normalizeWhitespace($titleNode->textContent) : null;
+
+        $seo = $this->extractSeoMeta($xpath);
+        $seo['articleTitle'] = $articleTitle;
 
         $slug = $englishRow->slug ?: 'untitled';
         $baseDir = "blog/{$slug}";
@@ -124,15 +147,20 @@ class BlogContentExtractionService
 
         Storage::disk('public')->put("{$baseDir}/content-en.html", $contentHtml);
 
+        $metaJson = json_encode($seo, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        Storage::disk('public')->put("{$baseDir}/meta-en.json", $metaJson);
+
+        $previewTitle = e($articleTitle ?? $englishRow->slug);
         $previewHtml = <<<HTML
             <!doctype html>
             <html lang="en">
             <head>
             <meta charset="utf-8">
-            <title>{$englishRow->slug} - preview</title>
+            <title>{$previewTitle} - preview</title>
             <script src="https://cdn.tailwindcss.com"></script>
             </head>
             <body class="mx-auto max-w-3xl px-6 py-10">
+            <h1 class="text-3xl font-bold mb-6">{$previewTitle}</h1>
             {$contentHtml}
             </body>
             </html>
@@ -141,9 +169,11 @@ class BlogContentExtractionService
         Storage::disk('public')->put("{$baseDir}/preview.html", $previewHtml);
 
         $contentPath = "{$baseDir}/content-en.html";
+        $metaPath = "{$baseDir}/meta-en.json";
 
         $englishRow->content_extracted_at = now();
         $englishRow->content_extraction_path = $contentPath;
+        $englishRow->seo_extraction_path = $metaPath;
         $englishRow->save();
 
         return [
@@ -152,22 +182,42 @@ class BlogContentExtractionService
             'imagesInlined' => $imageStats['inlined'],
             'stylesConverted' => $stylesConverted,
             'contentPath' => $contentPath,
+            'metaPath' => $metaPath,
             'contentUrl' => $this->assetUrl($contentPath),
+            'metaUrl' => $this->assetUrl($metaPath),
             'previewUrl' => $this->assetUrl("{$baseDir}/preview.html"),
+            'articleTitle' => $articleTitle,
         ];
     }
 
-    private function locateContentNode(\DOMXPath $xpath): ?\DOMElement
+    private function firstElementByClass(\DOMXPath $xpath, string $class): ?\DOMElement
     {
-        foreach (self::CONTENT_CLASSES as $class) {
-            $nodes = $xpath->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' {$class} ')]");
+        $nodes = $xpath->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' {$class} ')]");
 
-            if ($nodes && $nodes->length > 0) {
-                return $nodes->item(0);
-            }
+        return ($nodes && $nodes->length > 0) ? $nodes->item(0) : null;
+    }
+
+    /**
+     * @return array<string, ?string>
+     */
+    private function extractSeoMeta(\DOMXPath $xpath): array
+    {
+        $titleNodes = $xpath->query('//title');
+        $meta = [
+            'pageTitle' => $titleNodes->length > 0 ? $this->normalizeWhitespace($titleNodes->item(0)->textContent) : null,
+        ];
+
+        foreach (self::META_FIELDS as $key => [$attr, $value]) {
+            $nodes = $xpath->query("//meta[@{$attr}='{$value}']/@content");
+            $meta[$key] = $nodes->length > 0 ? $this->normalizeWhitespace($nodes->item(0)->nodeValue) : null;
         }
 
-        return null;
+        return $meta;
+    }
+
+    private function normalizeWhitespace(string $text): string
+    {
+        return trim(preg_replace('/\s+/', ' ', $text));
     }
 
     /**

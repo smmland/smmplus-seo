@@ -4,8 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Models\Language;
 use App\Models\Url;
+use App\Services\BlogContentExtractionService;
 use App\Services\BlogTranslationDetectionService;
 use App\Services\TranslationSettingsService;
+use Filament\Notifications\Actions\Action as NotificationAction;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Livewire\Attributes\Computed;
@@ -88,6 +90,43 @@ class BlogTranslationQueue extends Page
             ->title('Recheck complete')
             ->body("Checked {$result['checked']}, hid {$result['hidden']}, unhid {$result['unhidden']}, errors {$result['errors']}.")
             ->success()
+            ->send();
+    }
+
+    public function extractContent(int $urlId, BlogContentExtractionService $extractor): void
+    {
+        $row = Url::query()->find($urlId);
+
+        if (! $row) {
+            return;
+        }
+
+        $result = $extractor->extract($row);
+
+        unset($this->queue);
+
+        if (! $result['ok']) {
+            Notification::make()
+                ->title('Could not extract this page\'s content')
+                ->body($result['error'])
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title('Content extracted')
+            ->body("Images: {$result['imagesDownloaded']} downloaded ({$result['imagesInlined']} were base64 and got relinked), {$result['stylesConverted']} inline styles converted to classes.")
+            ->success()
+            ->actions([
+                NotificationAction::make('preview')
+                    ->label('Open preview')
+                    ->url($result['previewUrl'], shouldOpenInNewTab: true),
+                NotificationAction::make('content')
+                    ->label('Open content file')
+                    ->url($result['contentUrl'], shouldOpenInNewTab: true),
+            ])
             ->send();
     }
 

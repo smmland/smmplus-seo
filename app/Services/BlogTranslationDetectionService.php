@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Language;
 use App\Models\Url;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
@@ -263,8 +262,11 @@ class BlogTranslationDetectionService
     {
         try {
             $response = Http::withHeaders(self::FETCH_HEADERS)->timeout(10)->get($url);
-        } catch (ConnectionException $e) {
-            return [null, 'Connection error: '.$e->getMessage()];
+        } catch (\Throwable $e) {
+            // Broad catch deliberately: a single unreachable/erroring URL (dead link, blocked
+            // host, timeout, malformed response, ...) should count as one error, not abort the
+            // whole batch it's part of.
+            return [null, 'Fetch error: '.$e->getMessage()];
         }
 
         if (! $response->successful()) {

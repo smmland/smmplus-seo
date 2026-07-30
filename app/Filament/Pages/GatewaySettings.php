@@ -93,7 +93,7 @@ class GatewaySettings extends Page implements HasForms
                         TextInput::make('autoBlockBaseHours')
                             ->label('First block duration (hours)')
                             ->numeric()
-                            ->minValue(0.1)
+                            ->minValue(0.5)
                             ->step(0.5)
                             ->required(),
 

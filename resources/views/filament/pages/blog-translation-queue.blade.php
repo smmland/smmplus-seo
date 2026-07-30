@@ -41,13 +41,18 @@
                 <table class="fi-ta-table w-full text-start">
                     <thead>
                         <tr>
+                            <th class="p-2 text-start text-sm font-semibold">#</th>
                             <th class="p-2 text-start text-sm font-semibold">Topic (default language)</th>
                             <th class="p-2 text-start text-sm font-semibold">Missing languages</th>
+                            <th class="p-2 text-start text-sm font-semibold">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($this->queue as $topic)
-                            <tr class="border-t border-gray-100 dark:border-white/5 align-top">
+                            <tr wire:key="topic-{{ $topic['url']->id }}" class="border-t border-gray-100 dark:border-white/5 align-top">
+                                <td class="p-2 text-sm text-gray-500 dark:text-gray-400">
+                                    {{ $loop->iteration }}
+                                </td>
                                 <td class="p-2">
                                     <a href="{{ $topic['url']->source_url }}" target="_blank" rel="noopener" class="text-primary-600 hover:underline dark:text-primary-400">
                                         {{ $topic['url']->slug }}
@@ -61,6 +66,18 @@
                                             </x-filament::badge>
                                         @endforeach
                                     </div>
+                                </td>
+                                <td class="p-2">
+                                    <x-filament::button
+                                        size="sm"
+                                        color="gray"
+                                        icon="heroicon-o-arrow-path"
+                                        wire:click="recheckTopic({{ Illuminate\Support\Js::from($topic['url']->group_key) }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="recheckTopic({{ Illuminate\Support\Js::from($topic['url']->group_key) }})"
+                                    >
+                                        Recheck
+                                    </x-filament::button>
                                 </td>
                             </tr>
                         @endforeach

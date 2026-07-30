@@ -4,7 +4,9 @@ namespace App\Filament\Pages;
 
 use App\Models\Language;
 use App\Models\Url;
+use App\Services\BlogTranslationDetectionService;
 use App\Services\TranslationSettingsService;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Livewire\Attributes\Computed;
 
@@ -64,6 +66,29 @@ class BlogTranslationQueue extends Page
             })
             ->filter(fn (array $topic) => $topic['missing']->isNotEmpty())
             ->values();
+    }
+
+    public function recheckTopic(string $groupKey, BlogTranslationDetectionService $detector): void
+    {
+        $result = $detector->refreshTopic($groupKey);
+
+        unset($this->queue);
+
+        if ($result['checked'] === 0 && $result['errors'] > 0) {
+            Notification::make()
+                ->title('Could not check this topic')
+                ->body('No reachable default-language page was found for it.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title('Recheck complete')
+            ->body("Checked {$result['checked']}, hid {$result['hidden']}, unhid {$result['unhidden']}, errors {$result['errors']}.")
+            ->success()
+            ->send();
     }
 
     /**

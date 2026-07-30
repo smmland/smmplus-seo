@@ -119,6 +119,53 @@ class BlogTranslationDetectionService
     }
 
     /**
+     * Same check as refresh(), but for every non-default-language URL belonging to one topic
+     * (group_key) - fetched immediately, ignoring the recheck cycle and the batch limit. For
+     * manually re-verifying a whole topic's row on the Blog Translation queue page.
+     *
+     * @return array{checked:int, hidden:int, unhidden:int, errors:int}
+     */
+    public function refreshTopic(string $groupKey): array
+    {
+        $defaultLang = $this->defaultLang();
+
+        $rows = Url::query()
+            ->where('group_key', $groupKey)
+            ->where('pattern_type', 'BLOG')
+            ->where('is_active', true)
+            ->where('lang', '!=', $defaultLang)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 0];
+        }
+
+        $defaultRow = Url::query()
+            ->where('group_key', $groupKey)
+            ->where('lang', $defaultLang)
+            ->first();
+
+        if (! $defaultRow) {
+            return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => $rows->count()];
+        }
+
+        [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
+
+        if ($defaultTitle === null) {
+            return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => $rows->count()];
+        }
+
+        $autoHideEnabled = $this->settings->isAutoHideEnabled();
+        $totals = ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 0];
+
+        foreach ($rows as $row) {
+            $this->mergeTotals($totals, $this->checkRow($row, $defaultTitle, $autoHideEnabled));
+        }
+
+        return $totals;
+    }
+
+    /**
      * How many non-default-language blog URLs are currently due for a check, so the settings
      * page can show real progress instead of leaving you guessing whether one batch run covered
      * everything.

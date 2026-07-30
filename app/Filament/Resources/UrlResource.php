@@ -70,6 +70,38 @@ class UrlResource extends Resource
                         ->visible(fn (?Url $record) => $record !== null),
                 ])
                 ->columns(1),
+
+            Forms\Components\Section::make('Extracted title & SEO meta')
+                ->description('Filled in by "Extract content" on the Blog Translation queue page. Editable here for review/translation.')
+                ->visible(fn (?Url $record) => $record !== null && $record->content_extracted_at !== null)
+                ->schema([
+                    Forms\Components\TextInput::make('article_title')
+                        ->label('Article title (on-page H1)')
+                        ->maxLength(255),
+
+                    Forms\Components\TextInput::make('seo_title')
+                        ->label('Page <title>')
+                        ->maxLength(255),
+
+                    Forms\Components\Textarea::make('meta_description')
+                        ->rows(2),
+
+                    Forms\Components\TextInput::make('meta_keywords')
+                        ->maxLength(500),
+
+                    Forms\Components\TextInput::make('og_title')
+                        ->maxLength(255),
+
+                    Forms\Components\Textarea::make('og_description')
+                        ->rows(2),
+
+                    Forms\Components\TextInput::make('twitter_title')
+                        ->maxLength(255),
+
+                    Forms\Components\Textarea::make('twitter_description')
+                        ->rows(2),
+                ])
+                ->columns(1),
         ]);
     }
 
@@ -127,6 +159,11 @@ class UrlResource extends Resource
 
                 Tables\Columns\TextColumn::make('translation_title')
                     ->label('Fetched title')
+                    ->limit(50)
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('article_title')
+                    ->label('Article title')
                     ->limit(50)
                     ->toggleable(isToggledHiddenByDefault: true),
 

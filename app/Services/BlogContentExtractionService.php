@@ -16,22 +16,28 @@ class BlogContentExtractionService
         'Accept-Language' => 'en-US,en;q=0.9',
     ];
 
+    // The one reliable wrapper around a single article (title, cover, body) - title and body
+    // are located *within* this, never by searching the whole document, so an unrelated element
+    // elsewhere on the page (a related-posts card, a hidden template, ...) that happens to also
+    // carry the "post-body" or "article-title" class can never be picked up by mistake.
+    private const CARD_CLASS = 'article-card';
+
     // Only the article body - the title is captured separately (it needs its own translation
     // handling, not lumped in with the body content) and so is everything outside it.
     private const CONTENT_CLASS = 'post-body';
 
     private const TITLE_CLASS = 'article-title';
 
-    // (attribute, value) pairs identifying each <meta> tag worth translating for SEO. Excludes
-    // meta that isn't actual translatable text - og:url/og:image/twitter:image/twitter:card,
-    // canonical, hreflang - those are structural/technical, not content.
+    // (attribute, value, urls column) triples identifying each <meta> tag worth translating for
+    // SEO. Excludes meta that isn't actual translatable text - og:url/og:image/twitter:image/
+    // twitter:card, canonical, hreflang - those are structural/technical, not content.
     private const META_FIELDS = [
-        'metaDescription' => ['name', 'description'],
-        'metaKeywords' => ['name', 'keywords'],
-        'ogTitle' => ['property', 'og:title'],
-        'ogDescription' => ['property', 'og:description'],
-        'twitterTitle' => ['name', 'twitter:title'],
-        'twitterDescription' => ['name', 'twitter:description'],
+        'meta_description' => ['name', 'description'],
+        'meta_keywords' => ['name', 'keywords'],
+        'og_title' => ['property', 'og:title'],
+        'og_description' => ['property', 'og:description'],
+        'twitter_title' => ['name', 'twitter:title'],
+        'twitter_description' => ['name', 'twitter:description'],
     ];
 
     // CSS declarations ("property:value") that map to one fixed Tailwind utility class,
@@ -96,16 +102,16 @@ class BlogContentExtractionService
     ];
 
     /**
-     * Fetches the live English page and pulls out, as three separate pieces:
-     *  - the article body only (".post-body") - images downloaded and inline-styles converted
-     *    to Tailwind classes;
-     *  - the on-page article title (".article-title") - kept apart from the body, since it's
-     *    translated/tracked as its own field, not body content;
-     *  - the SEO-relevant <meta> text (title tag, description, keywords, OG/Twitter title+description)
-     *    - the fields Google actually shows or reads per language, not structural tags like
-     *      canonical/hreflang/og:image.
+     * Fetches the live English page and pulls out, as separate pieces:
+     *  - the article body only (".post-body", found *inside* ".article-card") - images
+     *    downloaded and inline-styles converted to Tailwind classes - saved as a file;
+     *  - the on-page article title (".article-title", also scoped inside ".article-card") and
+     *    the SEO-relevant <meta> text (title tag, description, keywords, OG/Twitter
+     *    title+description - the fields Google actually shows or reads per language, not
+     *    structural tags like canonical/hreflang/og:image) - saved directly on the row, not as
+     *    a file, so they're editable/queryable per URL.
      *
-     * @return array{ok: bool, error?: string, imagesDownloaded?: int, imagesInlined?: int, stylesConverted?: int, contentPath?: string, metaPath?: string, previewUrl?: string, contentUrl?: string, articleTitle?: ?string}
+     * @return array{ok: bool, error?: string, imagesDownloaded?: int, imagesInlined?: int, stylesConverted?: int, contentPath?: string, previewUrl?: string, contentUrl?: string, articleTitle?: ?string}
      */
     public function extract(Url $englishRow): array
     {
@@ -125,17 +131,24 @@ class BlogContentExtractionService
         libxml_clear_errors();
 
         $xpath = new \DOMXPath($doc);
-        $container = $this->firstElementByClass($xpath, self::CONTENT_CLASS);
 
-        if (! $container) {
-            return ['ok' => false, 'error' => 'Could not find the article content container on the page (expected a "'.self::CONTENT_CLASS.'" element).'];
+        $card = $this->firstElementByClass($xpath, self::CARD_CLASS);
+
+        if (! $card) {
+            return ['ok' => false, 'error' => 'Could not find the "'.self::CARD_CLASS.'" wrapper on the page.'];
         }
 
-        $titleNode = $this->firstElementByClass($xpath, self::TITLE_CLASS);
+        $container = $this->firstElementByClass($xpath, self::CONTENT_CLASS, $card);
+
+        if (! $container) {
+            return ['ok' => false, 'error' => 'Could not find a "'.self::CONTENT_CLASS.'" element inside the article card.'];
+        }
+
+        $titleNode = $this->firstElementByClass($xpath, self::TITLE_CLASS, $card);
         $articleTitle = $titleNode ? $this->normalizeWhitespace($titleNode->textContent) : null;
 
         $seo = $this->extractSeoMeta($xpath);
-        $seo['articleTitle'] = $articleTitle;
+        $seo['article_title'] = $articleTitle;
 
         $slug = $englishRow->slug ?: 'untitled';
         $baseDir = "blog/{$slug}";
@@ -143,12 +156,15 @@ class BlogContentExtractionService
         $imageStats = $this->processImages($container, $doc, $baseDir);
         $stylesConverted = $this->convertStyles($container);
 
+        // Belt-and-suspenders: if the body's first block happens to just repeat the title
+        // verbatim (a duplicate accidentally left in the source content), drop it - it isn't
+        // reachable via the class-scoped lookups above, but source content itself can still
+        // contain a stray duplicate.
+        $this->stripLeadingDuplicateTitle($container, $articleTitle);
+
         $contentHtml = $this->innerHtml($container);
 
         Storage::disk('public')->put("{$baseDir}/content-en.html", $contentHtml);
-
-        $metaJson = json_encode($seo, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        Storage::disk('public')->put("{$baseDir}/meta-en.json", $metaJson);
 
         $previewTitle = e($articleTitle ?? $englishRow->slug);
         $previewHtml = <<<HTML
@@ -169,11 +185,17 @@ class BlogContentExtractionService
         Storage::disk('public')->put("{$baseDir}/preview.html", $previewHtml);
 
         $contentPath = "{$baseDir}/content-en.html";
-        $metaPath = "{$baseDir}/meta-en.json";
 
         $englishRow->content_extracted_at = now();
         $englishRow->content_extraction_path = $contentPath;
-        $englishRow->seo_extraction_path = $metaPath;
+        $englishRow->article_title = $articleTitle;
+        $englishRow->seo_title = $seo['seo_title'];
+        $englishRow->meta_description = $seo['meta_description'];
+        $englishRow->meta_keywords = $seo['meta_keywords'];
+        $englishRow->og_title = $seo['og_title'];
+        $englishRow->og_description = $seo['og_description'];
+        $englishRow->twitter_title = $seo['twitter_title'];
+        $englishRow->twitter_description = $seo['twitter_description'];
         $englishRow->save();
 
         return [
@@ -182,17 +204,16 @@ class BlogContentExtractionService
             'imagesInlined' => $imageStats['inlined'],
             'stylesConverted' => $stylesConverted,
             'contentPath' => $contentPath,
-            'metaPath' => $metaPath,
             'contentUrl' => $this->assetUrl($contentPath),
-            'metaUrl' => $this->assetUrl($metaPath),
             'previewUrl' => $this->assetUrl("{$baseDir}/preview.html"),
             'articleTitle' => $articleTitle,
         ];
     }
 
-    private function firstElementByClass(\DOMXPath $xpath, string $class): ?\DOMElement
+    private function firstElementByClass(\DOMXPath $xpath, string $class, ?\DOMElement $context = null): ?\DOMElement
     {
-        $nodes = $xpath->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' {$class} ')]");
+        $query = ($context ? '.' : '')."//*[contains(concat(' ', normalize-space(@class), ' '), ' {$class} ')]";
+        $nodes = $context ? $xpath->query($query, $context) : $xpath->query($query);
 
         return ($nodes && $nodes->length > 0) ? $nodes->item(0) : null;
     }
@@ -204,15 +225,35 @@ class BlogContentExtractionService
     {
         $titleNodes = $xpath->query('//title');
         $meta = [
-            'pageTitle' => $titleNodes->length > 0 ? $this->normalizeWhitespace($titleNodes->item(0)->textContent) : null,
+            'seo_title' => $titleNodes->length > 0 ? $this->normalizeWhitespace($titleNodes->item(0)->textContent) : null,
         ];
 
-        foreach (self::META_FIELDS as $key => [$attr, $value]) {
+        foreach (self::META_FIELDS as $column => [$attr, $value]) {
             $nodes = $xpath->query("//meta[@{$attr}='{$value}']/@content");
-            $meta[$key] = $nodes->length > 0 ? $this->normalizeWhitespace($nodes->item(0)->nodeValue) : null;
+            $meta[$column] = $nodes->length > 0 ? $this->normalizeWhitespace($nodes->item(0)->nodeValue) : null;
         }
 
         return $meta;
+    }
+
+    private function stripLeadingDuplicateTitle(\DOMElement $container, ?string $articleTitle): void
+    {
+        if ($articleTitle === null) {
+            return;
+        }
+
+        foreach ($container->childNodes as $child) {
+            if ($child->nodeType !== XML_ELEMENT_NODE) {
+                continue;
+            }
+
+            if ($this->normalizeWhitespace($child->textContent) === $articleTitle) {
+                $container->removeChild($child);
+            }
+
+            // Only the first element child is a plausible accidental duplicate - stop either way.
+            break;
+        }
     }
 
     private function normalizeWhitespace(string $text): string

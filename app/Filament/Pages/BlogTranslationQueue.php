@@ -119,7 +119,7 @@ class BlogTranslationQueue extends Page
 
         Notification::make()
             ->title('Content extracted')
-            ->body("{$titleNote}Images: {$result['imagesDownloaded']} downloaded ({$result['imagesInlined']} were base64 and got relinked), {$result['stylesConverted']} inline styles converted to classes.")
+            ->body("{$titleNote}Images: {$result['imagesDownloaded']} downloaded ({$result['imagesInlined']} were base64 and got relinked), {$result['stylesConverted']} inline styles converted to classes. Title and SEO meta saved on the URL record.")
             ->success()
             ->actions([
                 NotificationAction::make('preview')
@@ -128,9 +128,6 @@ class BlogTranslationQueue extends Page
                 NotificationAction::make('content')
                     ->label('Open content file')
                     ->url($result['contentUrl'], shouldOpenInNewTab: true),
-                NotificationAction::make('meta')
-                    ->label('Open SEO meta')
-                    ->url($result['metaUrl'], shouldOpenInNewTab: true),
             ])
             ->send();
     }

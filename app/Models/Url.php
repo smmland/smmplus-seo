@@ -12,7 +12,7 @@ class Url extends Model
         'source_url', 'path', 'lang', 'pattern_type', 'slug', 'group_key',
         'source_lastmod', 'priority', 'changefreq', 'is_hidden', 'is_manual',
         'is_active', 'first_seen_at', 'last_seen_at',
-        'translation_title', 'is_translated', 'translation_checked_at', 'auto_hidden_for_translation',
+        'translation_title', 'is_translated', 'translation_checked_at', 'translation_check_note', 'auto_hidden_for_translation',
     ];
 
     protected function casts(): array

@@ -21,7 +21,7 @@ class SeedLanguagesCommand extends Command
         ['code' => 'fr', 'name' => 'Français'],
         ['code' => 'de', 'name' => 'Deutsch'],
         ['code' => 'it', 'name' => 'Italiano'],
-        ['code' => 'pt', 'name' => 'Português (Brasil)'],
+        ['code' => 'bp', 'name' => 'Português (Brasil)'],
         ['code' => 'id', 'name' => 'Bahasa Indonesia'],
         ['code' => 'ko', 'name' => '한국어'],
         ['code' => 'zh', 'name' => '中文'],

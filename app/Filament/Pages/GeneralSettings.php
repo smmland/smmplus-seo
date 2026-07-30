@@ -23,9 +23,14 @@ class GeneralSettings extends Page implements HasForms
 
     protected static string $view = 'filament.pages.general-settings';
 
-    protected static ?int $navigationSort = -1;
-
     public ?array $data = [];
+
+    // Reached from the account menu (top-right avatar -> Settings) instead of the sidebar -
+    // see AdminPanelProvider::panel()'s userMenuItems().
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public function mount(): void
     {

@@ -18,6 +18,9 @@ class Settings extends Page implements HasForms
 
     protected static ?string $navigationGroup = 'SEO';
 
+    // Pushed to the end of the SEO group - everything else in the group defaults to sort -1.
+    protected static ?int $navigationSort = 100;
+
     protected static string $view = 'filament.pages.settings';
 
     public ?array $data = [];

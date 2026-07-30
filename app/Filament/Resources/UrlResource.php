@@ -112,6 +112,28 @@ class UrlResource extends Resource
                     ->boolean()
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                Tables\Columns\IconColumn::make('is_translated')
+                    ->label('Translated')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('translation_title')
+                    ->label('Fetched title')
+                    ->limit(50)
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('translation_check_note')
+                    ->label('Last check note')
+                    ->limit(60)
+                    ->tooltip(fn (Url $record) => $record->translation_check_note)
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('translation_checked_at')
+                    ->label('Last checked')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('group_key')
                     ->toggleable(isToggledHiddenByDefault: true),
 

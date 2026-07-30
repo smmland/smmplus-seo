@@ -9,6 +9,24 @@ use Illuminate\Support\Facades\Http;
 
 class BlogTranslationDetectionService
 {
+    // A browser-shaped User-Agent + Accept headers. Without these, Guzzle's default
+    // "GuzzleHttp/7" UA gets a different response from some hosts' bot/WAF protection than a
+    // real visitor would - which can make two genuinely different pages come back as the same
+    // challenge/interstitial page, and therefore look like an untranslated match.
+    private const FETCH_HEADERS = [
+        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language' => 'en-US,en;q=0.9',
+    ];
+
+    // Titles that indicate we didn't actually get real page content (a bot-check/interstitial),
+    // not that the page is genuinely untranslated. If we compared these we could match two
+    // pages that are both blocked rather than both English - a false "untranslated" positive.
+    private const CHALLENGE_TITLE_MARKERS = [
+        'just a moment', 'attention required', 'access denied', 'are you human',
+        '403 forbidden', 'cloudflare', 'checking your browser', 'security check',
+    ];
+
     public function __construct(private readonly TranslationSettingsService $settings) {}
 
     /**
@@ -57,7 +75,7 @@ class BlogTranslationDetectionService
                 continue;
             }
 
-            $defaultTitle = $this->fetchTitle($defaultRow->source_url);
+            [$defaultTitle, $defaultNote] = $this->fetchTitle($defaultRow->source_url);
 
             if ($defaultTitle === null) {
                 $errors += $rows->count();
@@ -75,11 +93,12 @@ class BlogTranslationDetectionService
                     $row->auto_hidden_for_translation = false;
                 }
 
-                $title = $this->fetchTitle($row->source_url);
+                [$title, $note] = $this->fetchTitle($row->source_url);
                 $checked++;
 
                 if ($title === null) {
                     $errors++;
+                    $row->translation_check_note = $note;
                     $row->save();
 
                     continue;
@@ -90,6 +109,7 @@ class BlogTranslationDetectionService
                 $row->translation_title = $title;
                 $row->is_translated = $isTranslated;
                 $row->translation_checked_at = now();
+                $row->translation_check_note = $note ?? $defaultNote;
 
                 if (! $wasOverridden) {
                     if ($isTranslated) {
@@ -112,16 +132,22 @@ class BlogTranslationDetectionService
         return compact('checked', 'hidden', 'unhidden', 'errors');
     }
 
-    private function fetchTitle(string $url): ?string
+    /**
+     * @return array{0: ?string, 1: ?string} [title, diagnostic note]. Title is null whenever we
+     * couldn't get a trustworthy title to compare - a real request failure, or a response that
+     * looks like a bot-check page rather than the actual article - so the caller treats it as an
+     * error instead of feeding bad data into the translated/untranslated comparison.
+     */
+    private function fetchTitle(string $url): array
     {
         try {
-            $response = Http::timeout(10)->get($url);
-        } catch (ConnectionException) {
-            return null;
+            $response = Http::withHeaders(self::FETCH_HEADERS)->timeout(10)->get($url);
+        } catch (ConnectionException $e) {
+            return [null, 'Connection error: '.$e->getMessage()];
         }
 
         if (! $response->successful()) {
-            return null;
+            return [null, 'HTTP '.$response->status()];
         }
 
         $doc = new \DOMDocument();
@@ -132,12 +158,24 @@ class BlogTranslationDetectionService
         $titleNodes = $doc->getElementsByTagName('title');
 
         if ($titleNodes->length === 0) {
-            return null;
+            return [null, 'HTTP '.$response->status().', no <title> in response'];
         }
 
         $title = trim($titleNodes->item(0)->textContent);
 
-        return $title !== '' ? $title : null;
+        if ($title === '') {
+            return [null, 'HTTP '.$response->status().', empty <title>'];
+        }
+
+        $normalized = $this->normalize($title);
+
+        foreach (self::CHALLENGE_TITLE_MARKERS as $marker) {
+            if (str_contains($normalized, $marker)) {
+                return [null, "Looks like a bot-check page (title: \"{$title}\")"];
+            }
+        }
+
+        return [$title, 'HTTP '.$response->status().': "'.$title.'"'];
     }
 
     private function normalize(string $title): string

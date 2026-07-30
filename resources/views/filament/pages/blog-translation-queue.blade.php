@@ -1,4 +1,36 @@
 <x-filament-panels::page>
+    <div wire:poll.60s>
+        <x-filament::section>
+            <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                <span>Next automatic check (up to 40 URLs)</span>
+                <span>
+                    @if ($this->cronProgress['hasRun'])
+                        @if ($this->cronProgress['remainingMinutes'] > 0)
+                            in {{ $this->cronProgress['remainingMinutes'] }} min
+                        @else
+                            due any moment
+                        @endif
+                    @else
+                        waiting for the first automatic run
+                    @endif
+                </span>
+            </div>
+
+            <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
+                <div
+                    class="h-full rounded-full bg-primary-500 transition-all duration-500"
+                    style="width: {{ $this->cronProgress['percent'] }}%"
+                ></div>
+            </div>
+
+            @if ($this->cronProgress['hasRun'])
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    Last automatic check: {{ $this->cronProgress['lastRunAt']->diffForHumans() }}
+                </p>
+            @endif
+        </x-filament::section>
+    </div>
+
     <x-filament::section>
         @if ($this->queue->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Language;
 use App\Models\Url;
+use App\Services\TranslationSettingsService;
 use Filament\Pages\Page;
 use Livewire\Attributes\Computed;
 
@@ -63,5 +64,34 @@ class BlogTranslationQueue extends Page
             })
             ->filter(fn (array $topic) => $topic['missing']->isNotEmpty())
             ->values();
+    }
+
+    /**
+     * How far along we are toward the next automatic hourly recheck of the next batch of blog
+     * URLs, so the queue page can show it as a progress bar instead of leaving it a mystery.
+     *
+     * @return array{hasRun: bool, percent: int, remainingMinutes: ?int, lastRunAt: ?\Illuminate\Support\Carbon}
+     */
+    #[Computed]
+    public function cronProgress(): array
+    {
+        $settings = app(TranslationSettingsService::class);
+        $lastRunAt = $settings->getLastScheduledRunAt();
+        $intervalMinutes = TranslationSettingsService::SCHEDULE_INTERVAL_MINUTES;
+
+        if (! $lastRunAt) {
+            return ['hasRun' => false, 'percent' => 0, 'remainingMinutes' => null, 'lastRunAt' => null];
+        }
+
+        // abs() because Carbon's diffInMinutes() sign convention isn't reliable across versions
+        // for "which side is later" - we only care about magnitude here.
+        $elapsedMinutes = min($intervalMinutes, max(0, abs(now()->diffInMinutes($lastRunAt))));
+
+        return [
+            'hasRun' => true,
+            'percent' => (int) round(($elapsedMinutes / $intervalMinutes) * 100),
+            'remainingMinutes' => (int) ceil(max(0, $intervalMinutes - $elapsedMinutes)),
+            'lastRunAt' => $lastRunAt,
+        ];
     }
 }

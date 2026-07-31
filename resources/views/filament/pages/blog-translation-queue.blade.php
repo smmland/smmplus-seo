@@ -114,4 +114,84 @@
             </div>
         @endif
     </x-filament::section>
+
+    {{-- Defined here (not in the modal's own view) because Filament's action modal content is
+         injected into the DOM dynamically (Livewire morph), and browsers never execute <script>
+         tags inserted that way - only ones present in a real page load, like this one. --}}
+    <script>
+        function blogEditor(urlId, originalHtml, editedHtml, editedPreviewUrl, editedPreviewUrlTemplate) {
+            return {
+                urlId: urlId,
+                mode: 'original',
+                html: editedHtml || originalHtml || '',
+                editedPreviewUrl: editedPreviewUrl || null,
+                saving: false,
+                copiedOriginal: false,
+                copiedEdited: false,
+                showImages: false,
+                showLinks: false,
+                images: [],
+                links: [],
+                copyOriginal() {
+                    navigator.clipboard.writeText(originalHtml || '');
+                    this.copiedOriginal = true;
+                    setTimeout(() => { this.copiedOriginal = false; }, 1500);
+                },
+                copyEdited() {
+                    navigator.clipboard.writeText(this.html || '');
+                    this.copiedEdited = true;
+                    setTimeout(() => { this.copiedEdited = false; }, 1500);
+                },
+                scanImages() {
+                    const doc = new DOMParser().parseFromString(this.html, 'text/html');
+                    this.images = [...doc.querySelectorAll('img')].map((img, i) => ({
+                        index: i,
+                        src: img.getAttribute('src') || '',
+                        alt: img.getAttribute('alt') || '',
+                    }));
+                    this.showImages = true;
+                    this.showLinks = false;
+                },
+                applyImages() {
+                    const doc = new DOMParser().parseFromString(this.html, 'text/html');
+                    const imgs = doc.querySelectorAll('img');
+                    this.images.forEach((item) => {
+                        if (imgs[item.index]) {
+                            imgs[item.index].setAttribute('alt', item.alt);
+                        }
+                    });
+                    this.html = doc.body.innerHTML;
+                    this.showImages = false;
+                },
+                scanLinks() {
+                    const doc = new DOMParser().parseFromString(this.html, 'text/html');
+                    this.links = [...doc.querySelectorAll('a[href]')].map((a, i) => ({
+                        index: i,
+                        href: a.getAttribute('href') || '',
+                        text: (a.textContent || '').trim().slice(0, 40),
+                    }));
+                    this.showLinks = true;
+                    this.showImages = false;
+                },
+                applyLinks() {
+                    const doc = new DOMParser().parseFromString(this.html, 'text/html');
+                    const links = doc.querySelectorAll('a[href]');
+                    this.links.forEach((item) => {
+                        if (links[item.index]) {
+                            links[item.index].setAttribute('href', item.href);
+                        }
+                    });
+                    this.html = doc.body.innerHTML;
+                    this.showLinks = false;
+                },
+                save() {
+                    this.saving = true;
+                    this.$wire.call('saveEditedContent', this.urlId, this.html).then(() => {
+                        this.saving = false;
+                        this.editedPreviewUrl = editedPreviewUrlTemplate;
+                    });
+                },
+            };
+        }
+    </script>
 </x-filament-panels::page>

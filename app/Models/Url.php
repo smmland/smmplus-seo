@@ -16,6 +16,7 @@ class Url extends Model
         'content_extracted_at', 'content_extraction_path',
         'article_title', 'seo_title', 'meta_description', 'meta_keywords',
         'og_title', 'og_description', 'twitter_title', 'twitter_description',
+        'edited_content', 'edited_content_saved_at',
     ];
 
     protected function casts(): array
@@ -32,6 +33,7 @@ class Url extends Model
             'translation_checked_at' => 'datetime',
             'auto_hidden_for_translation' => 'boolean',
             'content_extracted_at' => 'datetime',
+            'edited_content_saved_at' => 'datetime',
         ];
     }
 }

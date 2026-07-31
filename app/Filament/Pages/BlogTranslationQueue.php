@@ -139,6 +139,75 @@ class BlogTranslationQueue extends Page implements HasActions
             ->send();
     }
 
+    /**
+     * Saves the manually-edited version of a URL's content, separate from the original
+     * extracted content - both are kept, so editing never loses the original to compare
+     * against. Also (re)writes a standalone preview file for the edited version, matching how
+     * the original's preview works, so both are equally copyable/previewable.
+     */
+    public function saveEditedContent(int $urlId, string $html): void
+    {
+        $row = Url::query()->find($urlId);
+
+        if (! $row) {
+            return;
+        }
+
+        // A rough sanity cap - this is meant for one blog post's body, not an arbitrary upload.
+        if (strlen($html) > 2_000_000) {
+            Notification::make()
+                ->title('Content too large to save')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $row->edited_content = $html;
+        $row->edited_content_saved_at = now();
+        $row->save();
+
+        $baseDir = 'blog/'.$row->slug;
+        $previewTitle = e($row->article_title ?? $row->slug);
+        $previewHtml = <<<HTML
+            <!doctype html>
+            <html lang="{$row->lang}">
+            <head>
+            <meta charset="utf-8">
+            <title>{$previewTitle} - edited preview</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            </head>
+            <body class="mx-auto max-w-3xl px-6 py-10">
+            <h1 class="text-3xl font-bold mb-6">{$previewTitle}</h1>
+            {$html}
+            </body>
+            </html>
+            HTML;
+
+        Storage::disk('public')->put("{$baseDir}/edited-preview-{$row->lang}.html", $previewHtml);
+
+        unset($this->queue);
+
+        Notification::make()
+            ->title('Edited content saved')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Placeholder for connecting an AI (Claude/ChatGPT) to translate this row's content
+     * automatically - not implemented yet, just the hook or now so the UI has somewhere for it
+     * to live once that's built.
+     */
+    public function translateWithAi(int $urlId): void
+    {
+        Notification::make()
+            ->title('AI translation is not wired up yet')
+            ->body('This button is a placeholder for the next phase - connecting Claude or ChatGPT to translate this row\'s content automatically.')
+            ->info()
+            ->send();
+    }
+
     public function viewTopicAction(): Action
     {
         return Action::make('viewTopic')
@@ -183,10 +252,20 @@ class BlogTranslationQueue extends Page implements HasActions
             // before this file-naming scheme existed (or under a slug that's since changed)
             // would otherwise get a link to a preview file that doesn't actually exist, which
             // 404s in the iframe below. Only link to it once it's confirmed to be on disk.
-            $previewPath = ($row && $row->content_extraction_path)
-                ? 'blog/'.$row->slug.'/preview-'.$row->lang.'.html'
+            $contentPath = ($row && $row->content_extraction_path)
+                ? 'blog/'.$row->slug.'/content-'.$row->lang.'.html'
                 : null;
+            $previewPath = $contentPath ? 'blog/'.$row->slug.'/preview-'.$row->lang.'.html' : null;
             $previewExists = $previewPath && Storage::disk('public')->exists($previewPath);
+            $contentHtml = ($contentPath && $previewExists) ? Storage::disk('public')->get($contentPath) : null;
+
+            $editedPreviewPath = $row ? 'blog/'.$row->slug.'/edited-preview-'.$row->lang.'.html' : null;
+            $editedPreviewExists = $editedPreviewPath && Storage::disk('public')->exists($editedPreviewPath);
+            // Passed to the editor regardless of whether the file exists yet, so it can start
+            // showing the "Preview edited" link the moment Save succeeds - Alpine's local state
+            // otherwise has no way to learn the file now exists without the modal being reopened
+            // (Livewire morphs preserve already-mounted x-data instead of re-running it).
+            $editedPreviewUrlTemplate = $editedPreviewPath ? url('/blog-content/'.$editedPreviewPath) : null;
 
             return [
                 'code' => $language->code,
@@ -199,8 +278,18 @@ class BlogTranslationQueue extends Page implements HasActions
                 'articleTitle' => $row?->article_title,
                 'seoTitle' => $row?->seo_title,
                 'metaDescription' => $row?->meta_description,
+                'metaKeywords' => $row?->meta_keywords,
+                'ogTitle' => $row?->og_title,
+                'ogDescription' => $row?->og_description,
+                'twitterTitle' => $row?->twitter_title,
+                'twitterDescription' => $row?->twitter_description,
                 'contentExtracted' => $previewExists,
                 'previewUrl' => $previewExists ? url('/blog-content/'.$previewPath) : null,
+                'contentHtml' => $contentHtml,
+                'editedContent' => $row?->edited_content,
+                'editedContentSavedAt' => $row?->edited_content_saved_at,
+                'editedPreviewUrl' => $editedPreviewExists ? url('/blog-content/'.$editedPreviewPath) : null,
+                'editedPreviewUrlTemplate' => $editedPreviewUrlTemplate,
             ];
         })->values();
 

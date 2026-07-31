@@ -7,13 +7,19 @@ use App\Models\Url;
 use App\Services\BlogContentExtractionService;
 use App\Services\BlogTranslationDetectionService;
 use App\Services\TranslationSettingsService;
+use Filament\Actions\Action;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
 use Filament\Notifications\Actions\Action as NotificationAction;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Support\Enums\MaxWidth;
 use Livewire\Attributes\Computed;
 
-class BlogTranslationQueue extends Page
+class BlogTranslationQueue extends Page implements HasActions
 {
+    use InteractsWithActions;
+
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
     protected static ?string $navigationGroup = 'Translation';
@@ -130,6 +136,71 @@ class BlogTranslationQueue extends Page
                     ->url($result['contentUrl'], shouldOpenInNewTab: true),
             ])
             ->send();
+    }
+
+    public function viewTopicAction(): Action
+    {
+        return Action::make('viewTopic')
+            ->label('Details')
+            ->icon('heroicon-o-information-circle')
+            ->color('gray')
+            ->modalHeading(fn (array $arguments) => $arguments['title'] ?? 'Topic details')
+            ->modalWidth(MaxWidth::SevenExtraLarge)
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close')
+            ->modalContent(fn (array $arguments) => view(
+                'filament.pages.blog-translation-details',
+                $this->topicDetails($arguments['groupKey']),
+            ));
+    }
+
+    /**
+     * @return array{englishRow: ?Url, languages: \Illuminate\Support\Collection, defaultLangCode: string}
+     */
+    private function topicDetails(string $groupKey): array
+    {
+        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        $rows = Url::query()
+            ->where('group_key', $groupKey)
+            ->where('pattern_type', 'BLOG')
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('lang');
+
+        $languageDefs = Language::query()
+            ->where('is_active', true)
+            ->orderByRaw('is_default desc')
+            ->orderBy('sort_order')
+            ->get(['code', 'name', 'is_default']);
+
+        $languages = $languageDefs->map(function (Language $language) use ($rows) {
+            /** @var ?Url $row */
+            $row = $rows->get($language->code);
+
+            return [
+                'code' => $language->code,
+                'name' => $language->name,
+                'isDefault' => $language->is_default,
+                'exists' => (bool) $row,
+                'isTranslated' => $row?->is_translated === true,
+                'sourceUrl' => $row?->source_url,
+                'urlId' => $row?->id,
+                'articleTitle' => $row?->article_title,
+                'seoTitle' => $row?->seo_title,
+                'metaDescription' => $row?->meta_description,
+                'contentExtracted' => $row?->content_extracted_at !== null,
+                'previewUrl' => ($row && $row->content_extraction_path)
+                    ? url('/blog-content/blog/'.$row->slug.'/preview-'.$row->lang.'.html')
+                    : null,
+            ];
+        })->values();
+
+        return [
+            'englishRow' => $rows->get($defaultLangCode),
+            'languages' => $languages,
+            'defaultLangCode' => $defaultLangCode,
+        ];
     }
 
     /**

@@ -102,9 +102,11 @@ class BlogContentExtractionService
     ];
 
     /**
-     * Fetches the live English page and pulls out, as separate pieces:
+     * Fetches a URL's live page (any language - not just English) and pulls out, as separate
+     * pieces:
      *  - the article body only (".post-body", found *inside* ".article-card") - images
-     *    downloaded and inline-styles converted to Tailwind classes - saved as a file;
+     *    downloaded and inline-styles converted to Tailwind classes - saved as a file, one per
+     *    language ("content-{lang}.html");
      *  - the on-page article title (".article-title", also scoped inside ".article-card") and
      *    the SEO-relevant <meta> text (title tag, description, keywords, OG/Twitter
      *    title+description - the fields Google actually shows or reads per language, not
@@ -113,10 +115,10 @@ class BlogContentExtractionService
      *
      * @return array{ok: bool, error?: string, imagesDownloaded?: int, imagesInlined?: int, stylesConverted?: int, contentPath?: string, previewUrl?: string, contentUrl?: string, articleTitle?: ?string}
      */
-    public function extract(Url $englishRow): array
+    public function extract(Url $row): array
     {
         try {
-            $response = Http::withHeaders(self::FETCH_HEADERS)->timeout(20)->get($englishRow->source_url);
+            $response = Http::withHeaders(self::FETCH_HEADERS)->timeout(20)->get($row->source_url);
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => 'Fetch error: '.$e->getMessage()];
         }
@@ -150,7 +152,8 @@ class BlogContentExtractionService
         $seo = $this->extractSeoMeta($xpath);
         $seo['article_title'] = $articleTitle;
 
-        $slug = $englishRow->slug ?: 'untitled';
+        $slug = $row->slug ?: 'untitled';
+        $lang = $row->lang ?: 'en';
         $baseDir = "blog/{$slug}";
 
         $imageStats = $this->processImages($container, $doc, $baseDir);
@@ -162,14 +165,16 @@ class BlogContentExtractionService
         // contain a stray duplicate.
         $this->stripLeadingDuplicateTitle($container, $articleTitle);
 
+        $this->polishPresentation($xpath, $container);
+
         $contentHtml = $this->innerHtml($container);
 
-        Storage::disk('public')->put("{$baseDir}/content-en.html", $contentHtml);
+        Storage::disk('public')->put("{$baseDir}/content-{$lang}.html", $contentHtml);
 
-        $previewTitle = e($articleTitle ?? $englishRow->slug);
+        $previewTitle = e($articleTitle ?? $row->slug);
         $previewHtml = <<<HTML
             <!doctype html>
-            <html lang="en">
+            <html lang="{$lang}">
             <head>
             <meta charset="utf-8">
             <title>{$previewTitle} - preview</title>
@@ -182,21 +187,21 @@ class BlogContentExtractionService
             </html>
             HTML;
 
-        Storage::disk('public')->put("{$baseDir}/preview.html", $previewHtml);
+        Storage::disk('public')->put("{$baseDir}/preview-{$lang}.html", $previewHtml);
 
-        $contentPath = "{$baseDir}/content-en.html";
+        $contentPath = "{$baseDir}/content-{$lang}.html";
 
-        $englishRow->content_extracted_at = now();
-        $englishRow->content_extraction_path = $contentPath;
-        $englishRow->article_title = $articleTitle;
-        $englishRow->seo_title = $seo['seo_title'];
-        $englishRow->meta_description = $seo['meta_description'];
-        $englishRow->meta_keywords = $seo['meta_keywords'];
-        $englishRow->og_title = $seo['og_title'];
-        $englishRow->og_description = $seo['og_description'];
-        $englishRow->twitter_title = $seo['twitter_title'];
-        $englishRow->twitter_description = $seo['twitter_description'];
-        $englishRow->save();
+        $row->content_extracted_at = now();
+        $row->content_extraction_path = $contentPath;
+        $row->article_title = $articleTitle;
+        $row->seo_title = $seo['seo_title'];
+        $row->meta_description = $seo['meta_description'];
+        $row->meta_keywords = $seo['meta_keywords'];
+        $row->og_title = $seo['og_title'];
+        $row->og_description = $seo['og_description'];
+        $row->twitter_title = $seo['twitter_title'];
+        $row->twitter_description = $seo['twitter_description'];
+        $row->save();
 
         return [
             'ok' => true,
@@ -205,7 +210,7 @@ class BlogContentExtractionService
             'stylesConverted' => $stylesConverted,
             'contentPath' => $contentPath,
             'contentUrl' => $this->assetUrl($contentPath),
-            'previewUrl' => $this->assetUrl("{$baseDir}/preview.html"),
+            'previewUrl' => $this->assetUrl("{$baseDir}/preview-{$lang}.html"),
             'articleTitle' => $articleTitle,
         ];
     }
@@ -259,6 +264,71 @@ class BlogContentExtractionService
     private function normalizeWhitespace(string $text): string
     {
         return trim(preg_replace('/\s+/', ' ', $text));
+    }
+
+    /**
+     * Presentation touches that go beyond a straight style->class conversion: round the corners
+     * of every content image, and make sure tables read as an actual table (full width,
+     * collapsed borders, bordered/padded cells) and scroll horizontally instead of overflowing
+     * on narrow screens, without doubling up classes a table already has from its own inline
+     * styles.
+     */
+    private function polishPresentation(\DOMXPath $xpath, \DOMElement $container): void
+    {
+        foreach ($xpath->query('.//img', $container) as $img) {
+            $class = trim($img->getAttribute('class'));
+
+            if (! preg_match('/(^|\s)rounded(-\S+)?(\s|$)/', $class)) {
+                $img->setAttribute('class', trim($class.' rounded-lg'));
+            }
+        }
+
+        foreach (iterator_to_array($xpath->query('.//table', $container)) as $table) {
+            $class = trim($table->getAttribute('class'));
+            $additions = [];
+
+            // Only default to w-full if there's no width utility at all yet - a table whose
+            // inline width style already converted to e.g. w-[451pt] shouldn't also get w-full,
+            // which would leave two conflicting width classes.
+            if (! preg_match('/(^|\s)w-\S+(\s|$)/', $class)) {
+                $additions[] = 'w-full';
+            }
+
+            if (! str_contains($class, 'border-collapse')) {
+                $additions[] = 'border-collapse';
+            }
+
+            if ($additions !== []) {
+                $table->setAttribute('class', trim($class.' '.implode(' ', $additions)));
+            }
+
+            foreach ($xpath->query('.//td | .//th', $table) as $cell) {
+                $cellClass = trim($cell->getAttribute('class'));
+
+                if (! str_contains($cellClass, 'border')) {
+                    $cellClass = trim($cellClass.' border border-gray-200');
+                }
+
+                if (! preg_match('/(^|\s)p-\S+(\s|$)/', $cellClass)) {
+                    $cellClass = trim($cellClass.' p-2');
+                }
+
+                $cell->setAttribute('class', $cellClass);
+            }
+
+            // Wrap in a horizontally-scrollable div so a wide table can't blow out the layout
+            // on narrow screens - unless it's already wrapped in one (re-running extraction).
+            $parent = $table->parentNode;
+            $alreadyWrapped = $parent instanceof \DOMElement
+                && str_contains($parent->getAttribute('class'), 'overflow-x-auto');
+
+            if (! $alreadyWrapped) {
+                $wrapper = $table->ownerDocument->createElement('div');
+                $wrapper->setAttribute('class', 'overflow-x-auto');
+                $parent->replaceChild($wrapper, $table);
+                $wrapper->appendChild($table);
+            }
+        }
     }
 
     /**

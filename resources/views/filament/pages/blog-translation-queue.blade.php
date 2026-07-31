@@ -90,6 +90,15 @@
                                         >
                                             Extract content
                                         </x-filament::button>
+
+                                        <x-filament::button
+                                            size="sm"
+                                            color="gray"
+                                            icon="heroicon-o-information-circle"
+                                            wire:click="mountAction('viewTopic', {{ Illuminate\Support\Js::from(['groupKey' => $topic['url']->group_key, 'title' => $topic['url']->article_title ?? $topic['url']->slug]) }})"
+                                        >
+                                            Details
+                                        </x-filament::button>
                                     </div>
 
                                     @if ($topic['url']->content_extracted_at)

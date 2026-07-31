@@ -185,55 +185,115 @@
                         @endif
                     </div>
 
-                    {{-- Visual: a live, click-to-edit rendering of the content itself - text is
-                         directly editable in place, and clicking an element (text/image/link)
-                         opens matching controls in the side panel. --}}
+                    {{-- Visual: a live, click-to-edit rendering of the content itself, with a
+                         persistent formatting toolbar (select text, then format it - like any
+                         normal editor) plus a floating quick-edit popup that pops up right next
+                         to whatever you just selected/clicked, for the fields you need fastest. --}}
                     <div x-show="mode === 'visual'" x-cloak>
                         <p class="mb-2 text-xs text-gray-400 dark:text-gray-500">
-                            Click text to edit it directly, or click an image/link to see its options.
+                            Select text and use the toolbar (or the popup that appears) to format it. Click an image or link for its full options on the right.
                         </p>
 
+                        {{-- Toolbar --}}
+                        <div class="flex flex-wrap items-center gap-1 rounded-t-lg border border-b-0 border-gray-200 bg-gray-50 p-1.5 dark:border-white/10 dark:bg-white/5">
+                            <select x-model="selFormatTag" @mousedown="restoreSelection()" @change="applyFormatBlockSelect()" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <template x-for="tag in formatTags" :key="tag">
+                                    <option :value="tag" x-text="tag === 'p' ? 'Paragraph' : (tag === 'blockquote' ? 'Quote' : tag.toUpperCase())"></option>
+                                </template>
+                            </select>
+
+                            <div class="flex overflow-hidden rounded-md border border-gray-300 dark:border-white/10">
+                                <button type="button" @mousedown.prevent="toggleBold()" class="px-2 py-1 text-xs font-bold hover:bg-gray-100 dark:hover:bg-white/10">B</button>
+                                <button type="button" @mousedown.prevent="toggleItalic()" class="border-s border-gray-300 px-2 py-1 text-xs italic hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">I</button>
+                                <button type="button" @mousedown.prevent="toggleUnderline()" class="border-s border-gray-300 px-2 py-1 text-xs underline hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">U</button>
+                            </div>
+
+                            <select x-model="selFontFamily" @mousedown="restoreSelection()" @change="applyFontFamilySelection()" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <option value="">Default font</option>
+                                <option value="font-sans">Sans-serif</option>
+                                <option value="font-serif">Serif</option>
+                                <option value="font-mono">Monospace</option>
+                            </select>
+
+                            <div class="flex overflow-hidden rounded-md border border-gray-300 dark:border-white/10">
+                                <button type="button" @mousedown.prevent="insertList(false)" title="Bullet list" class="px-2 py-1 text-xs hover:bg-gray-100 dark:hover:bg-white/10">•≡</button>
+                                <button type="button" @mousedown.prevent="insertList(true)" title="Numbered list" class="border-s border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">1≡</button>
+                            </div>
+
+                            <select @mousedown="restoreSelection()" @change="applyAlignToBlock($event.target.value)" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <option value="">Align…</option>
+                                <option value="text-left">Left</option>
+                                <option value="text-center">Center</option>
+                                <option value="text-right">Right</option>
+                                <option value="text-justify">Justify</option>
+                            </select>
+
+                            <select x-model="selBg" @mousedown="restoreSelection()" @change="applyHighlightSelection()" title="Highlight" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <option value="">Highlight…</option>
+                                <template x-for="color in textColors" :key="color">
+                                    <optgroup :label="color">
+                                        <template x-for="shade in highlightShades" :key="shade">
+                                            <option :value="'bg-' + color + '-' + shade" x-text="color + ' ' + shade"></option>
+                                        </template>
+                                    </optgroup>
+                                </template>
+                            </select>
+
+                            <select x-model="selColor" @mousedown="restoreSelection()" @change="applyTextColorSelection()" title="Text color" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <option value="">Text color…</option>
+                                <template x-for="color in textColors" :key="color">
+                                    <optgroup :label="color">
+                                        <template x-for="shade in textShades" :key="shade">
+                                            <option :value="'text-' + color + '-' + shade" x-text="color + ' ' + shade"></option>
+                                        </template>
+                                    </optgroup>
+                                </template>
+                            </select>
+
+                            <select x-model="selSize" @mousedown="restoreSelection()" @change="applyTextSizeSelection()" title="Text size" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <option value="">Size…</option>
+                                <template x-for="size in textSizes" :key="size">
+                                    <option :value="'text-' + size" x-text="size"></option>
+                                </template>
+                            </select>
+
+                            <button type="button" @mousedown.prevent="clearFormatting()" title="Clear formatting" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">⌫A</button>
+
+                            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-white/10"></span>
+
+                            <button type="button" @mousedown.prevent="toolbarLink()" title="Link" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">🔗</button>
+
+                            <label title="Insert image" class="cursor-pointer rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">
+                                🖼
+                                <input type="file" accept="image/*" class="hidden" @change="addImageFile($event)">
+                            </label>
+
+                            <button type="button" @mousedown.prevent="openVideoPopover()" title="Insert video" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">🎬</button>
+
+                            <button type="button" @mousedown.prevent="insertReadMore()" title="Insert/move the Read more marker (hr.shorthr)" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">Read more</button>
+
+                            <span class="flex-1"></span>
+
+                            <button type="button" @click="goCode()" title="View code" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">&lt;/&gt;</button>
+                        </div>
+
+                        <div x-show="videoPopoverOpen" x-cloak class="flex items-center gap-2 border border-b-0 border-gray-200 bg-gray-50 p-2 dark:border-white/10 dark:bg-white/5">
+                            <input type="text" x-model="videoUrl" placeholder="YouTube/Vimeo URL or direct video file URL" class="fi-input flex-1 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900" @keydown.enter="insertVideo()">
+                            <x-filament::button size="xs" @click="insertVideo()">Insert</x-filament::button>
+                            <button type="button" @click="videoPopoverOpen = false" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Cancel</button>
+                        </div>
+
                         <div class="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_260px]">
-                            <iframe x-ref="visualFrame" wire:ignore class="h-96 w-full rounded-lg border border-gray-200 bg-white dark:border-white/10"></iframe>
+                            <iframe x-ref="visualFrame" wire:ignore class="h-96 w-full rounded-b-lg border border-gray-200 bg-white dark:border-white/10"></iframe>
 
                             <div class="rounded-lg border border-gray-200 p-3 text-xs dark:border-white/10">
                                 <template x-if="!selectedKind">
-                                    <p class="text-gray-400 dark:text-gray-500">Click any text, image, or link in the preview to edit it here.</p>
-                                </template>
-
-                                <template x-if="selectedKind === 'text'">
-                                    <div class="space-y-3">
-                                        <p class="font-medium text-gray-600 dark:text-gray-300">Text style</p>
-
-                                        <div>
-                                            <label class="mb-1 block text-gray-500 dark:text-gray-400">Color</label>
-                                            <select x-model="selColor" @change="applyTextColor()" class="fi-input w-full rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
-                                                <option value="">Default</option>
-                                                <template x-for="color in textColors" :key="color">
-                                                    <optgroup :label="color">
-                                                        <template x-for="shade in textShades" :key="shade">
-                                                            <option :value="'text-' + color + '-' + shade" x-text="color + ' ' + shade"></option>
-                                                        </template>
-                                                    </optgroup>
-                                                </template>
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label class="mb-1 block text-gray-500 dark:text-gray-400">Size</label>
-                                            <select x-model="selSize" @change="applyTextSize()" class="fi-input w-full rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
-                                                <option value="">Default</option>
-                                                <template x-for="size in textSizes" :key="size">
-                                                    <option :value="'text-' + size" x-text="size"></option>
-                                                </template>
-                                            </select>
-                                        </div>
-                                    </div>
+                                    <p class="text-gray-400 dark:text-gray-500">Click an image or link in the preview for its full options here.</p>
                                 </template>
 
                                 <template x-if="selectedKind === 'image'">
                                     <div class="space-y-3">
-                                        <p class="font-medium text-gray-600 dark:text-gray-300">Image</p>
+                                        <p class="font-medium text-gray-600 dark:text-gray-300">Image options</p>
 
                                         <div>
                                             <label class="mb-1 block text-gray-500 dark:text-gray-400">Alt text</label>
@@ -258,7 +318,7 @@
 
                                 <template x-if="selectedKind === 'link'">
                                     <div class="space-y-3">
-                                        <p class="font-medium text-gray-600 dark:text-gray-300">Link</p>
+                                        <p class="font-medium text-gray-600 dark:text-gray-300">Link options</p>
 
                                         <div>
                                             <label class="mb-1 block text-gray-500 dark:text-gray-400">URL</label>
@@ -294,6 +354,51 @@
                                     </div>
                                 </template>
                             </div>
+                        </div>
+
+                        {{-- Floating quick-edit popup - appears right next to a text selection
+                             (bold/color/size/tag) or a clicked image (alt) / link (url), so the
+                             fastest edits don't need a trip to the toolbar or the panel above. --}}
+                        <div
+                            x-show="popupVisible"
+                            x-cloak
+                            :style="`position: fixed; top: ${popupTop}px; left: ${popupLeft}px; z-index: 60;`"
+                            class="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1.5 text-xs shadow-lg dark:border-white/10 dark:bg-gray-800"
+                        >
+                            <template x-if="popupKind === 'text'">
+                                <div class="flex items-center gap-1">
+                                    <button type="button" @mousedown.prevent="toggleBold()" class="rounded px-2 py-1 font-bold hover:bg-gray-100 dark:hover:bg-white/10">B</button>
+                                    <select x-model="selFormatTag" @mousedown="restoreSelection()" @change="applyFormatBlockSelect()" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                        <template x-for="tag in formatTags" :key="tag">
+                                            <option :value="tag" x-text="tag === 'p' ? 'P' : (tag === 'blockquote' ? 'Quote' : tag.toUpperCase())"></option>
+                                        </template>
+                                    </select>
+                                    <select x-model="selColor" @mousedown="restoreSelection()" @change="applyTextColorSelection()" class="fi-input w-20 rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                        <option value="">Color</option>
+                                        <template x-for="color in textColors" :key="color">
+                                            <optgroup :label="color">
+                                                <template x-for="shade in textShades" :key="shade">
+                                                    <option :value="'text-' + color + '-' + shade" x-text="color + ' ' + shade"></option>
+                                                </template>
+                                            </optgroup>
+                                        </template>
+                                    </select>
+                                    <select x-model="selSize" @mousedown="restoreSelection()" @change="applyTextSizeSelection()" class="fi-input w-16 rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                        <option value="">Size</option>
+                                        <template x-for="size in textSizes" :key="size">
+                                            <option :value="'text-' + size" x-text="size"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                            </template>
+
+                            <template x-if="popupKind === 'link'">
+                                <input type="text" x-model="linkHref" @change="applyLink()" placeholder="URL" class="fi-input w-56 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                            </template>
+
+                            <template x-if="popupKind === 'image'">
+                                <input type="text" x-model="imgAlt" @input="applyImageAlt()" placeholder="Alt text" class="fi-input w-56 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                            </template>
                         </div>
 
                         <label class="mt-2 inline-block cursor-pointer rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">

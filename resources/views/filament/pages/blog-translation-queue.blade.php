@@ -131,9 +131,14 @@
     <script>
         const BLOG_EDITOR_TEXT_COLORS = ['gray', 'red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'purple'];
         const BLOG_EDITOR_TEXT_SHADES = ['400', '500', '600', '700', '900'];
+        const BLOG_EDITOR_HIGHLIGHT_SHADES = ['100', '200', '300'];
         const BLOG_EDITOR_TEXT_SIZES = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl'];
         const BLOG_EDITOR_COLOR_CLASS_RE = /^text-(gray|red|orange|yellow|green|blue|indigo|purple)-(50|100|200|300|400|500|600|700|800|900)$/;
         const BLOG_EDITOR_SIZE_CLASS_RE = /^text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)$/;
+        const BLOG_EDITOR_BG_CLASS_RE = /^bg-(gray|red|orange|yellow|green|blue|indigo|purple)-(50|100|200|300|400|500|600|700|800|900)$/;
+        const BLOG_EDITOR_FONT_FAMILY_RE = /^font-(sans|serif|mono)$/;
+        const BLOG_EDITOR_ALIGN_RE = /^text-(left|center|right|justify)$/;
+        const BLOG_EDITOR_FORMAT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'blockquote'];
 
         function blogEditor(urlId, originalHtml, editedHtml, editedPreviewUrl, editedPreviewUrlTemplate) {
             return {
@@ -152,7 +157,7 @@
                 links: [],
                 codeMirror: null,
 
-                // Visual mode - click-to-select inspector.
+                // Visual mode - click-to-select inspector (images/links - full options).
                 selectedKind: null,
                 _selectedNode: null,
                 selColor: '',
@@ -170,9 +175,29 @@
                 linkNoreferrer: false,
                 uploadingImage: false,
 
+                // Visual mode - persistent toolbar state.
+                selFontFamily: '',
+                selBg: '',
+                selFormatTag: 'p',
+                _savedRange: null,
+
+                // Visual mode - floating quick-edit popup (appears right after selecting text,
+                // or clicking an image/link) so common edits don't require reaching the toolbar
+                // or the side panel.
+                popupVisible: false,
+                popupKind: null,
+                popupTop: 0,
+                popupLeft: 0,
+
+                // Visual mode - video insert popover.
+                videoPopoverOpen: false,
+                videoUrl: '',
+
                 textColors: BLOG_EDITOR_TEXT_COLORS,
                 textShades: BLOG_EDITOR_TEXT_SHADES,
+                highlightShades: BLOG_EDITOR_HIGHLIGHT_SHADES,
                 textSizes: BLOG_EDITOR_TEXT_SIZES,
+                formatTags: BLOG_EDITOR_FORMAT_TAGS,
 
                 copyOriginal() {
                     navigator.clipboard.writeText(originalHtml || '');
@@ -232,6 +257,7 @@
                 goOriginal() {
                     if (this.mode === 'visual') this.syncFromVisual();
                     if (this.mode === 'code') this.syncFromCode();
+                    this.hidePopup();
                     this.mode = 'original';
                 },
                 goVisual() {
@@ -241,16 +267,22 @@
                 },
                 goCode() {
                     if (this.mode === 'visual') this.syncFromVisual();
+                    this.hidePopup();
                     this.mode = 'code';
                     this.$nextTick(() => this.initOrRefreshCode());
                 },
 
                 // ---- visual mode: a contenteditable iframe (Tailwind CDN, so every utility
-                // class renders exactly like the live site) plus click-to-select element inspector.
+                // class renders exactly like the live site), a persistent formatting toolbar
+                // driven by real text selections, plus click-to-select image/link inspectors.
                 renderVisual() {
                     const frame = this.$refs.visualFrame;
                     if (!frame) return;
                     this.clearSelection();
+                    this.hidePopup();
+                    // A fresh srcdoc load replaces the iframe's document entirely, so any range
+                    // saved from the previous document would point at now-detached nodes.
+                    this._savedRange = null;
                     // Built with split closing tags ("<" + "/head>" etc.) because Livewire's
                     // asset injector does a raw string search across the whole rendered response
                     // for the literal head/body closing tags and splices its own script/style
@@ -265,6 +297,7 @@
                         const idoc = frame.contentDocument;
                         idoc.body.addEventListener('input', () => this.syncFromVisual());
                         idoc.body.addEventListener('click', (e) => this.visualClick(e));
+                        idoc.addEventListener('selectionchange', () => this.onSelectionChange());
                     };
                     frame.srcdoc = doc;
                 },
@@ -289,42 +322,265 @@
                     this.selectedKind = null;
                     this._selectedNode = null;
                 },
+                hidePopup() {
+                    this.popupVisible = false;
+                    this.popupKind = null;
+                },
                 visualClick(e) {
                     const frame = this.$refs.visualFrame;
                     const body = frame.contentDocument.body;
 
-                    if (e.target === body) { this.clearSelection(); return; }
+                    if (e.target === body) { this.clearSelection(); this.hidePopup(); return; }
                     if (e.target.tagName === 'IMG') { this.selectImage(e.target); return; }
 
                     const link = e.target.closest ? e.target.closest('a') : null;
                     if (link) { this.selectLink(link); return; }
 
-                    this.selectText(e.target);
+                    // Plain text click (no selection made) - nothing to format yet, just make
+                    // sure any stale image/link inspector state and popup are cleared.
+                    this.clearSelection();
+                    this.hidePopup();
                 },
-                selectText(el) {
-                    this.clearHighlight();
-                    el.setAttribute('data-blogeditor-selected', '1');
-                    this._selectedNode = el;
-                    this.selectedKind = 'text';
-                    const classes = (el.getAttribute('class') || '').split(/\s+/);
+                // ---- selection tracking: text formatting (color/size/bold/...) always acts on
+                // the current real text selection, the same as any normal rich-text editor - you
+                // select text first, then format it. The selection lives inside the iframe's own
+                // document, and clicking a toolbar/popup control in the parent document would
+                // normally collapse it, so the last real (non-collapsed) selection is kept saved
+                // and restored into the iframe right before every formatting action runs.
+                onSelectionChange() {
+                    const frame = this.$refs.visualFrame;
+                    if (!frame || !frame.contentDocument) return;
+                    const idoc = frame.contentDocument;
+                    const sel = idoc.getSelection();
+                    if (!sel || !sel.rangeCount) return;
+                    // Always track the cursor/selection (even collapsed - a plain click just
+                    // places the cursor) so cursor-only actions like alignment, format-block,
+                    // and inserting a list/image/video/Read-more marker land in the right spot.
+                    // The floating quick popup, though, only makes sense for a real selection.
+                    this._savedRange = sel.getRangeAt(0).cloneRange();
+                    if (!sel.isCollapsed) {
+                        this.showTextPopup(sel.getRangeAt(0), sel);
+                    } else if (this.popupKind === 'text') {
+                        this.hidePopup();
+                    }
+                },
+                restoreSelection() {
+                    const frame = this.$refs.visualFrame;
+                    if (!frame || !frame.contentDocument || !this._savedRange) return;
+                    const idoc = frame.contentDocument;
+                    idoc.body.focus();
+                    const sel = idoc.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(this._savedRange);
+                },
+                showTextPopup(range, sel) {
+                    const frame = this.$refs.visualFrame;
+                    const frameRect = frame.getBoundingClientRect();
+                    const rect = range.getBoundingClientRect();
+                    if (!rect || (!rect.width && !rect.height)) return;
+                    this.popupKind = 'text';
+                    this.popupTop = Math.max(8, frameRect.top + rect.top - 48);
+                    this.popupLeft = frameRect.left + rect.left;
+                    this.popupVisible = true;
+
+                    let node = sel.anchorNode;
+                    if (node && node.nodeType === 3) node = node.parentElement;
+                    const classes = node && node.getAttribute ? (node.getAttribute('class') || '').split(/\s+/) : [];
                     this.selColor = classes.find((c) => BLOG_EDITOR_COLOR_CLASS_RE.test(c)) || '';
                     this.selSize = classes.find((c) => BLOG_EDITOR_SIZE_CLASS_RE.test(c)) || '';
+                    const block = node && node.closest ? node.closest('p, h1, h2, h3, h4, h5, h6, blockquote, li') : null;
+                    this.selFormatTag = block ? block.tagName.toLowerCase() : 'p';
+                },
+                showElementPopup(kind, el) {
+                    const frame = this.$refs.visualFrame;
+                    const frameRect = frame.getBoundingClientRect();
+                    const rect = el.getBoundingClientRect();
+                    this.popupKind = kind;
+                    this.popupTop = Math.max(8, frameRect.top + rect.top - 48);
+                    this.popupLeft = frameRect.left + rect.left;
+                    this.popupVisible = true;
+                },
+                // ---- Tailwind-class-based formatting, applied to the current text selection
+                // (wraps/rewraps the selected range in a <span>, replacing any existing class
+                // from the same family) - keeps every formatting option a real Tailwind utility
+                // class instead of an inline style="", matching how the rest of this content is
+                // already built.
+                applyClassToSelection(regex, newClass) {
+                    this.restoreSelection();
+                    const frame = this.$refs.visualFrame;
+                    const idoc = frame.contentDocument;
+                    const sel = idoc.getSelection();
+                    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+                    const range = sel.getRangeAt(0);
+
+                    // If the selection exactly covers a <span> this editor already created (e.g.
+                    // color was just applied to this same selection, and now size is being set
+                    // too), reuse that span instead of wrapping another one around it - keeps
+                    // "apply several properties to one selection in a row" from nesting spans.
+                    const reusable = this.findReusableSpan(range, idoc);
+                    if (reusable) {
+                        this.setClassByRegex(reusable, regex, newClass);
+                        const r = idoc.createRange();
+                        r.selectNodeContents(reusable);
+                        sel.removeAllRanges();
+                        sel.addRange(r);
+                        this._savedRange = r.cloneRange();
+                        this.syncFromVisual();
+                        return;
+                    }
+
+                    const frag = range.extractContents();
+                    this.stripClassRecursive(frag, regex);
+
+                    const span = idoc.createElement('span');
+                    if (newClass) span.className = newClass;
+                    span.appendChild(frag);
+                    range.insertNode(span);
+
+                    const r = idoc.createRange();
+                    if (newClass) {
+                        r.selectNodeContents(span);
+                    } else {
+                        // No class to apply - unwrap the helper span again, keep its contents selected.
+                        const parent = span.parentNode;
+                        const nodes = [...span.childNodes];
+                        nodes.forEach((n) => parent.insertBefore(n, span));
+                        parent.removeChild(span);
+                        if (nodes.length) { r.setStartBefore(nodes[0]); r.setEndAfter(nodes[nodes.length - 1]); } else { r.selectNode(parent); }
+                    }
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                    this._savedRange = r.cloneRange();
+                    this.syncFromVisual();
+                },
+                stripClassRecursive(node, regex) {
+                    if (node.nodeType === 1) {
+                        const cls = (node.getAttribute('class') || '').split(/\s+/).filter((c) => c && !regex.test(c));
+                        if (cls.length) { node.setAttribute('class', cls.join(' ')); } else { node.removeAttribute('class'); }
+                    }
+                    [...(node.childNodes || [])].forEach((c) => this.stripClassRecursive(c, regex));
+                },
+                findReusableSpan(range, idoc) {
+                    let node = range.commonAncestorContainer;
+                    if (node.nodeType === 3) node = node.parentElement;
+                    if (!node || node.tagName !== 'SPAN') return null;
+                    const full = idoc.createRange();
+                    full.selectNodeContents(node);
+                    if (range.compareBoundaryPoints(Range.START_TO_START, full) === 0
+                        && range.compareBoundaryPoints(Range.END_TO_END, full) === 0) {
+                        return node;
+                    }
+                    return null;
+                },
+                applyAlignToBlock(newClass) {
+                    this.restoreSelection();
+                    const idoc = this.$refs.visualFrame.contentDocument;
+                    const sel = idoc.getSelection();
+                    if (!sel || sel.rangeCount === 0) return;
+                    let node = sel.getRangeAt(0).commonAncestorContainer;
+                    if (node.nodeType === 3) node = node.parentElement;
+                    const block = node && node.closest ? node.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, div') : null;
+                    if (!block || block === idoc.body) return;
+                    this.setClassByRegex(block, BLOG_EDITOR_ALIGN_RE, newClass);
+                    this.syncFromVisual();
+                },
+                applyTextColorSelection() { this.applyClassToSelection(BLOG_EDITOR_COLOR_CLASS_RE, this.selColor); },
+                applyTextSizeSelection() { this.applyClassToSelection(BLOG_EDITOR_SIZE_CLASS_RE, this.selSize); },
+                applyHighlightSelection() { this.applyClassToSelection(BLOG_EDITOR_BG_CLASS_RE, this.selBg); },
+                applyFontFamilySelection() { this.applyClassToSelection(BLOG_EDITOR_FONT_FAMILY_RE, this.selFontFamily); },
+                applyFormatBlockSelect() { this.execCmd('formatBlock', this.selFormatTag); },
+                execCmd(cmd, value) {
+                    this.restoreSelection();
+                    const idoc = this.$refs.visualFrame.contentDocument;
+                    idoc.execCommand(cmd, false, value ?? null);
+                    this.syncFromVisual();
+                },
+                toggleBold() { this.execCmd('bold'); },
+                toggleItalic() { this.execCmd('italic'); },
+                toggleUnderline() { this.execCmd('underline'); },
+                insertList(ordered) { this.execCmd(ordered ? 'insertOrderedList' : 'insertUnorderedList'); },
+                clearFormatting() {
+                    this.execCmd('removeFormat');
+                    [BLOG_EDITOR_COLOR_CLASS_RE, BLOG_EDITOR_SIZE_CLASS_RE, BLOG_EDITOR_BG_CLASS_RE, BLOG_EDITOR_FONT_FAMILY_RE].forEach((re) => {
+                        this.applyClassToSelection(re, '');
+                    });
+                },
+                toolbarLink() {
+                    this.restoreSelection();
+                    const idoc = this.$refs.visualFrame.contentDocument;
+                    const sel = idoc.getSelection();
+                    if (!sel || sel.rangeCount === 0) return;
+                    let node = sel.anchorNode;
+                    if (node && node.nodeType === 3) node = node.parentElement;
+                    const existingLink = node && node.closest ? node.closest('a') : null;
+                    if (existingLink) { this.selectLink(existingLink); return; }
+                    if (sel.isCollapsed) return;
+                    const range = sel.getRangeAt(0);
+                    const a = idoc.createElement('a');
+                    a.setAttribute('href', '');
+                    a.textContent = range.toString();
+                    range.deleteContents();
+                    range.insertNode(a);
+                    this.syncFromVisual();
+                    this.selectLink(a);
+                },
+                insertReadMore() {
+                    this.restoreSelection();
+                    const idoc = this.$refs.visualFrame.contentDocument;
+                    const existing = idoc.body.querySelector('hr.shorthr');
+                    if (existing) existing.remove();
+                    const hr = idoc.createElement('hr');
+                    hr.className = 'shorthr';
+                    const sel = idoc.getSelection();
+                    if (sel && sel.rangeCount) {
+                        const range = sel.getRangeAt(0);
+                        range.collapse(true);
+                        range.insertNode(hr);
+                    } else {
+                        idoc.body.appendChild(hr);
+                    }
+                    this.syncFromVisual();
+                },
+                openVideoPopover() { this.videoPopoverOpen = true; this.videoUrl = ''; },
+                insertVideo() {
+                    const url = (this.videoUrl || '').trim();
+                    this.videoPopoverOpen = false;
+                    if (!url) return;
+                    this.restoreSelection();
+                    const idoc = this.$refs.visualFrame.contentDocument;
+                    const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+                    const vimeo = !yt && url.match(/vimeo\.com\/(\d+)/);
+                    let wrapper;
+                    if (yt || vimeo) {
+                        const iframeEl = idoc.createElement('iframe');
+                        iframeEl.src = yt ? ('https://www.youtube.com/embed/' + yt[1]) : ('https://player.vimeo.com/video/' + vimeo[1]);
+                        iframeEl.className = 'h-full w-full rounded-lg';
+                        iframeEl.setAttribute('allowfullscreen', '');
+                        wrapper = idoc.createElement('div');
+                        wrapper.className = 'aspect-video mb-4';
+                        wrapper.appendChild(iframeEl);
+                    } else {
+                        const videoEl = idoc.createElement('video');
+                        videoEl.src = url;
+                        videoEl.controls = true;
+                        videoEl.className = 'w-full rounded-lg mb-4';
+                        wrapper = videoEl;
+                    }
+                    const sel = idoc.getSelection();
+                    if (sel && sel.rangeCount) {
+                        const range = sel.getRangeAt(0);
+                        range.collapse(false);
+                        range.insertNode(wrapper);
+                    } else {
+                        idoc.body.appendChild(wrapper);
+                    }
+                    this.syncFromVisual();
                 },
                 setClassByRegex(el, re, newClass) {
                     const classes = (el.getAttribute('class') || '').split(/\s+/).filter((c) => c && !re.test(c));
                     if (newClass) classes.push(newClass);
                     const joined = classes.join(' ').trim();
                     if (joined) { el.setAttribute('class', joined); } else { el.removeAttribute('class'); }
-                },
-                applyTextColor() {
-                    if (!this._selectedNode) return;
-                    this.setClassByRegex(this._selectedNode, BLOG_EDITOR_COLOR_CLASS_RE, this.selColor);
-                    this.syncFromVisual();
-                },
-                applyTextSize() {
-                    if (!this._selectedNode) return;
-                    this.setClassByRegex(this._selectedNode, BLOG_EDITOR_SIZE_CLASS_RE, this.selSize);
-                    this.syncFromVisual();
                 },
                 selectImage(el) {
                     this.clearHighlight();
@@ -333,6 +589,7 @@
                     this.selectedKind = 'image';
                     this.imgAlt = el.getAttribute('alt') || '';
                     this.imgRounded = /(^|\s)rounded(-\S+)?(\s|$)/.test(el.getAttribute('class') || '');
+                    this.showElementPopup('image', el);
                 },
                 applyImageAlt() {
                     if (!this._selectedNode) return;
@@ -348,6 +605,7 @@
                     if (!this._selectedNode) return;
                     this._selectedNode.remove();
                     this.clearSelection();
+                    this.hidePopup();
                     this.syncFromVisual();
                 },
                 replaceImageFile(event) {
@@ -406,6 +664,7 @@
                     this.linkUgc = rel.includes('ugc');
                     this.linkNoopener = rel.includes('noopener');
                     this.linkNoreferrer = rel.includes('noreferrer');
+                    this.showElementPopup('link', el);
                 },
                 applyLink() {
                     if (!this._selectedNode) return;

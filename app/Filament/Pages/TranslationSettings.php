@@ -2,11 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\AdminAutomationSettingsService;
 use App\Services\BlogTranslationDetectionService;
 use App\Services\TranslationSettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -32,11 +34,17 @@ class TranslationSettings extends Page implements HasForms
 
     public ?array $lastRunResult = null;
 
-    public function mount(TranslationSettingsService $settings): void
+    public function mount(TranslationSettingsService $settings, AdminAutomationSettingsService $automationSettings): void
     {
         $this->form->fill([
             'autoHideEnabled' => $settings->isAutoHideEnabled(),
             'recheckIntervalHours' => $settings->getRecheckIntervalHours(),
+
+            'adminPanelUrl' => $automationSettings->getPanelUrl(),
+            'adminUsername' => $automationSettings->getUsername(),
+            'adminPassword' => null,
+            'automationServiceUrl' => $automationSettings->getServiceUrl(),
+            'automationServiceToken' => null,
         ]);
     }
 
@@ -54,11 +62,46 @@ class TranslationSettings extends Page implements HasForms
                     ->minValue(1)
                     ->required()
                     ->helperText('How often each blog URL gets re-checked. Runs hourly in the background but only actually re-checks a URL once this many hours have passed since its last check.'),
+
+                Section::make('Admin panel automation')
+                    ->description('Credentials and endpoint used by the "Admin Login" page to sign in to the panel\'s admin area and open the Blog page there, so translated posts can eventually be published back to it.')
+                    ->schema([
+                        TextInput::make('adminPanelUrl')
+                            ->label('Panel URL')
+                            ->url()
+                            ->required()
+                            ->helperText('Currently pointed at the test panel (smmto.com); switch to the real smmplus panel URL once this is verified.'),
+
+                        TextInput::make('adminUsername')
+                            ->label('Admin username'),
+
+                        TextInput::make('adminPassword')
+                            ->label('Admin password')
+                            ->password()
+                            ->revealable()
+                            ->helperText(fn (AdminAutomationSettingsService $automationSettings) => $automationSettings->hasPassword()
+                                ? 'A password is already saved. Leave blank to keep it.'
+                                : 'No password saved yet.'),
+
+                        TextInput::make('automationServiceUrl')
+                            ->label('Automation service URL')
+                            ->url()
+                            ->helperText('Base URL of the Node/Playwright login service (see automation/README.md), e.g. https://automation.example.com'),
+
+                        TextInput::make('automationServiceToken')
+                            ->label('Automation service token')
+                            ->password()
+                            ->revealable()
+                            ->helperText(fn (AdminAutomationSettingsService $automationSettings) => $automationSettings->hasServiceToken()
+                                ? 'A token is already saved. Leave blank to keep it.'
+                                : 'Must match AUTOMATION_TOKEN on the automation service.'),
+                    ])
+                    ->columns(2),
             ])
             ->statePath('data');
     }
 
-    public function save(TranslationSettingsService $settings): void
+    public function save(TranslationSettingsService $settings, AdminAutomationSettingsService $automationSettings): void
     {
         $data = $this->form->getState();
 
@@ -66,6 +109,20 @@ class TranslationSettings extends Page implements HasForms
             (bool) $data['autoHideEnabled'],
             (int) $data['recheckIntervalHours'],
         );
+
+        $automationSettings->setSettings(
+            $data['adminPanelUrl'],
+            $data['adminUsername'] ?: null,
+            $data['adminPassword'] ?: null,
+            $data['automationServiceUrl'] ?: null,
+            $data['automationServiceToken'] ?: null,
+        );
+
+        $this->form->fill([
+            ...$data,
+            'adminPassword' => null,
+            'automationServiceToken' => null,
+        ]);
 
         Notification::make()
             ->title('Settings saved')

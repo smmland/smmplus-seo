@@ -1,0 +1,16 @@
+{
+  "name": "smmplus-admin-automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright-driven service that logs into the smmplus admin panel (React SPA, no public login API), auto-solves the hCaptcha checkbox when possible, and hands control to a human via a live screencast when a real challenge appears.",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "playwright": "^1.48.0"
+  }
+}

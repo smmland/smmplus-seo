@@ -195,6 +195,43 @@ class BlogTranslationQueue extends Page implements HasActions
     }
 
     /**
+     * Stores an image uploaded from the visual editor (a new image, or a replacement for an
+     * existing one) as a real file, the same way extraction does - keeps saveEditedContent()'s
+     * HTML small (a URL, not a data: URI) and gives the image a stable, previewable link.
+     */
+    public function uploadEditedImage(int $urlId, string $dataUrl): ?string
+    {
+        $row = Url::query()->find($urlId);
+
+        if (! $row) {
+            return null;
+        }
+
+        if (! preg_match('/^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/', $dataUrl, $m)) {
+            return null;
+        }
+
+        $bytes = base64_decode($m[2], true);
+
+        if ($bytes === false || strlen($bytes) > 8_000_000) {
+            return null;
+        }
+
+        $ext = match (strtolower($m[1])) {
+            'jpeg' => 'jpg',
+            'svg+xml' => 'svg',
+            default => preg_replace('/[^a-z0-9]/i', '', strtolower($m[1])) ?: 'jpg',
+        };
+
+        $filename = substr(md5($m[2]), 0, 16).'-'.now()->timestamp.'.'.$ext;
+        $path = "blog/{$row->slug}/images/edited/{$filename}";
+
+        Storage::disk('public')->put($path, $bytes);
+
+        return url('/blog-content/'.$path);
+    }
+
+    /**
      * Placeholder for connecting an AI (Claude/ChatGPT) to translate this row's content
      * automatically - not implemented yet, just the hook or now so the UI has somewhere for it
      * to live once that's built.

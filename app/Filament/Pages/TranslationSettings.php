@@ -47,6 +47,8 @@ class TranslationSettings extends Page implements HasForms
             'aiProvider' => $aiSettings->getProvider(),
             // Never pre-filled with the real secret - blank means "keep the saved one" on save.
             'aiApiKey' => null,
+            'aiModelClaude' => $aiSettings->getModel('claude'),
+            'aiModelChatgpt' => $aiSettings->getModel('chatgpt'),
             'blogTranslationPrompt' => $aiSettings->getBlogTranslationPrompt(),
         ]);
     }
@@ -82,6 +84,16 @@ class TranslationSettings extends Page implements HasForms
                             ->helperText(fn (Get $get) => app(AiSettingsService::class)->hasApiKey($get('aiProvider'))
                                 ? 'A key is already saved for this provider - leave blank to keep it, or type a new one to replace it.'
                                 : 'No key saved yet for this provider.'),
+
+                        TextInput::make('aiModelClaude')
+                            ->label('Claude model')
+                            ->visible(fn (Get $get) => $get('aiProvider') === 'claude')
+                            ->helperText('The Anthropic model id used for translation calls - edit this if the provider retires the current one.'),
+
+                        TextInput::make('aiModelChatgpt')
+                            ->label('ChatGPT model')
+                            ->visible(fn (Get $get) => $get('aiProvider') === 'chatgpt')
+                            ->helperText('The OpenAI model id used for translation calls - edit this if the provider retires the current one.'),
                     ])
                     ->columns(2),
 
@@ -109,6 +121,8 @@ class TranslationSettings extends Page implements HasForms
 
         $aiSettings->setProvider($data['aiProvider']);
         $aiSettings->setApiKey($data['aiProvider'], $data['aiApiKey'] ?: null);
+        $aiSettings->setModel('claude', $data['aiModelClaude'] ?? null);
+        $aiSettings->setModel('chatgpt', $data['aiModelChatgpt'] ?? null);
         $aiSettings->setBlogTranslationPrompt($data['blogTranslationPrompt']);
 
         // The typed key was only ever meant to reach storage (encrypted) - don't leave it

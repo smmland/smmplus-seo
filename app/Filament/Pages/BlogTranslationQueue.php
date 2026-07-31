@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Language;
 use App\Models\Url;
+use App\Services\BlogAiTranslationService;
 use App\Services\BlogContentExtractionService;
 use App\Services\BlogTranslationDetectionService;
 use App\Services\TranslationSettingsService;
@@ -232,17 +233,103 @@ class BlogTranslationQueue extends Page implements HasActions
     }
 
     /**
-     * Placeholder for connecting an AI (Claude/ChatGPT) to translate this row's content
-     * automatically - not implemented yet, just the hook or now so the UI has somewhere for it
-     * to live once that's built.
+     * Translates the topic's default-language content into one specific missing language -
+     * works whether or not that language already has a Url row (a real page might not exist on
+     * the live site yet), since BlogAiTranslationService creates one if needed.
      */
-    public function translateWithAi(int $urlId): void
+    public function translateLanguage(string $groupKey, string $targetLangCode, BlogAiTranslationService $translator): void
     {
-        Notification::make()
-            ->title('AI translation is not wired up yet')
-            ->body('This button is a placeholder for the next phase - connecting Claude or ChatGPT to translate this row\'s content automatically.')
-            ->info()
-            ->send();
+        $sourceRow = $this->defaultLanguageRow($groupKey);
+
+        if (! $sourceRow) {
+            Notification::make()
+                ->title('Could not find the default-language content for this topic')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $result = $translator->translate($sourceRow, $targetLangCode);
+
+        unset($this->queue);
+
+        $notification = Notification::make()
+            ->title($result['ok'] ? 'Translated' : 'Translation failed')
+            ->body($result['message']);
+
+        $result['ok'] ? $notification->success() : $notification->danger();
+
+        $notification->send();
+    }
+
+    /**
+     * The quick-access version on the default-language tab: translates whichever missing
+     * language comes first, one at a time - a single AI translation call can already run close
+     * to this shared host's PHP execution limit, so working through a large backlog is done by
+     * clicking again (same pattern as the "Run check now" batch button), not in one shot.
+     */
+    public function translateNextMissingLanguage(string $groupKey, BlogAiTranslationService $translator): void
+    {
+        $sourceRow = $this->defaultLanguageRow($groupKey);
+
+        if (! $sourceRow) {
+            Notification::make()
+                ->title('Could not find the default-language content for this topic')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $existingByLang = Url::query()
+            ->where('group_key', $groupKey)
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('lang');
+
+        $missingLanguage = Language::query()
+            ->where('is_active', true)
+            ->where('is_default', false)
+            ->orderBy('sort_order')
+            ->get(['code', 'name'])
+            ->first(function (Language $language) use ($existingByLang) {
+                $row = $existingByLang->get($language->code);
+
+                return ! $row || $row->is_translated !== true;
+            });
+
+        if (! $missingLanguage) {
+            Notification::make()
+                ->title('Nothing left to translate')
+                ->body('Every active language already has a translation for this topic.')
+                ->success()
+                ->send();
+
+            return;
+        }
+
+        $result = $translator->translate($sourceRow, $missingLanguage->code);
+
+        unset($this->queue);
+
+        $notification = Notification::make()
+            ->title($result['ok'] ? "Translated into {$missingLanguage->name}" : 'Translation failed')
+            ->body($result['message']);
+
+        $result['ok'] ? $notification->success() : $notification->danger();
+
+        $notification->send();
+    }
+
+    private function defaultLanguageRow(string $groupKey): ?Url
+    {
+        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        return Url::query()
+            ->where('group_key', $groupKey)
+            ->where('lang', $defaultLangCode)
+            ->first();
     }
 
     public function viewTopicAction(): Action
@@ -334,6 +421,7 @@ class BlogTranslationQueue extends Page implements HasActions
             'englishRow' => $rows->get($defaultLangCode),
             'languages' => $languages,
             'defaultLangCode' => $defaultLangCode,
+            'groupKey' => $groupKey,
         ];
     }
 

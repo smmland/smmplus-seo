@@ -50,10 +50,39 @@
 
     @foreach ($languages as $language)
         <div x-show="tab === '{{ $language['code'] }}'" x-cloak>
+            @if ($language['isDefault'])
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <span></span>
+                    <x-filament::button
+                        size="sm"
+                        color="primary"
+                        icon="heroicon-o-sparkles"
+                        wire:click="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
+                        wire:loading.attr="disabled"
+                        wire:target="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
+                    >
+                        Translate next missing language
+                    </x-filament::button>
+                </div>
+            @endif
+
             @if (! $language['exists'])
-                <p class="text-sm text-gray-500 dark:text-gray-400">
+                <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
                     No {{ $language['name'] }} page exists yet for this topic.
                 </p>
+
+                @if (! $language['isDefault'])
+                    <x-filament::button
+                        size="sm"
+                        color="gray"
+                        icon="heroicon-o-sparkles"
+                        wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                        wire:loading.attr="disabled"
+                        wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                    >
+                        Translate with AI
+                    </x-filament::button>
+                @endif
             @else
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <a
@@ -72,9 +101,11 @@
                                 size="sm"
                                 color="gray"
                                 icon="heroicon-o-sparkles"
-                                wire:click="translateWithAi({{ $language['urlId'] }})"
+                                wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                wire:loading.attr="disabled"
+                                wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
                             >
-                                Translate with AI
+                                Re-translate with AI
                             </x-filament::button>
                         @endif
 
@@ -272,6 +303,11 @@
 
                             <button type="button" @mousedown.prevent="insertReadMore()" title="Insert/move the Read more marker (hr.shorthr)" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">Read more</button>
 
+                            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-white/10"></span>
+
+                            <button type="button" @mousedown.prevent="undo()" :disabled="!_undoStack.length" title="Undo (Ctrl+Z)" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent dark:border-white/10 dark:hover:bg-white/10">↶</button>
+                            <button type="button" @mousedown.prevent="redo()" :disabled="!_redoStack.length" title="Redo (Ctrl+Shift+Z)" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent dark:border-white/10 dark:hover:bg-white/10">↷</button>
+
                             <span class="flex-1"></span>
 
                             <button type="button" @click="goCode()" title="View code" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">&lt;/&gt;</button>
@@ -451,7 +487,17 @@
                             </x-filament::button>
                         </div>
 
-                        <div x-ref="codeContainer" wire:ignore class="h-72 w-full overflow-auto rounded-lg border border-gray-200 text-xs dark:border-white/10"></div>
+                        {{-- x-ref stays on the outer div (JS needs it to find the mount point);
+                             x-ignore goes on the inner one CodeMirror actually renders into, so
+                             Alpine's mutation observer never walks its rapidly-churning internal
+                             DOM (new line/cursor/measurement nodes on every keystroke) - without
+                             it, Alpine ends up interleaved with CodeMirror's render cycle often
+                             enough to desync its internal line-measurement cache from the DOM,
+                             throwing "Cannot read properties of undefined (reading 'map')" from
+                             deep inside codemirror.js on every keystroke. --}}
+                        <div x-ref="codeContainer" wire:ignore class="h-72 w-full overflow-auto rounded-lg border border-gray-200 text-xs dark:border-white/10">
+                            <div x-ignore class="h-full w-full"></div>
+                        </div>
 
                         <p class="mt-1 text-xs text-gray-400 dark:text-gray-500" x-show="!editedPreviewUrl">
                             Edit the HTML above, then Save to create an edited preview link.

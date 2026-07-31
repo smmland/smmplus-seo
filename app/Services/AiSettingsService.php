@@ -35,9 +35,17 @@ class AiSettingsService
 
     private const KEY_PROVIDER = 'ai_provider';
     private const KEY_API_KEY_PREFIX = 'ai_api_key_';
+    private const KEY_MODEL_PREFIX = 'ai_model_';
     private const KEY_BLOG_TRANSLATION_PROMPT = 'ai_prompt_blog_translation';
 
     private const DEFAULT_PROVIDER = 'claude';
+
+    // Editable on the settings page rather than hardcoded permanently - API providers retire
+    // model ids over time, so these are just sane starting points, not guaranteed forever.
+    private const DEFAULT_MODELS = [
+        'claude' => 'claude-sonnet-4-5-20250929',
+        'chatgpt' => 'gpt-4o',
+    ];
 
     // Verbatim from smmland/smmplus-extensions (smmplus-tools/popup.js, buildPrompt()) per
     // explicit request to use it as the starting point - only the dynamic JS template values
@@ -147,6 +155,23 @@ class AiSettingsService
     public function clearApiKey(string $provider): void
     {
         Setting::query()->where('key', self::apiKeyStorageKey($provider))->delete();
+    }
+
+    public function getModel(string $provider): string
+    {
+        return $this->get(self::modelStorageKey($provider)) ?? (self::DEFAULT_MODELS[$provider] ?? '');
+    }
+
+    public function setModel(string $provider, ?string $model): void
+    {
+        if ($model !== null && $model !== '') {
+            $this->set(self::modelStorageKey($provider), $model);
+        }
+    }
+
+    private static function modelStorageKey(string $provider): string
+    {
+        return self::KEY_MODEL_PREFIX.$provider;
     }
 
     public function getBlogTranslationPrompt(): string

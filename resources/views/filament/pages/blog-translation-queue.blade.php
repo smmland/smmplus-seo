@@ -193,6 +193,15 @@
                 videoPopoverOpen: false,
                 videoUrl: '',
 
+                // Visual mode - undo/redo history (a custom stack of html snapshots, not the
+                // browser's native contenteditable undo - that history gets left inconsistent by
+                // the programmatic span wrap/unwrap this editor does for color/size/etc, so
+                // native Ctrl+Z is disabled inside the iframe in favor of this).
+                _undoStack: [],
+                _redoStack: [],
+                _typingSnapshotPending: false,
+                _typingTimer: null,
+
                 textColors: BLOG_EDITOR_TEXT_COLORS,
                 textShades: BLOG_EDITOR_TEXT_SHADES,
                 highlightShades: BLOG_EDITOR_HIGHLIGHT_SHADES,
@@ -295,9 +304,31 @@
                         + '<' + '/head><body contenteditable="true">' + this.html + '<' + '/body><' + '/html>';
                     frame.onload = () => {
                         const idoc = frame.contentDocument;
+                        // Snapshot for undo before the first keystroke of a burst of typing (not
+                        // every keystroke - that would make one Ctrl+Z undo a single character).
+                        // A pause of 800ms starts a new burst/undo step.
+                        idoc.body.addEventListener('beforeinput', () => {
+                            if (!this._typingSnapshotPending) {
+                                this.pushUndoSnapshot();
+                                this._typingSnapshotPending = true;
+                            }
+                            clearTimeout(this._typingTimer);
+                            this._typingTimer = setTimeout(() => { this._typingSnapshotPending = false; }, 800);
+                        });
                         idoc.body.addEventListener('input', () => this.syncFromVisual());
                         idoc.body.addEventListener('click', (e) => this.visualClick(e));
                         idoc.addEventListener('selectionchange', () => this.onSelectionChange());
+                        // The browser's own contenteditable undo history gets left inconsistent
+                        // by this editor's programmatic DOM changes (wrapping/unwrapping spans
+                        // for color/size/etc bypasses it entirely), so native Ctrl+Z is replaced
+                        // with the custom html-snapshot stack instead.
+                        idoc.addEventListener('keydown', (e) => {
+                            const mod = e.ctrlKey || e.metaKey;
+                            if (!mod) return;
+                            const key = e.key.toLowerCase();
+                            if (key === 'z' && !e.shiftKey) { e.preventDefault(); this.undo(); }
+                            else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); this.redo(); }
+                        });
                     };
                     frame.srcdoc = doc;
                 },
@@ -310,6 +341,35 @@
                         clone.querySelectorAll('[data-blogeditor-selected]').forEach((n) => n.removeAttribute('data-blogeditor-selected'));
                         this.html = clone.innerHTML;
                     }
+                },
+                // ---- undo/redo: a stack of html snapshots, taken right before a change is
+                // made (see pushUndoSnapshot() call sites throughout this file's mutating
+                // actions), so undo/redo work the same in Visual mode regardless of whether the
+                // change came from typing, the toolbar, the popup, or the side panel.
+                pushUndoSnapshot() {
+                    this._undoStack.push(this.html);
+                    if (this._undoStack.length > 50) this._undoStack.shift();
+                    this._redoStack = [];
+                },
+                undo() {
+                    if (!this._undoStack.length) return;
+                    this._redoStack.push(this.html);
+                    this.html = this._undoStack.pop();
+                    this.applyHtmlToVisual();
+                },
+                redo() {
+                    if (!this._redoStack.length) return;
+                    this._undoStack.push(this.html);
+                    this.html = this._redoStack.pop();
+                    this.applyHtmlToVisual();
+                },
+                applyHtmlToVisual() {
+                    const frame = this.$refs.visualFrame;
+                    if (frame && frame.contentDocument && frame.contentDocument.body) {
+                        frame.contentDocument.body.innerHTML = this.html;
+                    }
+                    this.clearSelection();
+                    this.hidePopup();
                 },
                 clearHighlight() {
                     const frame = this.$refs.visualFrame;
@@ -328,9 +388,23 @@
                 },
                 visualClick(e) {
                     const frame = this.$refs.visualFrame;
-                    const body = frame.contentDocument.body;
+                    const idoc = frame.contentDocument;
+                    const body = idoc.body;
 
-                    if (e.target === body) { this.clearSelection(); this.hidePopup(); return; }
+                    if (e.target === body) {
+                        // A mouse drag-selection also fires its final "click" on the body (the
+                        // browser reports the release there), which would otherwise immediately
+                        // hide the popup onSelectionChange() just showed for that same
+                        // selection - a real selection made with the mouse never got a chance
+                        // to stay open, while one made by keyboard (shift+arrows, no click
+                        // event at all) worked fine. Only treat this as "clicked empty space to
+                        // deselect" when there's no selection left standing.
+                        const sel = idoc.getSelection();
+                        if (sel && sel.rangeCount && !sel.isCollapsed) return;
+                        this.clearSelection();
+                        this.hidePopup();
+                        return;
+                    }
                     if (e.target.tagName === 'IMG') { this.selectImage(e.target); return; }
 
                     const link = e.target.closest ? e.target.closest('a') : null;
@@ -405,12 +479,13 @@
                 // from the same family) - keeps every formatting option a real Tailwind utility
                 // class instead of an inline style="", matching how the rest of this content is
                 // already built.
-                applyClassToSelection(regex, newClass) {
+                applyClassToSelection(regex, newClass, skipSnapshot) {
                     this.restoreSelection();
                     const frame = this.$refs.visualFrame;
                     const idoc = frame.contentDocument;
                     const sel = idoc.getSelection();
                     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+                    if (!skipSnapshot) this.pushUndoSnapshot();
                     const range = sel.getRangeAt(0);
 
                     // If the selection exactly covers a <span> this editor already created (e.g.
@@ -481,6 +556,7 @@
                     if (node.nodeType === 3) node = node.parentElement;
                     const block = node && node.closest ? node.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, div') : null;
                     if (!block || block === idoc.body) return;
+                    this.pushUndoSnapshot();
                     this.setClassByRegex(block, BLOG_EDITOR_ALIGN_RE, newClass);
                     this.syncFromVisual();
                 },
@@ -489,9 +565,10 @@
                 applyHighlightSelection() { this.applyClassToSelection(BLOG_EDITOR_BG_CLASS_RE, this.selBg); },
                 applyFontFamilySelection() { this.applyClassToSelection(BLOG_EDITOR_FONT_FAMILY_RE, this.selFontFamily); },
                 applyFormatBlockSelect() { this.execCmd('formatBlock', this.selFormatTag); },
-                execCmd(cmd, value) {
+                execCmd(cmd, value, skipSnapshot) {
                     this.restoreSelection();
                     const idoc = this.$refs.visualFrame.contentDocument;
+                    if (!skipSnapshot) this.pushUndoSnapshot();
                     idoc.execCommand(cmd, false, value ?? null);
                     this.syncFromVisual();
                 },
@@ -500,9 +577,10 @@
                 toggleUnderline() { this.execCmd('underline'); },
                 insertList(ordered) { this.execCmd(ordered ? 'insertOrderedList' : 'insertUnorderedList'); },
                 clearFormatting() {
-                    this.execCmd('removeFormat');
+                    this.pushUndoSnapshot();
+                    this.execCmd('removeFormat', null, true);
                     [BLOG_EDITOR_COLOR_CLASS_RE, BLOG_EDITOR_SIZE_CLASS_RE, BLOG_EDITOR_BG_CLASS_RE, BLOG_EDITOR_FONT_FAMILY_RE].forEach((re) => {
-                        this.applyClassToSelection(re, '');
+                        this.applyClassToSelection(re, '', true);
                     });
                 },
                 toolbarLink() {
@@ -515,6 +593,7 @@
                     const existingLink = node && node.closest ? node.closest('a') : null;
                     if (existingLink) { this.selectLink(existingLink); return; }
                     if (sel.isCollapsed) return;
+                    this.pushUndoSnapshot();
                     const range = sel.getRangeAt(0);
                     const a = idoc.createElement('a');
                     a.setAttribute('href', '');
@@ -526,6 +605,7 @@
                 },
                 insertReadMore() {
                     this.restoreSelection();
+                    this.pushUndoSnapshot();
                     const idoc = this.$refs.visualFrame.contentDocument;
                     const existing = idoc.body.querySelector('hr.shorthr');
                     if (existing) existing.remove();
@@ -547,6 +627,7 @@
                     this.videoPopoverOpen = false;
                     if (!url) return;
                     this.restoreSelection();
+                    this.pushUndoSnapshot();
                     const idoc = this.$refs.visualFrame.contentDocument;
                     const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
                     const vimeo = !yt && url.match(/vimeo\.com\/(\d+)/);
@@ -593,16 +674,19 @@
                 },
                 applyImageAlt() {
                     if (!this._selectedNode) return;
+                    this.pushUndoSnapshot();
                     this._selectedNode.setAttribute('alt', this.imgAlt);
                     this.syncFromVisual();
                 },
                 toggleImageRounded() {
                     if (!this._selectedNode) return;
+                    this.pushUndoSnapshot();
                     this.setClassByRegex(this._selectedNode, /^rounded(-\S+)?$/, this.imgRounded ? 'rounded-lg' : '');
                     this.syncFromVisual();
                 },
                 removeImage() {
                     if (!this._selectedNode) return;
+                    this.pushUndoSnapshot();
                     this._selectedNode.remove();
                     this.clearSelection();
                     this.hidePopup();
@@ -613,6 +697,7 @@
                     if (!file || !this._selectedNode) { event.target.value = ''; return; }
                     const node = this._selectedNode;
                     this.readAndUploadImage(file, (url) => {
+                        this.pushUndoSnapshot();
                         node.setAttribute('src', url);
                         this.syncFromVisual();
                     });
@@ -622,6 +707,7 @@
                     const file = event.target.files[0];
                     if (!file) return;
                     this.readAndUploadImage(file, (url) => {
+                        this.pushUndoSnapshot();
                         const frame = this.$refs.visualFrame;
                         const idoc = frame.contentDocument;
                         const img = idoc.createElement('img');
@@ -668,6 +754,7 @@
                 },
                 applyLink() {
                     if (!this._selectedNode) return;
+                    this.pushUndoSnapshot();
                     const el = this._selectedNode;
                     el.setAttribute('href', this.linkHref);
                     if (this.linkText) el.textContent = this.linkText;
@@ -685,16 +772,51 @@
 
                 // ---- code mode: CodeMirror, lazily created on first use per language tab.
                 initOrRefreshCode() {
-                    const el = this.$refs.codeContainer;
+                    const outer = this.$refs.codeContainer;
+                    if (!outer) return;
+                    // CodeMirror mounts into the inner x-ignore'd div, not the ref'd element
+                    // itself - see the comment beside it in the blade for why.
+                    const el = outer.firstElementChild;
                     if (!el) return;
+
+                    if (typeof CodeMirror === 'undefined') {
+                        // The vendored CodeMirror assets (public/vendor/codemirror) failed to
+                        // load - most likely a stale cached Blade view after a deploy (run
+                        // `php artisan view:clear` after uploading new files) or the vendor
+                        // folder missing on the server. Fails loud instead of a blank box.
+                        el.innerHTML = '<p class="p-3 text-sm text-danger-600">Code editor failed to load (CodeMirror script missing). Try a hard refresh; if that doesn\'t help, the vendor/codemirror files may not have been deployed.</p>';
+                        return;
+                    }
+
                     if (!this.codeMirror) {
                         this.codeMirror = CodeMirror(el, {
                             value: this.html,
                             mode: 'htmlmixed',
                             lineNumbers: true,
                             lineWrapping: true,
+                            viewportMargin: Infinity,
                         });
-                        this.codeMirror.on('change', () => { this.html = this.codeMirror.getValue(); });
+                        // Filament's modal has its own focus-trap (a separate MutationObserver
+                        // from Alpine's/Livewire's, watching the trapped region to keep its
+                        // tabbable-elements list current) that reacts to CodeMirror's constant
+                        // internal DOM churn (cursor/line nodes) often enough to interrupt one of
+                        // CodeMirror's own operations mid-flight, throwing "Cannot read
+                        // properties of undefined (reading 'map')" from deep inside
+                        // codemirror.js - happens with either input style (textarea or
+                        // contenteditable), so it's the trap doing this, not CodeMirror's input
+                        // handling. A full refresh() right after each edit (deferred off
+                        // CodeMirror's own synchronous operation, which also avoids a second,
+                        // separate reentrancy from writing the reactive `html` property
+                        // mid-operation) rebuilds its internal view from scratch and reliably
+                        // redraws the cursor/selection correctly - the one interrupted operation
+                        // per keystroke is harmless as long as this follows it every time.
+                        this.codeMirror.on('change', (cmInstance) => {
+                            const value = cmInstance.getValue();
+                            setTimeout(() => {
+                                this.html = value;
+                                cmInstance.refresh();
+                            }, 0);
+                        });
                     } else {
                         this.codeMirror.setValue(this.html);
                     }

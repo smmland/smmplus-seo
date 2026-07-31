@@ -99,9 +99,9 @@
                         class="h-96 w-full rounded-lg border border-gray-200 dark:border-white/10"
                     ></iframe>
                 @else
-                    <p class="text-sm text-gray-400 dark:text-gray-500">
+                    <div class="flex h-40 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-400 dark:border-white/10 dark:text-gray-500">
                         Content not extracted yet - click "Extract content" above.
-                    </p>
+                    </div>
                 @endif
             @endif
         </div>

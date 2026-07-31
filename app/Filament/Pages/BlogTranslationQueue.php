@@ -14,6 +14,7 @@ use Filament\Notifications\Actions\Action as NotificationAction;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Computed;
 
 class BlogTranslationQueue extends Page implements HasActions
@@ -178,6 +179,15 @@ class BlogTranslationQueue extends Page implements HasActions
             /** @var ?Url $row */
             $row = $rows->get($language->code);
 
+            // Don't build a link from the slug/lang naming convention alone - rows extracted
+            // before this file-naming scheme existed (or under a slug that's since changed)
+            // would otherwise get a link to a preview file that doesn't actually exist, which
+            // 404s in the iframe below. Only link to it once it's confirmed to be on disk.
+            $previewPath = ($row && $row->content_extraction_path)
+                ? 'blog/'.$row->slug.'/preview-'.$row->lang.'.html'
+                : null;
+            $previewExists = $previewPath && Storage::disk('public')->exists($previewPath);
+
             return [
                 'code' => $language->code,
                 'name' => $language->name,
@@ -189,10 +199,8 @@ class BlogTranslationQueue extends Page implements HasActions
                 'articleTitle' => $row?->article_title,
                 'seoTitle' => $row?->seo_title,
                 'metaDescription' => $row?->meta_description,
-                'contentExtracted' => $row?->content_extracted_at !== null,
-                'previewUrl' => ($row && $row->content_extraction_path)
-                    ? url('/blog-content/blog/'.$row->slug.'/preview-'.$row->lang.'.html')
-                    : null,
+                'contentExtracted' => $previewExists,
+                'previewUrl' => $previewExists ? url('/blog-content/'.$previewPath) : null,
             ];
         })->values();
 

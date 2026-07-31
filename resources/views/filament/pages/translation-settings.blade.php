@@ -2,9 +2,44 @@
     <form wire:submit="save">
         {{ $this->form }}
 
-        <x-filament::button type="submit" class="mt-4">
-            Save
-        </x-filament::button>
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+            <x-filament::button type="submit">
+                Save
+            </x-filament::button>
+
+            <x-filament::button
+                type="button"
+                color="gray"
+                wire:click="testAiConnection"
+                wire:loading.attr="disabled"
+                wire:target="testAiConnection"
+            >
+                Test AI connection
+            </x-filament::button>
+
+            <x-filament::button
+                type="button"
+                color="gray"
+                wire:click="resetPromptToDefault"
+            >
+                Reset prompt to default
+            </x-filament::button>
+
+            @if ($aiTestResult)
+                <span class="text-sm {{ $aiTestResult['ok'] ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }}">
+                    {{ $aiTestResult['message'] }}
+                </span>
+            @endif
+        </div>
+
+        <div class="mt-4 rounded-lg border border-gray-200 p-3 text-xs text-gray-500 dark:border-white/10 dark:text-gray-400">
+            <p class="mb-1 font-medium text-gray-600 dark:text-gray-300">Placeholders supported in the prompt above:</p>
+            <div class="flex flex-wrap gap-x-4 gap-y-1">
+                @foreach (\App\Services\AiSettingsService::BLOG_TRANSLATION_PLACEHOLDERS as $token => $description)
+                    <span><code class="rounded bg-gray-100 px-1 dark:bg-white/10">{{ $token }}</code> {{ $description }}</span>
+                @endforeach
+            </div>
+        </div>
     </form>
 
     <x-filament::section heading="Manual check">

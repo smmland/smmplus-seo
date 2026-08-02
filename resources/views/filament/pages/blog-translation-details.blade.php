@@ -1,48 +1,62 @@
 @php
     $languages = $languages instanceof \Illuminate\Support\Collection ? $languages : collect($languages);
+
+    // Shared class strings so every toolbar/panel control looks consistent without repeating a
+    // huge class list on every single button.
+    $tbBtn = 'inline-flex h-8 items-center justify-center gap-1 rounded-md px-2 text-sm text-gray-600 ring-1 ring-inset ring-gray-950/10 transition hover:bg-gray-100 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/10 dark:hover:text-white';
+    $tbBtnActive = 'bg-white shadow-sm ring-1 ring-inset ring-gray-950/10 dark:bg-white/10 dark:ring-white/10';
+    $tbSelect = 'fi-input h-8 rounded-md border-0 py-0 text-sm text-gray-700 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-gray-200 dark:ring-white/10';
+    $panelInput = 'fi-input block w-full rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10';
+    $panelLabel = 'mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400';
 @endphp
 
-<div x-data="{ tab: '{{ $defaultLangCode }}' }">
+<div x-data="{ tab: '{{ $defaultLangCode }}' }" class="space-y-4">
     @if ($englishRow)
-        <div class="mb-4 space-y-1">
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-                <a href="{{ $englishRow->source_url }}" target="_blank" rel="noopener" class="hover:underline">
-                    {{ $englishRow->source_url }}
+        <div class="flex items-start gap-3 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+            <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-primary-600 ring-1 ring-gray-950/5 dark:bg-white/10 dark:text-primary-400 dark:ring-white/10">
+                <x-filament::icon icon="heroicon-o-document-text" class="h-5 w-5" />
+            </div>
+            <div class="min-w-0 flex-1 space-y-1">
+                <a href="{{ $englishRow->source_url }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400">
+                    <span class="truncate">{{ $englishRow->source_url }}</span>
+                    <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="h-3.5 w-3.5 shrink-0" />
                 </a>
-            </p>
 
-            @if ($englishRow->seo_title)
-                <p class="text-xs text-gray-400 dark:text-gray-500">
-                    &lt;title&gt; {{ $englishRow->seo_title }}
-                </p>
-            @endif
+                @if ($englishRow->seo_title)
+                    <p class="truncate text-xs text-gray-400 dark:text-gray-500">
+                        <span class="font-mono">&lt;title&gt;</span> {{ $englishRow->seo_title }}
+                    </p>
+                @endif
 
-            @if ($englishRow->meta_description)
-                <p class="text-sm text-gray-600 dark:text-gray-300">
-                    {{ $englishRow->meta_description }}
-                </p>
-            @endif
+                @if ($englishRow->meta_description)
+                    <p class="line-clamp-2 text-sm text-gray-600 dark:text-gray-300">
+                        {{ $englishRow->meta_description }}
+                    </p>
+                @endif
+            </div>
         </div>
     @endif
 
-    <div class="flex flex-wrap gap-1 border-b border-gray-200 dark:border-white/10 mb-4">
+    <div class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
         @foreach ($languages as $language)
             <button
                 type="button"
                 @click="tab = '{{ $language['code'] }}'"
-                :class="tab === '{{ $language['code'] }}' ? 'border-primary-600 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400'"
-                class="flex items-center gap-1 border-b-2 -mb-px px-3 py-2 text-sm font-medium"
+                :class="tab === '{{ $language['code'] }}'
+                    ? 'bg-primary-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
             >
                 {{ strtoupper($language['code']) }}
 
                 @if ($language['isDefault'])
-                    <x-filament::icon icon="heroicon-m-star" class="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                    <x-filament::icon icon="heroicon-m-star" class="h-3.5 w-3.5 text-amber-400" />
                 @elseif (! $language['exists'])
-                    <x-filament::icon icon="heroicon-m-minus-circle" class="h-4 w-4 text-gray-300 dark:text-gray-600" />
+                    <x-filament::icon icon="heroicon-m-minus-circle" class="h-3.5 w-3.5 opacity-50" />
                 @elseif ($language['isTranslated'])
-                    <x-filament::icon icon="heroicon-m-check-circle" class="h-4 w-4 text-success-500" />
+                    <x-filament::icon icon="heroicon-m-check-circle" class="h-3.5 w-3.5 text-success-500" />
                 @else
-                    <x-filament::icon icon="heroicon-m-x-circle" class="h-4 w-4 text-warning-500" />
+                    <x-filament::icon icon="heroicon-m-x-circle" class="h-3.5 w-3.5 text-warning-400" />
                 @endif
             </button>
         @endforeach
@@ -51,8 +65,7 @@
     @foreach ($languages as $language)
         <div x-show="tab === '{{ $language['code'] }}'" x-cloak>
             @if ($language['isDefault'])
-                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <span></span>
+                <div class="mb-4 flex items-center justify-end">
                     <x-filament::button
                         size="sm"
                         color="primary"
@@ -67,22 +80,25 @@
             @endif
 
             @if (! $language['exists'])
-                <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
-                    No {{ $language['name'] }} page exists yet for this topic.
-                </p>
+                <div class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-gray-300 px-6 py-10 text-center dark:border-white/10">
+                    <x-filament::icon icon="heroicon-o-language" class="h-8 w-8 text-gray-300 dark:text-gray-600" />
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        No {{ $language['name'] }} page exists yet for this topic.
+                    </p>
 
-                @if (! $language['isDefault'])
-                    <x-filament::button
-                        size="sm"
-                        color="gray"
-                        icon="heroicon-o-sparkles"
-                        wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                        wire:loading.attr="disabled"
-                        wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                    >
-                        Translate with AI
-                    </x-filament::button>
-                @endif
+                    @if (! $language['isDefault'])
+                        <x-filament::button
+                            size="sm"
+                            color="gray"
+                            icon="heroicon-o-sparkles"
+                            wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                            wire:loading.attr="disabled"
+                            wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                        >
+                            Translate with AI
+                        </x-filament::button>
+                    @endif
+                </div>
             @else
                 <div
                     x-data="blogEditor(
@@ -93,19 +109,20 @@
                         {{ Illuminate\Support\Js::from($language['editedPreviewUrlTemplate']) }},
                         {{ Illuminate\Support\Js::from(\App\Models\Language::direction($language['code'])) }}
                     )"
+                    class="space-y-4"
                 >
-                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
                         <a
                             href="{{ $language['sourceUrl'] }}"
                             target="_blank"
                             rel="noopener"
-                            class="inline-flex items-center gap-1 text-sm text-primary-600 hover:underline dark:text-primary-400"
+                            class="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
                         >
                             Open live page
                             <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="h-4 w-4" />
                         </a>
 
-                        <div class="flex flex-wrap gap-1">
+                        <div class="flex flex-wrap gap-2">
                             @if (! $language['isDefault'] && ! $language['isTranslated'])
                                 <x-filament::button
                                     size="sm"
@@ -143,60 +160,79 @@
                         ];
                     @endphp
 
-                    <dl class="mb-4 space-y-1.5 text-sm">
+                    <dl class="divide-y divide-gray-100 overflow-hidden rounded-xl ring-1 ring-gray-950/5 dark:divide-white/5 dark:ring-white/10">
                         @foreach ($copyFields as $label => $value)
-                            <div class="flex items-start justify-between gap-2" x-data="{ copied: false }">
+                            <div class="flex items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-white/5" x-data="{ copied: false }">
                                 <div class="min-w-0 flex-1">
-                                    <dt class="inline font-medium text-gray-700 dark:text-gray-200">{{ $label }}:</dt>
-                                    <dd class="inline text-gray-600 dark:text-gray-300">{{ $value ?? '—' }}</dd>
+                                    <dt class="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ $label }}</dt>
+                                    <dd class="truncate text-gray-700 dark:text-gray-200" title="{{ $value }}">{{ $value ?: '—' }}</dd>
                                 </div>
                                 @if ($value)
                                     <button
                                         type="button"
                                         @click="navigator.clipboard.writeText({{ Illuminate\Support\Js::from($value) }}); copied = true; setTimeout(() => copied = false, 1500)"
-                                        class="shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
-                                        x-text="copied ? 'Copied!' : 'Copy'"
-                                    ></button>
+                                        class="shrink-0 rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-white/10 dark:hover:text-primary-400"
+                                    >
+                                        <x-filament::icon x-show="!copied" icon="heroicon-o-clipboard-document" class="h-4 w-4" />
+                                        <x-filament::icon x-show="copied" x-cloak icon="heroicon-o-clipboard-document-check" class="h-4 w-4 text-success-500" />
+                                    </button>
                                 @endif
                             </div>
                         @endforeach
                     </dl>
 
-                    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <div class="flex gap-1 rounded-lg bg-gray-100 p-0.5 dark:bg-white/5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="inline-flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-white/5">
                             <button
                                 type="button"
                                 @click="goOriginal()"
-                                :class="mode === 'original' ? 'bg-white shadow-sm dark:bg-gray-700' : 'text-gray-500 dark:text-gray-400'"
-                                class="rounded-md px-3 py-1 text-xs font-medium"
-                            >Original</button>
+                                :class="mode === 'original' ? '{{ $tbBtnActive }} text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+                                class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+                            >
+                                <x-filament::icon icon="heroicon-o-eye" class="h-4 w-4" />
+                                Original
+                            </button>
                             <button
                                 type="button"
                                 @click="goVisual()"
-                                :class="mode === 'visual' ? 'bg-white shadow-sm dark:bg-gray-700' : 'text-gray-500 dark:text-gray-400'"
-                                class="rounded-md px-3 py-1 text-xs font-medium"
-                            >Visual</button>
+                                :class="mode === 'visual' ? '{{ $tbBtnActive }} text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+                                class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+                            >
+                                <x-filament::icon icon="heroicon-o-pencil-square" class="h-4 w-4" />
+                                Visual
+                            </button>
                             <button
                                 type="button"
                                 @click="goCode()"
-                                :class="mode === 'code' ? 'bg-white shadow-sm dark:bg-gray-700' : 'text-gray-500 dark:text-gray-400'"
-                                class="rounded-md px-3 py-1 text-xs font-medium"
-                            >Code</button>
+                                :class="mode === 'code' ? '{{ $tbBtnActive }} text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+                                class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+                            >
+                                <x-filament::icon icon="heroicon-o-code-bracket" class="h-4 w-4" />
+                                Code
+                            </button>
                         </div>
 
                         <div x-show="mode === 'original'">
                             <button
                                 type="button"
                                 @click="copyOriginal()"
-                                class="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
-                                x-text="copiedOriginal ? 'Copied!' : 'Copy original HTML'"
-                            ></button>
+                                class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
+                            >
+                                <x-filament::icon icon="heroicon-o-clipboard-document" class="h-3.5 w-3.5" />
+                                <span x-text="copiedOriginal ? 'Copied!' : 'Copy original HTML'"></span>
+                            </button>
                         </div>
 
-                        <div x-show="mode !== 'original'" class="flex flex-wrap items-center gap-2">
-                            <button type="button" @click="copyEdited()" class="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400" x-text="copiedEdited ? 'Copied!' : 'Copy edited HTML'"></button>
-                            <a x-show="editedPreviewUrl" :href="editedPreviewUrl" target="_blank" rel="noopener" class="text-xs text-primary-600 hover:underline dark:text-primary-400">Preview edited ↗</a>
-                            <x-filament::button size="sm" @click="save()" :disabled="false">
+                        <div x-show="mode !== 'original'" class="flex flex-wrap items-center gap-3">
+                            <button type="button" @click="copyEdited()" class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+                                <x-filament::icon icon="heroicon-o-clipboard-document" class="h-3.5 w-3.5" />
+                                <span x-text="copiedEdited ? 'Copied!' : 'Copy edited HTML'"></span>
+                            </button>
+                            <a x-show="editedPreviewUrl" :href="editedPreviewUrl" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline dark:text-primary-400">
+                                Preview edited
+                                <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="h-3.5 w-3.5" />
+                            </a>
+                            <x-filament::button size="sm" icon="heroicon-o-check" @click="save()" :disabled="false">
                                 <span x-text="saving ? 'Saving…' : 'Save'"></span>
                             </x-filament::button>
                         </div>
@@ -206,10 +242,11 @@
                         @if ($language['previewUrl'])
                             <iframe
                                 src="{{ $language['previewUrl'] }}"
-                                class="h-96 w-full rounded-lg border border-gray-200 dark:border-white/10"
+                                class="h-96 w-full rounded-xl bg-white ring-1 ring-gray-950/5 dark:ring-white/10"
                             ></iframe>
                         @else
-                            <div class="flex h-40 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-400 dark:border-white/10 dark:text-gray-500">
+                            <div class="flex h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 text-sm text-gray-400 dark:border-white/10 dark:text-gray-500">
+                                <x-filament::icon icon="heroicon-o-photo" class="h-6 w-6 opacity-50" />
                                 Content not extracted yet - click "Extract content" above.
                             </div>
                         @endif
@@ -225,32 +262,36 @@
                         </p>
 
                         {{-- Toolbar --}}
-                        <div class="flex flex-wrap items-center gap-1 rounded-t-lg border border-b-0 border-gray-200 bg-gray-50 p-1.5 dark:border-white/10 dark:bg-white/5">
-                            <select x-model="selFormatTag" @mousedown="restoreSelection()" @change="applyFormatBlockSelect()" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                        <div class="flex flex-wrap items-center gap-1.5 rounded-t-xl bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                            <select x-model="selFormatTag" @mousedown="restoreSelection()" @change="applyFormatBlockSelect()" class="{{ $tbSelect }}">
                                 <template x-for="tag in formatTags" :key="tag">
                                     <option :value="tag" x-text="tag === 'p' ? 'Paragraph' : (tag === 'blockquote' ? 'Quote' : tag.toUpperCase())"></option>
                                 </template>
                             </select>
 
-                            <div class="flex overflow-hidden rounded-md border border-gray-300 dark:border-white/10">
-                                <button type="button" @mousedown.prevent="toggleBold()" class="px-2 py-1 text-xs font-bold hover:bg-gray-100 dark:hover:bg-white/10">B</button>
-                                <button type="button" @mousedown.prevent="toggleItalic()" class="border-s border-gray-300 px-2 py-1 text-xs italic hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">I</button>
-                                <button type="button" @mousedown.prevent="toggleUnderline()" class="border-s border-gray-300 px-2 py-1 text-xs underline hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">U</button>
+                            <div class="inline-flex overflow-hidden rounded-md ring-1 ring-inset ring-gray-950/10 dark:ring-white/10">
+                                <button type="button" @mousedown.prevent="toggleBold()" title="Bold" class="inline-flex h-8 w-8 items-center justify-center font-bold text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10">B</button>
+                                <button type="button" @mousedown.prevent="toggleItalic()" title="Italic" class="inline-flex h-8 w-8 items-center justify-center border-s border-gray-950/10 italic text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/10">I</button>
+                                <button type="button" @mousedown.prevent="toggleUnderline()" title="Underline" class="inline-flex h-8 w-8 items-center justify-center border-s border-gray-950/10 underline text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/10">U</button>
                             </div>
 
-                            <select x-model="selFontFamily" @mousedown="restoreSelection()" @change="applyFontFamilySelection()" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                            <select x-model="selFontFamily" @mousedown="restoreSelection()" @change="applyFontFamilySelection()" class="{{ $tbSelect }}">
                                 <option value="">Default font</option>
                                 <option value="font-sans">Sans-serif</option>
                                 <option value="font-serif">Serif</option>
                                 <option value="font-mono">Monospace</option>
                             </select>
 
-                            <div class="flex overflow-hidden rounded-md border border-gray-300 dark:border-white/10">
-                                <button type="button" @mousedown.prevent="insertList(false)" title="Bullet list" class="px-2 py-1 text-xs hover:bg-gray-100 dark:hover:bg-white/10">•≡</button>
-                                <button type="button" @mousedown.prevent="insertList(true)" title="Numbered list" class="border-s border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">1≡</button>
+                            <div class="inline-flex overflow-hidden rounded-md ring-1 ring-inset ring-gray-950/10 dark:ring-white/10">
+                                <button type="button" @mousedown.prevent="insertList(false)" title="Bullet list" class="inline-flex h-8 w-8 items-center justify-center text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10">
+                                    <x-filament::icon icon="heroicon-o-list-bullet" class="h-4 w-4" />
+                                </button>
+                                <button type="button" @mousedown.prevent="insertList(true)" title="Numbered list" class="inline-flex h-8 w-8 items-center justify-center border-s border-gray-950/10 text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/10">
+                                    <x-filament::icon icon="heroicon-o-queue-list" class="h-4 w-4" />
+                                </button>
                             </div>
 
-                            <select @mousedown="restoreSelection()" @change="applyAlignToBlock($event.target.value)" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                            <select @mousedown="restoreSelection()" @change="applyAlignToBlock($event.target.value)" class="{{ $tbSelect }}">
                                 <option value="">Align…</option>
                                 <option value="text-left">Left</option>
                                 <option value="text-center">Center</option>
@@ -258,7 +299,7 @@
                                 <option value="text-justify">Justify</option>
                             </select>
 
-                            <select x-model="selBg" @mousedown="restoreSelection()" @change="applyHighlightSelection()" title="Highlight" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                            <select x-model="selBg" @mousedown="restoreSelection()" @change="applyHighlightSelection()" title="Highlight" class="{{ $tbSelect }}">
                                 <option value="">Highlight…</option>
                                 <template x-for="color in textColors" :key="color">
                                     <optgroup :label="color">
@@ -269,7 +310,7 @@
                                 </template>
                             </select>
 
-                            <select x-model="selColor" @mousedown="restoreSelection()" @change="applyTextColorSelection()" title="Text color" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                            <select x-model="selColor" @mousedown="restoreSelection()" @change="applyTextColorSelection()" title="Text color" class="{{ $tbSelect }}">
                                 <option value="">Text color…</option>
                                 <template x-for="color in textColors" :key="color">
                                     <optgroup :label="color">
@@ -280,72 +321,95 @@
                                 </template>
                             </select>
 
-                            <select x-model="selSize" @mousedown="restoreSelection()" @change="applyTextSizeSelection()" title="Text size" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                            <select x-model="selSize" @mousedown="restoreSelection()" @change="applyTextSizeSelection()" title="Text size" class="{{ $tbSelect }}">
                                 <option value="">Size…</option>
                                 <template x-for="size in textSizes" :key="size">
                                     <option :value="'text-' + size" x-text="size"></option>
                                 </template>
                             </select>
 
-                            <button type="button" @mousedown.prevent="clearFormatting()" title="Clear formatting" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">⌫A</button>
+                            <button type="button" @mousedown.prevent="clearFormatting()" title="Clear formatting" class="{{ $tbBtn }}">
+                                <x-filament::icon icon="heroicon-o-x-circle" class="h-4 w-4" />
+                            </button>
 
-                            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-white/10"></span>
+                            <span class="mx-0.5 h-6 w-px bg-gray-950/10 dark:bg-white/10"></span>
 
-                            <button type="button" @mousedown.prevent="toolbarLink()" title="Link" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">🔗</button>
+                            <button type="button" @mousedown.prevent="toolbarLink()" title="Link" class="{{ $tbBtn }}">
+                                <x-filament::icon icon="heroicon-o-link" class="h-4 w-4" />
+                            </button>
 
-                            <label title="Insert image" class="cursor-pointer rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">
-                                🖼
+                            <label title="Insert image" class="{{ $tbBtn }} cursor-pointer">
+                                <x-filament::icon icon="heroicon-o-photo" class="h-4 w-4" />
                                 <input type="file" accept="image/*" class="hidden" @change="addImageFile($event)">
                             </label>
 
-                            <button type="button" @mousedown.prevent="openVideoPopover()" title="Insert video" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">🎬</button>
+                            <button type="button" @mousedown.prevent="openVideoPopover()" title="Insert video" class="{{ $tbBtn }}">
+                                <x-filament::icon icon="heroicon-o-video-camera" class="h-4 w-4" />
+                            </button>
 
-                            <button type="button" @mousedown.prevent="insertReadMore()" title="Insert/move the Read more marker (hr.shorthr)" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">Read more</button>
+                            <button type="button" @mousedown.prevent="insertReadMore()" title="Insert/move the Read more marker (hr.shorthr)" class="{{ $tbBtn }} gap-1.5">
+                                <x-filament::icon icon="heroicon-o-scissors" class="h-4 w-4" />
+                                Read more
+                            </button>
 
-                            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-white/10"></span>
+                            <span class="mx-0.5 h-6 w-px bg-gray-950/10 dark:bg-white/10"></span>
 
-                            <button type="button" @mousedown.prevent="undo()" :disabled="!_undoStack.length" title="Undo (Ctrl+Z)" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent dark:border-white/10 dark:hover:bg-white/10">↶</button>
-                            <button type="button" @mousedown.prevent="redo()" :disabled="!_redoStack.length" title="Redo (Ctrl+Shift+Z)" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent dark:border-white/10 dark:hover:bg-white/10">↷</button>
+                            <button type="button" @mousedown.prevent="undo()" x-bind:disabled="!_undoStack.length" title="Undo (Ctrl+Z)" class="{{ $tbBtn }}">
+                                <x-filament::icon icon="heroicon-o-arrow-uturn-left" class="h-4 w-4" />
+                            </button>
+                            <button type="button" @mousedown.prevent="redo()" x-bind:disabled="!_redoStack.length" title="Redo (Ctrl+Shift+Z)" class="{{ $tbBtn }}">
+                                <x-filament::icon icon="heroicon-o-arrow-uturn-right" class="h-4 w-4" />
+                            </button>
 
                             <span class="flex-1"></span>
 
-                            <button type="button" @click="goCode()" title="View code" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/10">&lt;/&gt;</button>
+                            <button type="button" @click="goCode()" title="View code" class="{{ $tbBtn }}">
+                                <x-filament::icon icon="heroicon-o-code-bracket" class="h-4 w-4" />
+                            </button>
                         </div>
 
-                        <div x-show="videoPopoverOpen" x-cloak class="flex items-center gap-2 border border-b-0 border-gray-200 bg-gray-50 p-2 dark:border-white/10 dark:bg-white/5">
-                            <input type="text" x-model="videoUrl" placeholder="YouTube/Vimeo URL or direct video file URL" class="fi-input flex-1 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900" @keydown.enter="insertVideo()">
+                        <div x-show="videoPopoverOpen" x-cloak class="flex items-center gap-2 bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                            <input type="text" x-model="videoUrl" placeholder="YouTube/Vimeo URL or direct video file URL" class="{{ $panelInput }} flex-1" @keydown.enter="insertVideo()">
                             <x-filament::button size="xs" @click="insertVideo()">Insert</x-filament::button>
                             <button type="button" @click="videoPopoverOpen = false" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Cancel</button>
                         </div>
 
                         <div class="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_260px]">
-                            <iframe x-ref="visualFrame" wire:ignore class="h-96 w-full rounded-b-lg border border-gray-200 bg-white dark:border-white/10"></iframe>
+                            <iframe x-ref="visualFrame" wire:ignore class="h-96 w-full rounded-b-xl bg-white ring-1 ring-gray-950/5 dark:ring-white/10"></iframe>
 
-                            <div class="rounded-lg border border-gray-200 p-3 text-xs dark:border-white/10">
+                            <div class="rounded-xl bg-white p-3 text-xs ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
                                 <template x-if="!selectedKind">
-                                    <p class="text-gray-400 dark:text-gray-500">Click an image or link in the preview for its full options here.</p>
+                                    <div class="flex h-full flex-col items-center justify-center gap-2 py-6 text-center text-gray-400 dark:text-gray-500">
+                                        <x-filament::icon icon="heroicon-o-cursor-arrow-rays" class="h-6 w-6 opacity-50" />
+                                        Click an image or link in the preview for its full options here.
+                                    </div>
                                 </template>
 
                                 <template x-if="selectedKind === 'image'">
                                     <div class="space-y-3">
-                                        <p class="font-medium text-gray-600 dark:text-gray-300">Image options</p>
+                                        <p class="flex items-center gap-1.5 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                            <x-filament::icon icon="heroicon-o-photo" class="h-4 w-4 text-gray-400" />
+                                            Image options
+                                        </p>
 
                                         <div>
-                                            <label class="mb-1 block text-gray-500 dark:text-gray-400">Alt text</label>
-                                            <input type="text" x-model="imgAlt" @input="applyImageAlt()" class="fi-input w-full rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                            <label class="{{ $panelLabel }}">Alt text</label>
+                                            <input type="text" x-model="imgAlt" @input="applyImageAlt()" class="{{ $panelInput }}">
                                         </div>
 
-                                        <label class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-                                            <input type="checkbox" x-model="imgRounded" @change="toggleImageRounded()">
+                                        <label class="flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
+                                            <input type="checkbox" x-model="imgRounded" @change="toggleImageRounded()" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5">
                                             Rounded corners
                                         </label>
 
-                                        <label class="block cursor-pointer rounded-md border border-gray-200 px-2 py-1 text-center text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">
+                                        <label class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-center text-gray-600 ring-1 ring-inset ring-gray-950/10 transition hover:bg-gray-50 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5">
+                                            <x-filament::icon icon="heroicon-o-arrow-path" class="h-3.5 w-3.5" />
                                             <span x-text="uploadingImage ? 'Uploading…' : 'Replace image'"></span>
                                             <input type="file" accept="image/*" class="hidden" @change="replaceImageFile($event)">
                                         </label>
 
-                                        <button type="button" @click="removeImage()" class="w-full rounded-md border border-danger-200 px-2 py-1 text-danger-600 hover:bg-danger-50 dark:border-danger-500/20 dark:text-danger-400 dark:hover:bg-danger-500/10">
+                                        <button type="button" @click="removeImage()" class="flex w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-danger-600 ring-1 ring-inset ring-danger-600/20 transition hover:bg-danger-50 dark:text-danger-400 dark:ring-danger-500/20 dark:hover:bg-danger-500/10">
+                                            <x-filament::icon icon="heroicon-o-trash" class="h-3.5 w-3.5" />
                                             Remove image
                                         </button>
                                     </div>
@@ -353,38 +417,41 @@
 
                                 <template x-if="selectedKind === 'link'">
                                     <div class="space-y-3">
-                                        <p class="font-medium text-gray-600 dark:text-gray-300">Link options</p>
+                                        <p class="flex items-center gap-1.5 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                            <x-filament::icon icon="heroicon-o-link" class="h-4 w-4 text-gray-400" />
+                                            Link options
+                                        </p>
 
                                         <div>
-                                            <label class="mb-1 block text-gray-500 dark:text-gray-400">URL</label>
-                                            <input type="text" x-model="linkHref" @change="applyLink()" class="fi-input w-full rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                            <label class="{{ $panelLabel }}">URL</label>
+                                            <input type="text" x-model="linkHref" @change="applyLink()" class="{{ $panelInput }}">
                                         </div>
 
                                         <div>
-                                            <label class="mb-1 block text-gray-500 dark:text-gray-400">Link text</label>
-                                            <input type="text" x-model="linkText" @change="applyLink()" class="fi-input w-full rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                            <label class="{{ $panelLabel }}">Link text</label>
+                                            <input type="text" x-model="linkText" @change="applyLink()" class="{{ $panelInput }}">
                                         </div>
 
                                         <div>
-                                            <label class="mb-1 block text-gray-500 dark:text-gray-400">Title attribute (tooltip)</label>
-                                            <input type="text" x-model="linkTitle" @change="applyLink()" class="fi-input w-full rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                            <label class="{{ $panelLabel }}">Title attribute (tooltip)</label>
+                                            <input type="text" x-model="linkTitle" @change="applyLink()" class="{{ $panelInput }}">
                                         </div>
 
                                         <div>
-                                            <label class="mb-1 block text-gray-500 dark:text-gray-400">Open in</label>
-                                            <select x-model="linkTarget" @change="applyLink()" class="fi-input w-full rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                            <label class="{{ $panelLabel }}">Open in</label>
+                                            <select x-model="linkTarget" @change="applyLink()" class="{{ $panelInput }}">
                                                 <option value="_self">Same tab</option>
                                                 <option value="_blank">New tab</option>
                                             </select>
                                         </div>
 
-                                        <div class="space-y-1">
-                                            <p class="text-gray-500 dark:text-gray-400">SEO / rel attributes</p>
-                                            <label class="flex items-center gap-1.5"><input type="checkbox" x-model="linkNofollow" @change="applyLink()"> nofollow</label>
-                                            <label class="flex items-center gap-1.5"><input type="checkbox" x-model="linkSponsored" @change="applyLink()"> sponsored</label>
-                                            <label class="flex items-center gap-1.5"><input type="checkbox" x-model="linkUgc" @change="applyLink()"> ugc</label>
-                                            <label class="flex items-center gap-1.5"><input type="checkbox" x-model="linkNoopener" @change="applyLink()"> noopener</label>
-                                            <label class="flex items-center gap-1.5"><input type="checkbox" x-model="linkNoreferrer" @change="applyLink()"> noreferrer</label>
+                                        <div class="space-y-1.5 rounded-lg bg-gray-50 p-2 dark:bg-white/5">
+                                            <p class="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">SEO / rel attributes</p>
+                                            <label class="flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><input type="checkbox" x-model="linkNofollow" @change="applyLink()" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> nofollow</label>
+                                            <label class="flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><input type="checkbox" x-model="linkSponsored" @change="applyLink()" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> sponsored</label>
+                                            <label class="flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><input type="checkbox" x-model="linkUgc" @change="applyLink()" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> ugc</label>
+                                            <label class="flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><input type="checkbox" x-model="linkNoopener" @change="applyLink()" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> noopener</label>
+                                            <label class="flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><input type="checkbox" x-model="linkNoreferrer" @change="applyLink()" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> noreferrer</label>
                                         </div>
                                     </div>
                                 </template>
@@ -398,17 +465,17 @@
                             x-show="popupVisible"
                             x-cloak
                             :style="`position: fixed; top: ${popupTop}px; left: ${popupLeft}px; z-index: 60;`"
-                            class="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1.5 text-xs shadow-lg dark:border-white/10 dark:bg-gray-800"
+                            class="flex items-center gap-1 rounded-xl bg-white p-1.5 text-sm shadow-xl ring-1 ring-gray-950/10 dark:bg-gray-800 dark:ring-white/10"
                         >
                             <template x-if="popupKind === 'text'">
                                 <div class="flex items-center gap-1">
-                                    <button type="button" @mousedown.prevent="toggleBold()" class="rounded px-2 py-1 font-bold hover:bg-gray-100 dark:hover:bg-white/10">B</button>
-                                    <select x-model="selFormatTag" @mousedown="restoreSelection()" @change="applyFormatBlockSelect()" class="fi-input rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                    <button type="button" @mousedown.prevent="toggleBold()" title="Bold" class="inline-flex h-8 w-8 items-center justify-center rounded-md font-bold text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10">B</button>
+                                    <select x-model="selFormatTag" @mousedown="restoreSelection()" @change="applyFormatBlockSelect()" class="{{ $tbSelect }}">
                                         <template x-for="tag in formatTags" :key="tag">
                                             <option :value="tag" x-text="tag === 'p' ? 'P' : (tag === 'blockquote' ? 'Quote' : tag.toUpperCase())"></option>
                                         </template>
                                     </select>
-                                    <select x-model="selColor" @mousedown="restoreSelection()" @change="applyTextColorSelection()" class="fi-input w-20 rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                    <select x-model="selColor" @mousedown="restoreSelection()" @change="applyTextColorSelection()" class="{{ $tbSelect }} w-20">
                                         <option value="">Color</option>
                                         <template x-for="color in textColors" :key="color">
                                             <optgroup :label="color">
@@ -418,7 +485,7 @@
                                             </optgroup>
                                         </template>
                                     </select>
-                                    <select x-model="selSize" @mousedown="restoreSelection()" @change="applyTextSizeSelection()" class="fi-input w-16 rounded-md border-gray-300 py-1 text-xs dark:border-white/10 dark:bg-gray-900">
+                                    <select x-model="selSize" @mousedown="restoreSelection()" @change="applyTextSizeSelection()" class="{{ $tbSelect }} w-16">
                                         <option value="">Size</option>
                                         <template x-for="size in textSizes" :key="size">
                                             <option :value="'text-' + size" x-text="size"></option>
@@ -428,42 +495,47 @@
                             </template>
 
                             <template x-if="popupKind === 'link'">
-                                <input type="text" x-model="linkHref" @change="applyLink()" placeholder="URL" class="fi-input w-56 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <input type="text" x-model="linkHref" @change="applyLink()" placeholder="URL" class="{{ $panelInput }} w-56">
                             </template>
 
                             <template x-if="popupKind === 'image'">
-                                <input type="text" x-model="imgAlt" @input="applyImageAlt()" placeholder="Alt text" class="fi-input w-56 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                <input type="text" x-model="imgAlt" @input="applyImageAlt()" placeholder="Alt text" class="{{ $panelInput }} w-56">
                             </template>
                         </div>
 
-                        <label class="mt-2 inline-block cursor-pointer rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">
-                            <span x-text="uploadingImage ? 'Uploading…' : '+ Add image'"></span>
-                            <input type="file" accept="image/*" class="hidden" @change="addImageFile($event)">
-                        </label>
+                        <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                            <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 transition hover:bg-gray-50 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5">
+                                <x-filament::icon icon="heroicon-o-plus" class="h-3.5 w-3.5" />
+                                <span x-text="uploadingImage ? 'Uploading…' : 'Add image'"></span>
+                                <input type="file" accept="image/*" class="hidden" @change="addImageFile($event)">
+                            </label>
 
-                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500" x-show="!editedPreviewUrl">
-                            Edit above, then Save to create an edited preview link.
-                        </p>
+                            <p class="text-xs text-gray-400 dark:text-gray-500" x-show="!editedPreviewUrl">
+                                Edit above, then Save to create an edited preview link.
+                            </p>
+                        </div>
                     </div>
 
-                    <div x-show="mode === 'code'" x-cloak>
-                        <div class="mb-2 flex flex-wrap items-center gap-2">
-                            <button type="button" @click="scanImages()" class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">
-                                🖼 Fix image ALT text
+                    <div x-show="mode === 'code'" x-cloak class="space-y-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" @click="scanImages()" class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 transition hover:bg-gray-50 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5">
+                                <x-filament::icon icon="heroicon-o-photo" class="h-3.5 w-3.5" />
+                                Fix image ALT text
                             </button>
-                            <button type="button" @click="scanLinks()" class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">
-                                🔗 Fix links
+                            <button type="button" @click="scanLinks()" class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 transition hover:bg-gray-50 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5">
+                                <x-filament::icon icon="heroicon-o-link" class="h-3.5 w-3.5" />
+                                Fix links
                             </button>
                         </div>
 
-                        <div x-show="showImages" x-cloak class="mb-3 max-h-48 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-2 dark:border-white/10">
+                        <div x-show="showImages" x-cloak class="max-h-48 space-y-2 overflow-y-auto rounded-xl bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
                             <template x-if="images.length === 0">
                                 <p class="text-xs text-gray-400">No images found in this content.</p>
                             </template>
                             <template x-for="(img, i) in images" :key="i">
                                 <div class="flex items-center gap-2">
-                                    <img :src="img.src" class="h-8 w-8 shrink-0 rounded border border-gray-200 object-cover dark:border-white/10" onerror="this.style.visibility='hidden'">
-                                    <input type="text" x-model="img.alt" placeholder="Alt text..." class="fi-input flex-1 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                    <img :src="img.src" class="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-gray-950/10 dark:ring-white/10" onerror="this.style.visibility='hidden'">
+                                    <input type="text" x-model="img.alt" placeholder="Alt text..." class="{{ $panelInput }} flex-1">
                                 </div>
                             </template>
                             <x-filament::button size="xs" color="gray" @click="applyImages()" x-show="images.length > 0">
@@ -471,14 +543,14 @@
                             </x-filament::button>
                         </div>
 
-                        <div x-show="showLinks" x-cloak class="mb-3 max-h-48 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-2 dark:border-white/10">
+                        <div x-show="showLinks" x-cloak class="max-h-48 space-y-2 overflow-y-auto rounded-xl bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
                             <template x-if="links.length === 0">
                                 <p class="text-xs text-gray-400">No links found in this content.</p>
                             </template>
                             <template x-for="(link, i) in links" :key="i">
                                 <div class="flex items-center gap-2">
                                     <span class="w-32 shrink-0 truncate text-xs text-gray-500 dark:text-gray-400" x-text="link.text"></span>
-                                    <input type="text" x-model="link.href" class="fi-input flex-1 rounded-md border-gray-300 text-xs dark:border-white/10 dark:bg-gray-900">
+                                    <input type="text" x-model="link.href" class="{{ $panelInput }} flex-1">
                                 </div>
                             </template>
                             <x-filament::button size="xs" color="gray" @click="applyLinks()" x-show="links.length > 0">
@@ -494,11 +566,11 @@
                              enough to desync its internal line-measurement cache from the DOM,
                              throwing "Cannot read properties of undefined (reading 'map')" from
                              deep inside codemirror.js on every keystroke. --}}
-                        <div x-ref="codeContainer" wire:ignore class="h-72 w-full overflow-auto rounded-lg border border-gray-200 text-xs dark:border-white/10">
+                        <div x-ref="codeContainer" wire:ignore class="h-72 w-full overflow-auto rounded-xl text-xs ring-1 ring-gray-950/5 dark:ring-white/10">
                             <div x-ignore class="h-full w-full"></div>
                         </div>
 
-                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500" x-show="!editedPreviewUrl">
+                        <p class="text-xs text-gray-400 dark:text-gray-500" x-show="!editedPreviewUrl">
                             Edit the HTML above, then Save to create an edited preview link.
                         </p>
                     </div>

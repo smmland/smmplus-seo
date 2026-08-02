@@ -30,7 +30,9 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->colors([
-                'primary' => Color::Amber,
+                // Matches smm.plus's own brand teal (the accent color used for its buttons,
+                // active nav links, and the ".plus" wordmark) instead of Filament's default.
+                'primary' => Color::hex('#14B8C6'),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')

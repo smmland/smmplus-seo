@@ -149,22 +149,33 @@ class BlogAiTranslationService
      */
     private function callChatgpt(string $apiKey, string $model, string $prompt): array
     {
+        $payload = [
+            'model' => $model,
+            // OpenAI deprecated max_tokens for chat completions in favor of this - newer
+            // models (o3, o4-mini, gpt-5, ...) reject max_tokens outright with HTTP 400.
+            // Reasoning models also spend part of this same budget on hidden "reasoning
+            // tokens" before writing anything visible, so this needs real headroom above
+            // the translated article's expected size or those models come back empty.
+            'max_completion_tokens' => 32768,
+            'response_format' => ['type' => 'json_object'],
+            'messages' => [
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ];
+
+        // A straightforward translate-and-reformat task never needs deep reasoning - without
+        // this, a reasoning model can burn its *entire* token budget thinking and stop before
+        // writing any visible reply at all (a raised budget alone doesn't fix that, since the
+        // model can just reason more too). Only sent for models that actually support it -
+        // sending it to a non-reasoning model like gpt-4o fails the same way max_tokens used to.
+        if ($this->isReasoningModel($model)) {
+            $payload['reasoning_effort'] = 'low';
+        }
+
         try {
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$apiKey,
-            ])->timeout(170)->post('https://api.openai.com/v1/chat/completions', [
-                'model' => $model,
-                // OpenAI deprecated max_tokens for chat completions in favor of this - newer
-                // models (o3, o4-mini, gpt-5, ...) reject max_tokens outright with HTTP 400.
-                // Reasoning models also spend part of this same budget on hidden "reasoning
-                // tokens" before writing anything visible, so this needs real headroom above
-                // the translated article's expected size or those models come back empty.
-                'max_completion_tokens' => 16384,
-                'response_format' => ['type' => 'json_object'],
-                'messages' => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ]);
+            ])->timeout(170)->post('https://api.openai.com/v1/chat/completions', $payload);
         } catch (\Throwable $e) {
             return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
         }
@@ -192,6 +203,14 @@ class BlogAiTranslationService
         }
 
         return ['ok' => true, 'text' => $text];
+    }
+
+    // Matches OpenAI's reasoning-capable chat completions models - the o-series and gpt-5 family
+    // (o1, o3, o4-mini, gpt-5, gpt-5-mini, ...). Everything else (gpt-4o, gpt-4.1, ...) rejects
+    // reasoning_effort as an unsupported parameter, the same way it rejects max_tokens.
+    private function isReasoningModel(string $model): bool
+    {
+        return (bool) preg_match('/^(o[0-9]|gpt-5)/', $model);
     }
 
     private function errorSnippet(string $detail): string

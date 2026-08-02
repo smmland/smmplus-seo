@@ -375,6 +375,61 @@ class BlogTranslationQueue extends Page implements HasActions
             ->send();
     }
 
+    /**
+     * Wipes one language's translation for this topic entirely - title, SEO meta, and the
+     * translated content/preview files - reverting it to "no page exists yet" so it can be
+     * translated fresh. Never the default language: that's the source everything else
+     * translates from, not a translation itself.
+     */
+    public function deleteTranslation(string $groupKey, string $targetLangCode): void
+    {
+        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        if ($targetLangCode === $defaultLangCode) {
+            Notification::make()
+                ->title('Cannot delete the default language')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $row = Url::query()->where('group_key', $groupKey)->where('lang', $targetLangCode)->first();
+
+        if (! $row) {
+            Notification::make()
+                ->title('Nothing to delete')
+                ->body('No translation exists for this language.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $languageName = Language::query()->where('code', $targetLangCode)->value('name') ?? $targetLangCode;
+
+        $baseDir = "blog/{$row->slug}";
+        Storage::disk('public')->delete([
+            "{$baseDir}/content-{$targetLangCode}.html",
+            "{$baseDir}/preview-{$targetLangCode}.html",
+            "{$baseDir}/edited-preview-{$targetLangCode}.html",
+        ]);
+
+        $row->delete();
+
+        if ($this->translationTrackingAvailable()) {
+            BlogTranslationJob::query()->where('group_key', $groupKey)->where('target_lang', $targetLangCode)->delete();
+        }
+
+        unset($this->queue);
+
+        Notification::make()
+            ->title('Translation deleted')
+            ->body("All {$languageName} content for this topic has been removed.")
+            ->success()
+            ->send();
+    }
+
     private function queueTranslation(Url $sourceRow, string $groupKey, string $targetLangCode): void
     {
         BlogTranslationJob::query()->updateOrCreate(

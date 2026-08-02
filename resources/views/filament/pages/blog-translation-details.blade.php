@@ -135,7 +135,7 @@
                         </a>
 
                         <div class="flex flex-wrap items-center gap-2">
-                            @if (! $language['isDefault'] && ! $language['isTranslated'])
+                            @if (! $language['isDefault'])
                                 @if ($language['translationPending'])
                                     <span class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
                                         <x-filament::loading-indicator class="h-4 w-4" />
@@ -154,6 +154,17 @@
                                         @click="retranslateAndRefresh({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
                                     >
                                         {{ $language['translationError'] ? 'Retry translation' : 'Re-translate with AI' }}
+                                    </x-filament::button>
+
+                                    <x-filament::button
+                                        size="sm"
+                                        color="danger"
+                                        outlined
+                                        icon="heroicon-o-trash"
+                                        wire:click="deleteTranslation({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                        wire:confirm="Delete all {{ $language['name'] }} content for this topic? This removes the title, SEO meta, and translated page - it can't be undone, only redone by translating again."
+                                    >
+                                        Delete translation
                                     </x-filament::button>
                                 @endif
                             @endif

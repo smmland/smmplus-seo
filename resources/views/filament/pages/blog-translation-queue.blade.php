@@ -115,15 +115,17 @@
         @endif
     </x-filament::section>
 
-    {{-- Code-editor mode uses CodeMirror, vendored under public/vendor/codemirror (this app
+    {{-- Code-editor mode uses CodeMirror, vendored under public/js-libs/codemirror (this app
          ships with no JS build step, so a plain static include - not an npm/CDN dependency -
-         matches how the rest of the admin panel's assets already work). --}}
-    <link rel="stylesheet" href="{{ asset('vendor/codemirror/codemirror.css') }}">
-    <script src="{{ asset('vendor/codemirror/codemirror.js') }}"></script>
-    <script src="{{ asset('vendor/codemirror/mode/xml/xml.js') }}"></script>
-    <script src="{{ asset('vendor/codemirror/mode/javascript/javascript.js') }}"></script>
-    <script src="{{ asset('vendor/codemirror/mode/css/css.js') }}"></script>
-    <script src="{{ asset('vendor/codemirror/mode/htmlmixed/htmlmixed.js') }}"></script>
+         matches how the rest of the admin panel's assets already work). Deliberately NOT under
+         public/vendor - some hosts block that path outright as a blanket protection against
+         Composer's own vendor/ directory ever being exposed, which would 404 these too. --}}
+    <link rel="stylesheet" href="{{ asset('js-libs/codemirror/codemirror.css') }}">
+    <script src="{{ asset('js-libs/codemirror/codemirror.js') }}"></script>
+    <script src="{{ asset('js-libs/codemirror/mode/xml/xml.js') }}"></script>
+    <script src="{{ asset('js-libs/codemirror/mode/javascript/javascript.js') }}"></script>
+    <script src="{{ asset('js-libs/codemirror/mode/css/css.js') }}"></script>
+    <script src="{{ asset('js-libs/codemirror/mode/htmlmixed/htmlmixed.js') }}"></script>
 
     {{-- Defined here (not in the modal's own view) because Filament's action modal content is
          injected into the DOM dynamically (Livewire morph), and browsers never execute <script>
@@ -780,11 +782,12 @@
                     if (!el) return;
 
                     if (typeof CodeMirror === 'undefined') {
-                        // The vendored CodeMirror assets (public/vendor/codemirror) failed to
-                        // load - most likely a stale cached Blade view after a deploy (run
-                        // `php artisan view:clear` after uploading new files) or the vendor
-                        // folder missing on the server. Fails loud instead of a blank box.
-                        el.innerHTML = '<p class="p-3 text-sm text-danger-600">Code editor failed to load (CodeMirror script missing). Try a hard refresh; if that doesn\'t help, the vendor/codemirror files may not have been deployed.</p>';
+                        // The vendored CodeMirror assets (public/js-libs/codemirror) failed to
+                        // load - either a stale cached Blade view after a deploy (run
+                        // `php artisan view:clear`), the files genuinely missing on the server,
+                        // or the host blocking the path outright. Fails loud instead of a blank
+                        // box, and points at how to tell which.
+                        el.innerHTML = '<p class="p-3 text-sm text-danger-600">Code editor failed to load (CodeMirror script missing). Open <code>{{ asset("js-libs/codemirror/codemirror.js") }}</code> directly in a new tab - if that 404s or is blocked, the js-libs/codemirror files weren\'t deployed (or the host is blocking that path); if it loads fine, try a hard refresh and <code>php artisan view:clear</code> on the server instead.</p>';
                         return;
                     }
 

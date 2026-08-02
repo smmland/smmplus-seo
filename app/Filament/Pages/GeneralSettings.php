@@ -193,7 +193,7 @@ class GeneralSettings extends Page implements HasForms
     {
         return $form
             ->schema([
-                Section::make('AI translation connection')
+                Section::make('AI Settings')
                     ->description('Used to auto-translate blog content that\'s missing a language. Pick one provider and enter its API key - "Test connection" checks it against the provider directly, without saving first.')
                     ->schema([
                         Select::make('aiProvider')

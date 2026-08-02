@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\GeneralSettings;
+use App\Services\SettingsService;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -30,9 +31,10 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->colors([
-                // Matches smm.plus's own brand teal (the accent color used for its buttons,
-                // active nav links, and the ".plus" wordmark) instead of Filament's default.
-                'primary' => Color::hex('#14B8C6'),
+                // Admin-configurable (General Settings > Appearance) rather than fixed - falls
+                // back to the default preset's hex if the settings table isn't reachable yet
+                // (e.g. artisan commands that boot providers before the DB is configured).
+                'primary' => Color::hex($this->accentColorHex()),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
@@ -63,5 +65,14 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ]);
+    }
+
+    private function accentColorHex(): string
+    {
+        try {
+            return app(SettingsService::class)->getAccentColorHex();
+        } catch (\Throwable) {
+            return SettingsService::ACCENT_COLOR_PRESETS['signal-blue']['hex'];
+        }
     }
 }

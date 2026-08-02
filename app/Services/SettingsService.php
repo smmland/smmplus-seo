@@ -11,6 +11,21 @@ class SettingsService
     private const KEY_SYNC_INTERVAL_HOURS = 'sync_interval_hours';
     private const KEY_SOURCE_SITEMAP_URL = 'source_sitemap_url';
     private const KEY_CRON_HEARTBEAT_AT = 'cron_heartbeat_at';
+    private const KEY_ACCENT_COLOR = 'accent_color';
+
+    private const DEFAULT_ACCENT_COLOR = 'signal-blue';
+
+    // Curated, not a free color picker - keeps every option legible against both the panel's
+    // neutrals and its semantic colors (success/danger badges etc, which stay fixed regardless
+    // of accent so they're never confused with it).
+    public const ACCENT_COLOR_PRESETS = [
+        'teal' => ['label' => 'Teal', 'hex' => '#14B8C6'],
+        'signal-blue' => ['label' => 'Signal Blue', 'hex' => '#2F6FED'],
+        'indigo' => ['label' => 'Indigo', 'hex' => '#6A5CF5'],
+        'violet' => ['label' => 'Violet', 'hex' => '#8B3FE8'],
+        'emerald' => ['label' => 'Emerald', 'hex' => '#0F9D6C'],
+        'amber' => ['label' => 'Amber', 'hex' => '#D97F0A'],
+    ];
 
     public function getSyncIntervalHours(): int
     {
@@ -56,6 +71,29 @@ class SettingsService
         $stored = $this->get(self::KEY_CRON_HEARTBEAT_AT);
 
         return $stored ? Carbon::parse($stored) : null;
+    }
+
+    public function getAccentColorKey(): string
+    {
+        $stored = $this->get(self::KEY_ACCENT_COLOR);
+
+        return ($stored !== null && isset(self::ACCENT_COLOR_PRESETS[$stored]))
+            ? $stored
+            : self::DEFAULT_ACCENT_COLOR;
+    }
+
+    public function getAccentColorHex(): string
+    {
+        return self::ACCENT_COLOR_PRESETS[$this->getAccentColorKey()]['hex'];
+    }
+
+    public function setAccentColor(string $key): void
+    {
+        if (! isset(self::ACCENT_COLOR_PRESETS[$key])) {
+            throw new InvalidArgumentException("Unknown accent color preset: {$key}");
+        }
+
+        $this->set(self::KEY_ACCENT_COLOR, $key);
     }
 
     private function get(string $key): ?string

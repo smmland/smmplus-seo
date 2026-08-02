@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\SettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -25,6 +26,8 @@ class GeneralSettings extends Page implements HasForms
 
     public ?array $data = [];
 
+    public string $accentColor = '';
+
     // Reached from the account menu (top-right avatar -> Settings) instead of the sidebar -
     // see AdminPanelProvider::panel()'s userMenuItems().
     public static function shouldRegisterNavigation(): bool
@@ -32,11 +35,34 @@ class GeneralSettings extends Page implements HasForms
         return false;
     }
 
-    public function mount(): void
+    public function mount(SettingsService $settings): void
     {
         $this->form->fill([
             'email' => Auth::user()->email,
         ]);
+
+        $this->accentColor = $settings->getAccentColorKey();
+    }
+
+    public function getAccentColorPresets(): array
+    {
+        return SettingsService::ACCENT_COLOR_PRESETS;
+    }
+
+    // The panel's colors (nav, buttons, ...) are resolved into CSS variables once per full page
+    // load (AdminPanelProvider::panel(), read server-side into the layout's <head>) - a Livewire
+    // property update alone can't repaint chrome that's already on the page, so this forces a
+    // real browser navigation instead of a SPA-style partial update.
+    public function setAccentColor(string $key, SettingsService $settings): void
+    {
+        $settings->setAccentColor($key);
+
+        Notification::make()
+            ->title('Panel color updated')
+            ->success()
+            ->send();
+
+        $this->redirect(static::getUrl());
     }
 
     public function form(Form $form): Form

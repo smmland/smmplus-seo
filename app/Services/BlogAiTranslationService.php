@@ -156,7 +156,10 @@ class BlogAiTranslationService
                 'model' => $model,
                 // OpenAI deprecated max_tokens for chat completions in favor of this - newer
                 // models (o3, o4-mini, gpt-5, ...) reject max_tokens outright with HTTP 400.
-                'max_completion_tokens' => 8192,
+                // Reasoning models also spend part of this same budget on hidden "reasoning
+                // tokens" before writing anything visible, so this needs real headroom above
+                // the translated article's expected size or those models come back empty.
+                'max_completion_tokens' => 16384,
                 'response_format' => ['type' => 'json_object'],
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
@@ -173,7 +176,19 @@ class BlogAiTranslationService
         $text = $response->json('choices.0.message.content');
 
         if (! $text) {
-            return ['ok' => false, 'message' => 'ChatGPT returned an empty response.'];
+            $finishReason = $response->json('choices.0.finish_reason');
+            $reasoningTokens = $response->json('usage.completion_tokens_details.reasoning_tokens');
+
+            // The unhelpful default: a reasoning model (o3, o4-mini, gpt-5, ...) can spend its
+            // entire token budget on hidden reasoning and stop before writing any visible reply -
+            // the API call still succeeds, just with nothing in it. Surface that distinctly from
+            // a genuinely empty reply so it's obvious a bigger budget (or a non-reasoning model
+            // like GPT-4o) is what's needed, not a prompt fix.
+            if ($finishReason === 'length' && $reasoningTokens) {
+                return ['ok' => false, 'message' => "ChatGPT used its entire token budget on internal reasoning ({$reasoningTokens} tokens) and stopped before writing a reply. Try a non-reasoning model (e.g. GPT-4o) in AI Settings, which doesn't have this issue."];
+            }
+
+            return ['ok' => false, 'message' => 'ChatGPT returned an empty response'.($finishReason ? " (finish_reason: {$finishReason})" : '').'.'];
         }
 
         return ['ok' => true, 'text' => $text];

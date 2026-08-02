@@ -37,8 +37,15 @@ class AiSettingsService
     private const KEY_API_KEY_PREFIX = 'ai_api_key_';
     private const KEY_MODEL_PREFIX = 'ai_model_';
     private const KEY_BLOG_TRANSLATION_PROMPT = 'ai_prompt_blog_translation';
+    private const KEY_MAX_CONCURRENT_TRANSLATIONS = 'ai_max_concurrent_translations';
 
     private const DEFAULT_PROVIDER = 'claude';
+    private const DEFAULT_MAX_CONCURRENT_TRANSLATIONS = 3;
+
+    // Purely a safety rail against a typo'd huge number firing that many simultaneous requests
+    // at once - the provider's own rate limits are the real ceiling, this just keeps a mistake
+    // from being catastrophic.
+    private const MAX_CONCURRENT_TRANSLATIONS_CEILING = 10;
 
     // Editable on the settings page rather than hardcoded permanently - API providers retire
     // model ids over time, so these are just sane starting points, not guaranteed forever.
@@ -168,6 +175,26 @@ class AiSettingsService
     public function defaultBlogTranslationPrompt(): string
     {
         return self::DEFAULT_BLOG_TRANSLATION_PROMPT;
+    }
+
+    /**
+     * How many translation requests the queue processor (translation:process-queue) fires at
+     * the AI provider at once, instead of one at a time - this host has no persistent worker
+     * process to run several of in parallel, so "concurrent" here means N outbound HTTP requests
+     * in flight together within a single PHP process (Http::pool), not N separate processes.
+     */
+    public function getMaxConcurrentTranslations(): int
+    {
+        $stored = $this->get(self::KEY_MAX_CONCURRENT_TRANSLATIONS);
+
+        $value = $stored !== null ? (int) $stored : self::DEFAULT_MAX_CONCURRENT_TRANSLATIONS;
+
+        return max(1, min($value, self::MAX_CONCURRENT_TRANSLATIONS_CEILING));
+    }
+
+    public function setMaxConcurrentTranslations(int $count): void
+    {
+        $this->set(self::KEY_MAX_CONCURRENT_TRANSLATIONS, (string) max(1, min($count, self::MAX_CONCURRENT_TRANSLATIONS_CEILING)));
     }
 
     /**

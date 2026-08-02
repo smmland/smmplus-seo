@@ -40,9 +40,11 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            // Above TranslateBlogArticleJob's own 900s timeout (the longest-running job on this
-            // queue) - otherwise a worker still legitimately mid-translation would have its job
-            // considered "lost" and released for reprocessing well before it could ever finish.
+            // This "database" queue connection is currently unused - blog translations are
+            // processed directly by the translation:process-queue command (routes/console.php)
+            // rather than through Laravel's queue dispatch, so nothing here actually reserves a
+            // row against this retry_after window. Left at a generous value regardless, in case
+            // something is ever dispatched onto this queue in the future.
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 1000),
             'after_commit' => false,
         ],

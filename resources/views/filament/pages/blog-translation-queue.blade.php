@@ -42,6 +42,23 @@
                 transform: none;
             }
         }
+
+        /* Determinate variant (a real known percentage - how many of a topic's languages are
+           translated so far) - unlike .bt-progress-bar above, this has no animation/transform of
+           its own, so a percentage set via an inline width style renders exactly as given instead
+           of fighting the sweep keyframes, which assume a fixed 28px bar. */
+        .bt-progress-track-wide {
+            width: 100%;
+        }
+        .bt-progress-bar-fill {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            border-radius: 9999px;
+            background-color: rgb(var(--primary-600));
+            transition: width .3s ease;
+        }
     </style>
 
     <div wire:poll.20s>

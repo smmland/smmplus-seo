@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Models\Language;
 use App\Models\Url;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -114,20 +117,157 @@ class BlogAiTranslationService
     private function callClaude(string $apiKey, string $model, string $prompt): array
     {
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-            ])->timeout(170)->post('https://api.anthropic.com/v1/messages', [
-                'model' => $model,
-                'max_tokens' => 8192,
-                'messages' => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ]);
+            $response = Http::withHeaders($this->claudeHeaders($apiKey))
+                ->timeout(170)
+                ->post('https://api.anthropic.com/v1/messages', $this->claudeRequestPayload($model, $prompt));
         } catch (\Throwable $e) {
             return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
         }
 
+        return $this->extractClaudeText($response);
+    }
+
+    /**
+     * @return array{ok: bool, message?: string, text?: string}
+     */
+    private function callChatgpt(string $apiKey, string $model, string $prompt): array
+    {
+        try {
+            $response = Http::withHeaders($this->chatgptHeaders($apiKey))
+                ->timeout(170)
+                ->post('https://api.openai.com/v1/chat/completions', $this->chatgptRequestPayload($model, $prompt));
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
+        }
+
+        return $this->extractChatgptText($response);
+    }
+
+    /**
+     * Translates several already-queued jobs at once via concurrent outbound HTTP requests
+     * (Http::pool) instead of one at a time - this is what "N concurrent translations" (AI
+     * Settings) means in practice on a host with no persistent worker process to run several
+     * of in parallel: N real requests in flight together within a single PHP process, using the
+     * same provider/model/key for all of them since only one is configured system-wide.
+     *
+     * @param  Collection<int, \App\Models\BlogTranslationJob>  $jobs
+     * @return array<int, array{ok: bool, message: string}> keyed by BlogTranslationJob id
+     */
+    public function translateManyConcurrently(Collection $jobs): array
+    {
+        $provider = $this->aiSettings->getProvider();
+        $apiKey = $this->aiSettings->getApiKey($provider);
+        $model = $this->aiSettings->getModel($provider);
+
+        if (! $apiKey || ! $model) {
+            $message = "No API key or model configured for \"{$provider}\" - set it up in AI Settings first.";
+
+            return $jobs->mapWithKeys(fn ($job) => [$job->id => ['ok' => false, 'message' => $message]])->all();
+        }
+
+        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        // Resolves each job's prompt up front so a job whose source content vanished since it
+        // was queued (source row deleted, content never extracted) fails immediately with a
+        // clear reason instead of being sent to the AI at all.
+        $prepared = [];
+
+        foreach ($jobs as $job) {
+            $sourceRow = Url::query()->where('group_key', $job->group_key)->where('lang', $defaultLangCode)->first();
+
+            if (! $sourceRow) {
+                $prepared[$job->id] = ['error' => 'Could not find the default-language content for this topic.'];
+
+                continue;
+            }
+
+            if (! $sourceRow->content_extraction_path || ! Storage::disk('public')->exists($sourceRow->content_extraction_path)) {
+                $prepared[$job->id] = ['error' => 'The source content hasn\'t been extracted yet - click "Extract content" on the default-language tab first.'];
+
+                continue;
+            }
+
+            $sourceContent = Storage::disk('public')->get($sourceRow->content_extraction_path);
+            $targetLanguage = Language::query()->where('code', $job->target_lang)->value('name') ?? $job->target_lang;
+
+            $prepared[$job->id] = [
+                'sourceRow' => $sourceRow,
+                'targetLangCode' => $job->target_lang,
+                'targetLanguage' => $targetLanguage,
+                'prompt' => $this->buildPrompt($sourceRow, $sourceContent, $targetLanguage),
+            ];
+        }
+
+        $toSend = collect($prepared)->filter(fn ($p) => isset($p['prompt']));
+
+        $results = [];
+
+        if ($toSend->isNotEmpty()) {
+            $responses = Http::pool(fn (Pool $pool) => $toSend->map(
+                fn ($p, $jobId) => $provider === 'claude'
+                    ? $pool->as((string) $jobId)->withHeaders($this->claudeHeaders($apiKey))->timeout(170)->post('https://api.anthropic.com/v1/messages', $this->claudeRequestPayload($model, $p['prompt']))
+                    : $pool->as((string) $jobId)->withHeaders($this->chatgptHeaders($apiKey))->timeout(170)->post('https://api.openai.com/v1/chat/completions', $this->chatgptRequestPayload($model, $p['prompt']))
+            )->all());
+
+            foreach ($toSend as $jobId => $p) {
+                $response = $responses[(string) $jobId] ?? null;
+
+                // A per-request transport failure (timeout, DNS, ...) inside a pool comes back
+                // as the exception itself rather than a Response - and doesn't abort the other
+                // requests in the pool, which is exactly the point of using one.
+                $extracted = $response instanceof Response
+                    ? ($provider === 'claude' ? $this->extractClaudeText($response) : $this->extractChatgptText($response))
+                    : ['ok' => false, 'message' => 'Connection error: '.($response instanceof \Throwable ? $response->getMessage() : 'the request failed.')];
+
+                if (! $extracted['ok']) {
+                    $results[$jobId] = $extracted;
+
+                    continue;
+                }
+
+                $parsed = $this->parseJsonResponse($extracted['text']);
+
+                if (! $parsed || ! isset($parsed['content'])) {
+                    $results[$jobId] = ['ok' => false, 'message' => 'The AI\'s reply could not be parsed as the expected JSON - try again, or check the prompt in Translation Settings.'];
+
+                    continue;
+                }
+
+                $this->saveTranslation($p['sourceRow'], $p['targetLangCode'], $parsed);
+                $results[$jobId] = ['ok' => true, 'message' => "Translated into {$p['targetLanguage']} and saved."];
+            }
+        }
+
+        foreach ($prepared as $jobId => $p) {
+            if (! isset($results[$jobId])) {
+                $results[$jobId] = ['ok' => false, 'message' => $p['error']];
+            }
+        }
+
+        return $results;
+    }
+
+    private function claudeHeaders(string $apiKey): array
+    {
+        return [
+            'x-api-key' => $apiKey,
+            'anthropic-version' => '2023-06-01',
+        ];
+    }
+
+    private function claudeRequestPayload(string $model, string $prompt): array
+    {
+        return [
+            'model' => $model,
+            'max_tokens' => 8192,
+            'messages' => [
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ];
+    }
+
+    private function extractClaudeText(Response $response): array
+    {
         if (! $response->successful()) {
             return ['ok' => false, 'message' => 'HTTP '.$response->status().': '.$this->errorSnippet($response->json('error.message') ?? $response->body())];
         }
@@ -144,10 +284,14 @@ class BlogAiTranslationService
         return ['ok' => true, 'text' => $text];
     }
 
-    /**
-     * @return array{ok: bool, message?: string, text?: string}
-     */
-    private function callChatgpt(string $apiKey, string $model, string $prompt): array
+    private function chatgptHeaders(string $apiKey): array
+    {
+        return [
+            'Authorization' => 'Bearer '.$apiKey,
+        ];
+    }
+
+    private function chatgptRequestPayload(string $model, string $prompt): array
     {
         $payload = [
             'model' => $model,
@@ -172,14 +316,11 @@ class BlogAiTranslationService
             $payload['reasoning_effort'] = 'low';
         }
 
-        try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer '.$apiKey,
-            ])->timeout(170)->post('https://api.openai.com/v1/chat/completions', $payload);
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
-        }
+        return $payload;
+    }
 
+    private function extractChatgptText(Response $response): array
+    {
         if (! $response->successful()) {
             return ['ok' => false, 'message' => 'HTTP '.$response->status().': '.$this->errorSnippet($response->json('error.message') ?? $response->body())];
         }

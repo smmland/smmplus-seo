@@ -1,6 +1,15 @@
 @php
     $languages = $languages instanceof \Illuminate\Support\Collection ? $languages : collect($languages);
 
+    // Drives the "Translate all missing languages" button and its progress bar - purely derived
+    // from the same per-language flags the tabs below already use, so it stays in sync with
+    // nothing extra to track, refreshed the same way everything else here is (wire:poll.10s).
+    $nonDefaultLanguages = $languages->where('isDefault', false);
+    $totalNonDefault = $nonDefaultLanguages->count();
+    $translatedCount = $nonDefaultLanguages->where('isTranslated', true)->count();
+    $pendingCount = $nonDefaultLanguages->where('translationPending', true)->count();
+    $missingCount = $totalNonDefault - $translatedCount - $pendingCount;
+
     // Shared class strings so every toolbar/panel control looks consistent without repeating a
     // huge class list on every single button.
     $tbBtn = 'inline-flex h-8 items-center justify-center gap-1 rounded-md px-2 text-sm text-gray-600 ring-1 ring-inset ring-gray-950/10 transition hover:bg-gray-100 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/10 dark:hover:text-white';
@@ -38,18 +47,44 @@
             {{-- Lives here (not inside a specific language tab) because it operates on the whole
                  topic - whichever language is next missing, not "the language you happen to be
                  looking at" - so it stays visible no matter which tab is open. --}}
-            <x-filament::button
-                size="sm"
-                color="primary"
-                icon="heroicon-o-sparkles"
-                class="shrink-0"
-                wire:click="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
-                wire:loading.attr="disabled"
-                wire:target="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
-            >
-                Translate next missing language
-            </x-filament::button>
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
+                <x-filament::button
+                    size="sm"
+                    color="primary"
+                    icon="heroicon-o-sparkles"
+                    :disabled="$missingCount === 0"
+                    wire:click="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
+                    wire:loading.attr="disabled"
+                    wire:target="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }}), translateAllMissingLanguages({{ Illuminate\Support\Js::from($groupKey) }})"
+                >
+                    Translate next missing language
+                </x-filament::button>
+
+                <x-filament::button
+                    size="sm"
+                    color="gray"
+                    icon="heroicon-o-queue-list"
+                    :disabled="$missingCount === 0"
+                    wire:click="translateAllMissingLanguages({{ Illuminate\Support\Js::from($groupKey) }})"
+                    wire:loading.attr="disabled"
+                    wire:target="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }}), translateAllMissingLanguages({{ Illuminate\Support\Js::from($groupKey) }})"
+                >
+                    Translate all missing languages
+                </x-filament::button>
+            </div>
         </div>
+
+        @if ($pendingCount > 0)
+            <div class="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                <div class="mb-2 flex items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-300">
+                    <span class="inline-flex items-center gap-1.5">
+                        <x-filament::loading-indicator class="h-4 w-4" />
+                        Translating {{ $pendingCount }} language(s)… {{ $translatedCount }} of {{ $totalNonDefault }} done so far.
+                    </span>
+                </div>
+                <div class="bt-progress-track bt-progress-track-wide"><div class="bt-progress-bar-fill" style="width: {{ $totalNonDefault > 0 ? round($translatedCount / $totalNonDefault * 100) : 0 }}%"></div></div>
+            </div>
+        @endif
     @endif
 
     <div

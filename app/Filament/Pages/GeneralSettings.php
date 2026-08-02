@@ -102,6 +102,7 @@ class GeneralSettings extends Page implements HasForms
             'aiModelClaudeCustom' => array_key_exists($claudeModel, self::CLAUDE_MODELS) ? null : $claudeModel,
             'aiModelChatgpt' => array_key_exists($chatgptModel, self::CHATGPT_MODELS) ? $chatgptModel : 'custom',
             'aiModelChatgptCustom' => array_key_exists($chatgptModel, self::CHATGPT_MODELS) ? null : $chatgptModel,
+            'aiMaxConcurrentTranslations' => $aiSettings->getMaxConcurrentTranslations(),
         ]);
     }
 
@@ -231,6 +232,15 @@ class GeneralSettings extends Page implements HasForms
                         TextInput::make('aiModelChatgptCustom')
                             ->label('Custom ChatGPT model id')
                             ->visible(fn (Get $get) => $get('aiProvider') === 'chatgpt' && $get('aiModelChatgpt') === 'custom'),
+
+                        TextInput::make('aiMaxConcurrentTranslations')
+                            ->label('Max concurrent translations')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(1)
+                            ->maxValue(10)
+                            ->required()
+                            ->helperText('How many languages "Translate all missing languages" sends to the AI provider at once instead of one at a time. Higher is faster but more likely to hit the provider\'s own rate limits.'),
                     ])
                     ->columns(2),
             ])
@@ -255,6 +265,8 @@ class GeneralSettings extends Page implements HasForms
             $chatgptModel = $data['aiModelChatgpt'] === 'custom' ? ($data['aiModelChatgptCustom'] ?? '') : $data['aiModelChatgpt'];
             $aiSettings->setModel('chatgpt', $chatgptModel ?: null);
         }
+
+        $aiSettings->setMaxConcurrentTranslations((int) $data['aiMaxConcurrentTranslations']);
 
         // The typed key was only ever meant to reach storage (encrypted) - don't leave it
         // sitting in the live form state after a successful save.

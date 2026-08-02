@@ -34,17 +34,15 @@ Schedule::command('gateway:auto-block-ips')->everyFiveMinutes()->withoutOverlapp
 // newly-translated posts don't wait long to be picked up.
 Schedule::command('translation:refresh-blog-status')->hourly()->withoutOverlapping();
 
-// Processes queued jobs (currently just TranslateBlogArticleJob) - this shared host has no
-// persistent `queue:work` process (no SSH access to keep one running), so the queue is drained
-// a batch at a time off the same schedule:run tick everything else here rides on instead.
-// --stop-when-empty exits once drained rather than idling, so this doesn't overlap the next
-// tick; --timeout must be >= TranslateBlogArticleJob's own $timeout (900s) or the worker would
-// kill a still-legitimately-running translation itself. withoutOverlapping() covers the case
-// where one translation runs long enough that the next tick fires while this one's still busy.
-// Skipped entirely while a panel update is installing (GeneralSettings::installUpdate) - the
-// update overwrites this app's own files, and a translation job picked up mid-swap could run
-// against a half-replaced codebase.
-Schedule::command('queue:work --queue=default --stop-when-empty --tries=1 --timeout=900')
+// Processes queued blog translation jobs, up to the configured number (AI Settings: Max
+// concurrent translations, default 3) fired at the AI provider together - this shared host has
+// no persistent worker process, so this rides the same once-a-minute schedule:run tick
+// everything else here does, draining as many batches as fit in its own time budget rather than
+// waiting for the next tick. withoutOverlapping() covers a batch that runs long enough for the
+// next tick to fire while this one's still busy. Skipped entirely while a panel update is
+// installing (GeneralSettings::installUpdate) - the update overwrites this app's own files, and
+// a translation picked up mid-swap could run against a half-replaced codebase.
+Schedule::command('translation:process-queue')
     ->everyMinute()
     ->withoutOverlapping(20)
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

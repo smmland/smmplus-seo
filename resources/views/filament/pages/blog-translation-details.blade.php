@@ -543,24 +543,66 @@
                             </x-filament::button>
                         </div>
 
-                        <div x-show="showLinks" x-cloak class="max-h-48 space-y-2 overflow-y-auto rounded-xl bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                        {{--
+                            Each switch below is driven entirely by Alpine (:class for the track
+                            color, :style for the thumb's transform) rather than a CSS
+                            peer-checked selector - this admin panel ships Filament's pre-built
+                            CSS bundle (no app-specific Tailwind build step scans these blade
+                            files), so any peer-checked:*/translate-x-4 utility invented here
+                            would compile to nothing and silently never apply, in both themes.
+                            :class/:style merge with the static classes/style Alpine finds
+                            already on the element, so the base geometry below stays as plain
+                            (verified-present) utility classes.
+                        --}}
+                        <div x-show="showLinks" x-cloak class="max-h-56 overflow-auto rounded-xl bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
                             <template x-if="links.length === 0">
                                 <p class="text-xs text-gray-400">No links found in this content.</p>
                             </template>
-                            <template x-for="(link, i) in links" :key="i">
-                                <div class="space-y-1 border-b border-gray-950/5 pb-1.5 last:border-0 last:pb-0 dark:border-white/10">
-                                    <div class="flex items-center gap-2">
-                                        <span class="w-32 shrink-0 truncate text-xs text-gray-500 dark:text-gray-400" x-text="link.text"></span>
-                                        <input type="text" x-model="link.href" class="{{ $panelInput }} flex-1">
-                                    </div>
-                                    <div class="flex items-center gap-3 ps-1 text-xs text-gray-600 dark:text-gray-300">
-                                        <label class="flex items-center gap-1"><input type="checkbox" x-model="link.nofollow" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> nofollow</label>
-                                        <label class="flex items-center gap-1"><input type="checkbox" x-model="link.sponsored" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> sponsored</label>
-                                        <label class="flex items-center gap-1"><input type="checkbox" x-model="link.ugc" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> ugc</label>
-                                    </div>
-                                </div>
+                            <template x-if="links.length > 0">
+                                <table class="w-full text-start text-xs">
+                                    <thead>
+                                        <tr class="text-gray-500 dark:text-gray-400">
+                                            <th class="p-1.5 text-start font-medium">Link</th>
+                                            <th class="p-1.5 text-start font-medium">URL</th>
+                                            <th class="p-1.5 text-center font-medium">nofollow</th>
+                                            <th class="p-1.5 text-center font-medium">sponsored</th>
+                                            <th class="p-1.5 text-center font-medium">ugc</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="(link, i) in links" :key="i">
+                                            <tr class="border-t border-gray-950/5 dark:border-white/10">
+                                                <td class="max-w-40 truncate p-1.5 text-gray-500 dark:text-gray-400" x-text="link.text"></td>
+                                                <td class="p-1.5">
+                                                    <input type="text" x-model="link.href" class="{{ $panelInput }} w-full">
+                                                </td>
+                                                <td class="p-1.5 text-center">
+                                                    <label class="relative inline-flex h-5 w-9 cursor-pointer items-center">
+                                                        <input type="checkbox" x-model="link.nofollow" class="sr-only">
+                                                        <span class="absolute inset-0 rounded-full transition-colors" :class="link.nofollow ? 'bg-primary-600' : 'bg-gray-200 dark:bg-white/10'"></span>
+                                                        <span class="pointer-events-none absolute h-4 w-4 rounded-full bg-white shadow" :style="'top:2px; left:2px; transition: transform .15s ease-in-out; transform: translateX(' + (link.nofollow ? '1rem' : '0') + ')'"></span>
+                                                    </label>
+                                                </td>
+                                                <td class="p-1.5 text-center">
+                                                    <label class="relative inline-flex h-5 w-9 cursor-pointer items-center">
+                                                        <input type="checkbox" x-model="link.sponsored" class="sr-only">
+                                                        <span class="absolute inset-0 rounded-full transition-colors" :class="link.sponsored ? 'bg-primary-600' : 'bg-gray-200 dark:bg-white/10'"></span>
+                                                        <span class="pointer-events-none absolute h-4 w-4 rounded-full bg-white shadow" :style="'top:2px; left:2px; transition: transform .15s ease-in-out; transform: translateX(' + (link.sponsored ? '1rem' : '0') + ')'"></span>
+                                                    </label>
+                                                </td>
+                                                <td class="p-1.5 text-center">
+                                                    <label class="relative inline-flex h-5 w-9 cursor-pointer items-center">
+                                                        <input type="checkbox" x-model="link.ugc" class="sr-only">
+                                                        <span class="absolute inset-0 rounded-full transition-colors" :class="link.ugc ? 'bg-primary-600' : 'bg-gray-200 dark:bg-white/10'"></span>
+                                                        <span class="pointer-events-none absolute h-4 w-4 rounded-full bg-white shadow" :style="'top:2px; left:2px; transition: transform .15s ease-in-out; transform: translateX(' + (link.ugc ? '1rem' : '0') + ')'"></span>
+                                                    </label>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
                             </template>
-                            <x-filament::button size="xs" color="gray" @click="applyLinks()" x-show="links.length > 0">
+                            <x-filament::button size="xs" color="gray" @click="applyLinks()" x-show="links.length > 0" class="mt-2">
                                 Apply to content
                             </x-filament::button>
                         </div>

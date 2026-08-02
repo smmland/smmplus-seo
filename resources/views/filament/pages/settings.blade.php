@@ -22,6 +22,34 @@
         </x-filament::section>
     </div>
 
+    @php $pendingMigrations = $this->pendingMigrationsCount(); @endphp
+    <x-filament::section>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <p class="text-sm font-medium text-gray-950 dark:text-white">Database updates</p>
+                @if ($pendingMigrations > 0)
+                    <p class="text-sm text-warning-600 dark:text-warning-400">
+                        {{ $pendingMigrations }} update{{ $pendingMigrations === 1 ? '' : 's' }} waiting to be applied - click "Update database" after uploading new files, since there's no server terminal to run this from.
+                    </p>
+                @else
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        Up to date - nothing waiting to be applied.
+                    </p>
+                @endif
+            </div>
+
+            <x-filament::button
+                color="gray"
+                icon="heroicon-o-circle-stack"
+                wire:click="runMigrations"
+                wire:loading.attr="disabled"
+                wire:target="runMigrations"
+            >
+                Update database
+            </x-filament::button>
+        </div>
+    </x-filament::section>
+
     <x-filament::section>
         <div class="flex flex-wrap items-center justify-between gap-4">
             <div>

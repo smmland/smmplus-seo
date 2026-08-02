@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
@@ -27,6 +28,11 @@ class GeneralSettings extends Page implements HasForms
     public ?array $data = [];
 
     public string $accentColor = '';
+
+    // How stale the heartbeat (written every minute by routes/console.php) can be before we
+    // call the cron dead rather than just between ticks - generous enough to absorb a slow
+    // request or two without flapping.
+    private const CRON_STALE_AFTER_MINUTES = 3;
 
     // Reached from the account menu (top-right avatar -> Settings) instead of the sidebar -
     // see AdminPanelProvider::panel()'s userMenuItems().
@@ -63,6 +69,43 @@ class GeneralSettings extends Page implements HasForms
             ->send();
 
         $this->redirect(static::getUrl());
+    }
+
+    public function getCronStatus(SettingsService $settings): array
+    {
+        $heartbeat = $settings->getCronHeartbeatAt();
+
+        return [
+            'heartbeat' => $heartbeat,
+            'active' => $heartbeat !== null && $heartbeat->gt(now()->subMinutes(self::CRON_STALE_AFTER_MINUTES)),
+        ];
+    }
+
+    // Every update this panel ships that changes the database needs `php artisan migrate` run
+    // once after deploying it - normally a one-line SSH command, but this host's admin has no
+    // terminal access at all, only FTP/cPanel file upload. This button is the only way those
+    // updates can ever actually take effect: upload the new files, then click this instead of
+    // needing shell access. Safe to click any time, including with nothing pending - already-
+    // applied migrations are tracked and skipped automatically.
+    public function pendingMigrationsCount(): int
+    {
+        $migrator = app('migrator');
+        $files = $migrator->getMigrationFiles(database_path('migrations'));
+        $ran = $migrator->getRepository()->getRan();
+
+        return count(array_diff(array_keys($files), $ran));
+    }
+
+    public function runMigrations(): void
+    {
+        Artisan::call('migrate', ['--force' => true]);
+        $output = trim(Artisan::output());
+
+        Notification::make()
+            ->title('Database updated')
+            ->body($output !== '' ? $output : 'Nothing to update - already up to date.')
+            ->success()
+            ->send();
     }
 
     public function form(Form $form): Form

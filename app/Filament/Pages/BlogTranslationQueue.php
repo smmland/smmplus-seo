@@ -16,6 +16,7 @@ use Filament\Notifications\Actions\Action as NotificationAction;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Computed;
 
@@ -260,6 +261,12 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function translateLanguage(string $groupKey, string $targetLangCode): array
     {
+        if (! $this->translationTrackingAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return ['ok' => false, 'message' => 'Database update needed first.'];
+        }
+
         $sourceRow = $this->defaultLanguageRow($groupKey);
 
         if (! $sourceRow) {
@@ -301,6 +308,12 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function translateNextMissingLanguage(string $groupKey): void
     {
+        if (! $this->translationTrackingAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return;
+        }
+
         $sourceRow = $this->defaultLanguageRow($groupKey);
 
         if (! $sourceRow) {
@@ -381,6 +394,29 @@ class BlogTranslationQueue extends Page implements HasActions
             ->exists();
     }
 
+    // Guards every blog_translation_jobs query in this class - an admin without shell access
+    // has no way to run that table's migration except the "Update database" button (General
+    // Settings), so there's a real window after deploying this feature, before they've clicked
+    // it, where the table genuinely doesn't exist yet. Without this guard, just opening the
+    // topic details modal (topicDetails() below) would hard-crash the whole page instead of
+    // degrading to "translation status unavailable, everything else still works". Cached per
+    // request - Schema::hasTable() is a real query, and this gets checked on every render/poll.
+    private static ?bool $translationTrackingAvailable = null;
+
+    private function translationTrackingAvailable(): bool
+    {
+        return self::$translationTrackingAvailable ??= Schema::hasTable('blog_translation_jobs');
+    }
+
+    private function notifyDatabaseUpdateNeeded(): void
+    {
+        Notification::make()
+            ->title('Database update needed')
+            ->body('This feature needs a database update first - go to General Settings and click "Update database", then try again.')
+            ->danger()
+            ->send();
+    }
+
     private function defaultLanguageRow(string $groupKey): ?Url
     {
         $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
@@ -427,10 +463,9 @@ class BlogTranslationQueue extends Page implements HasActions
             ->orderBy('sort_order')
             ->get(['code', 'name', 'is_default']);
 
-        $translationJobs = BlogTranslationJob::query()
-            ->where('group_key', $groupKey)
-            ->get()
-            ->keyBy('target_lang');
+        $translationJobs = $this->translationTrackingAvailable()
+            ? BlogTranslationJob::query()->where('group_key', $groupKey)->get()->keyBy('target_lang')
+            : collect();
 
         $pendingLangs = $translationJobs
             ->filter(fn (BlogTranslationJob $job) => in_array($job->status, BlogTranslationJob::PENDING_STATUSES, true))

@@ -1,4 +1,55 @@
 <x-filament-panels::page>
+    <div wire:poll.30s>
+        @php $cronStatus = $this->getCronStatus(app(\App\Services\SettingsService::class)); @endphp
+        <x-filament::section>
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">Server cron</p>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
+                        @if ($cronStatus['active'])
+                            <x-filament::badge color="success">Active</x-filament::badge>
+                            <span>last checked in {{ $cronStatus['heartbeat']->diffForHumans() }}</span>
+                        @elseif ($cronStatus['heartbeat'])
+                            <x-filament::badge color="danger">Not detected</x-filament::badge>
+                            <span>last seen {{ $cronStatus['heartbeat']->diffForHumans() }} - the server's system crontab has stopped reaching this app.</span>
+                        @else
+                            <x-filament::badge color="danger">Not detected</x-filament::badge>
+                            <span>never seen - the required system cron entry (see README) isn't reaching this app.</span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </x-filament::section>
+    </div>
+
+    @php $pendingMigrations = $this->pendingMigrationsCount(); @endphp
+    <x-filament::section>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <p class="text-sm font-medium text-gray-950 dark:text-white">Database updates</p>
+                @if ($pendingMigrations > 0)
+                    <p class="text-sm text-warning-600 dark:text-warning-400">
+                        {{ $pendingMigrations }} update{{ $pendingMigrations === 1 ? '' : 's' }} waiting to be applied - click "Update database" after uploading new files, since there's no server terminal to run this from.
+                    </p>
+                @else
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        Up to date - nothing waiting to be applied.
+                    </p>
+                @endif
+            </div>
+
+            <x-filament::button
+                color="gray"
+                icon="heroicon-o-circle-stack"
+                wire:click="runMigrations"
+                wire:loading.attr="disabled"
+                wire:target="runMigrations"
+            >
+                Update database
+            </x-filament::button>
+        </div>
+    </x-filament::section>
+
     <x-filament::section heading="Appearance" description="Pick the panel's accent color - used for the active nav item, primary buttons, links and switches throughout.">
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
             @foreach ($this->getAccentColorPresets() as $key => $preset)

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Language;
 use App\Models\Url;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -157,15 +158,16 @@ class BlogContentExtractionService
         Storage::disk('public')->put("{$baseDir}/content-{$lang}.html", $contentHtml);
 
         $previewTitle = e($articleTitle ?? $row->slug);
+        $dir = Language::direction($lang);
         $previewHtml = <<<HTML
             <!doctype html>
-            <html lang="{$lang}">
+            <html lang="{$lang}" dir="{$dir}">
             <head>
             <meta charset="utf-8">
             <title>{$previewTitle} - preview</title>
             <script src="https://cdn.tailwindcss.com"></script>
             </head>
-            <body class="mx-auto max-w-3xl px-6 py-10">
+            <body class="mx-auto max-w-3xl px-6 py-10" dir="{$dir}">
             <h1 class="text-3xl font-bold mb-6">{$previewTitle}</h1>
             {$contentHtml}
             </body>

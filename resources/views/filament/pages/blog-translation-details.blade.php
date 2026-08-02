@@ -90,7 +90,8 @@
                         {{ Illuminate\Support\Js::from($language['contentHtml'] ?? '') }},
                         {{ Illuminate\Support\Js::from($language['editedContent'] ?? $language['contentHtml'] ?? '') }},
                         {{ Illuminate\Support\Js::from($language['editedPreviewUrl']) }},
-                        {{ Illuminate\Support\Js::from($language['editedPreviewUrlTemplate']) }}
+                        {{ Illuminate\Support\Js::from($language['editedPreviewUrlTemplate']) }},
+                        {{ Illuminate\Support\Js::from(\App\Models\Language::direction($language['code'])) }}
                     )"
                 >
                     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">

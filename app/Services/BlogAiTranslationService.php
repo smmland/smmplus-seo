@@ -242,15 +242,16 @@ class BlogAiTranslationService
         Storage::disk('public')->put("{$baseDir}/content-{$targetLangCode}.html", $content);
 
         $previewTitle = e($row->article_title ?? $row->slug);
+        $dir = Language::direction($targetLangCode);
         $previewHtml = <<<HTML
             <!doctype html>
-            <html lang="{$targetLangCode}">
+            <html lang="{$targetLangCode}" dir="{$dir}">
             <head>
             <meta charset="utf-8">
             <title>{$previewTitle} - preview</title>
             <script src="https://cdn.tailwindcss.com"></script>
             </head>
-            <body class="mx-auto max-w-3xl px-6 py-10">
+            <body class="mx-auto max-w-3xl px-6 py-10" dir="{$dir}">
             <h1 class="text-3xl font-bold mb-6">{$previewTitle}</h1>
             {$content}
             </body>

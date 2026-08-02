@@ -145,10 +145,11 @@
         const BLOG_EDITOR_ALIGN_RE = /^text-(left|center|right|justify)$/;
         const BLOG_EDITOR_FORMAT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'blockquote'];
 
-        function blogEditor(urlId, originalHtml, editedHtml, editedPreviewUrl, editedPreviewUrlTemplate) {
+        function blogEditor(urlId, originalHtml, editedHtml, editedPreviewUrl, editedPreviewUrlTemplate, dir) {
             return {
                 urlId: urlId,
                 mode: 'original',
+                dir: dir || 'ltr',
                 // Reactive (not a closure variable) so extractAndRefresh()/retranslateAndRefresh()
                 // can update it after the content changes underneath an already-mounted editor -
                 // a Livewire re-render alone won't do it (morphs preserve already-mounted x-data
@@ -339,11 +340,11 @@
                     // for the literal head/body closing tags and splices its own script/style
                     // tags in wherever it finds them - including inside this JS string literal,
                     // which corrupted it into broken, unparseable JS when written as normal text.
-                    const doc = '<!doctype html><html><head><meta charset="utf-8">'
+                    const doc = '<!doctype html><html dir="' + this.dir + '"><head><meta charset="utf-8">'
                         + '<script src="https://cdn.tailwindcss.com"><' + '/script>'
                         + '<style>body{padding:1.5rem;max-width:48rem;margin:0 auto;outline:none;}'
                         + '[data-blogeditor-selected]{outline:2px solid #6366f1;outline-offset:2px;}</style>'
-                        + '<' + '/head><body contenteditable="true">' + this.html + '<' + '/body><' + '/html>';
+                        + '<' + '/head><body contenteditable="true" dir="' + this.dir + '">' + this.html + '<' + '/body><' + '/html>';
                     frame.onload = () => {
                         const idoc = frame.contentDocument;
                         // Snapshot for undo before the first keystroke of a burst of typing (not

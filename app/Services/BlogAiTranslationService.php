@@ -154,7 +154,9 @@ class BlogAiTranslationService
                 'Authorization' => 'Bearer '.$apiKey,
             ])->timeout(170)->post('https://api.openai.com/v1/chat/completions', [
                 'model' => $model,
-                'max_tokens' => 8192,
+                // OpenAI deprecated max_tokens for chat completions in favor of this - newer
+                // models (o3, o4-mini, gpt-5, ...) reject max_tokens outright with HTTP 400.
+                'max_completion_tokens' => 8192,
                 'response_format' => ['type' => 'json_object'],
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],

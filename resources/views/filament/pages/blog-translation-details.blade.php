@@ -134,10 +134,12 @@
                             <td class="p-1.5">
                                 @if (! $language['exists'])
                                     <x-filament::badge color="gray" size="xs">No content</x-filament::badge>
+                                @elseif ($language['needsSiteUpdate'])
+                                    <x-filament::badge color="warning" size="xs">Needs site update</x-filament::badge>
                                 @elseif ($language['isTranslated'])
-                                    <x-filament::badge color="success" size="xs">Published</x-filament::badge>
+                                    <x-filament::badge color="success" size="xs">Confirmed live</x-filament::badge>
                                 @else
-                                    <x-filament::badge color="warning" size="xs">Newly translated</x-filament::badge>
+                                    <x-filament::badge color="warning" size="xs">Not translated yet</x-filament::badge>
                                 @endif
                             </td>
                         </tr>
@@ -169,14 +171,24 @@
             >
                 {{ strtoupper($language['code']) }}
 
+                {{-- Plain text-{color}-{shade} utility classes don't work here (this admin panel
+                     serves Filament's pre-built CSS bundle, which never compiled these specific
+                     shades since nothing else in it happens to use them - see the note on
+                     blog-translation-queue.blade.php's progress bar for the fuller story on this
+                     bug). Filament's own semantic colors ARE available at runtime as CSS custom
+                     properties though (injected into <head> from the panel's color config), the
+                     same --primary-600 the progress bar already reads - so those, not a utility
+                     class, are what these icons resolve their color from. --}}
                 @if ($language['isDefault'])
-                    <x-filament::icon icon="heroicon-m-star" class="h-3.5 w-3.5 text-amber-400" />
+                    <x-filament::icon icon="heroicon-m-star" class="h-3.5 w-3.5" style="color: rgb(var(--warning-500))" />
                 @elseif (! $language['exists'])
                     <x-filament::icon icon="heroicon-m-minus-circle" class="h-3.5 w-3.5 opacity-50" />
+                @elseif ($language['needsSiteUpdate'])
+                    <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3.5 w-3.5" style="color: rgb(var(--warning-600))" />
                 @elseif ($language['isTranslated'])
-                    <x-filament::icon icon="heroicon-m-check-circle" class="h-3.5 w-3.5 text-success-500" />
+                    <x-filament::icon icon="heroicon-m-check-circle" class="h-3.5 w-3.5" style="color: rgb(var(--success-600))" />
                 @else
-                    <x-filament::icon icon="heroicon-m-x-circle" class="h-3.5 w-3.5 text-warning-400" />
+                    <x-filament::icon icon="heroicon-m-x-circle" class="h-3.5 w-3.5" style="color: rgb(var(--warning-600))" />
                 @endif
             </button>
         @endforeach
@@ -289,6 +301,30 @@
                             </x-filament::button>
                         </div>
                     </div>
+
+                    {{-- Colored via inline styles reading Filament's own --warning-* CSS custom
+                         properties (injected into <head> at runtime from the panel's color
+                         config), not bg-warning-50/text-warning-700-style utility classes - this
+                         admin panel serves Filament's pre-built CSS bundle, which was never
+                         compiled with those specific shades since nothing else in it happens to
+                         use them (same root cause as the progress bar's --primary-600 usage). --}}
+                    @if (! $language['isDefault'] && $language['needsSiteUpdate'] && ! $language['translationPending'])
+                        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 text-sm" style="background-color: rgba(var(--warning-500), .1)">
+                            <span style="color: rgb(var(--warning-700))">
+                                Translated in this tool, but not yet confirmed live on the site{{ $language['translationCheckedAt'] ? ' - last checked '.$language['translationCheckedAt']->diffForHumans() : ' - never checked' }}{{ $language['translationCheckNote'] ? ' ('.$language['translationCheckNote'].')' : '' }}. Copy the content onto the live site (see "Download translate export" above), then recheck.
+                            </span>
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-arrow-path"
+                                wire:click="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                                wire:loading.attr="disabled"
+                                wire:target="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                            >
+                                Recheck now
+                            </x-filament::button>
+                        </div>
+                    @endif
 
                     @php
                         $copyFields = [

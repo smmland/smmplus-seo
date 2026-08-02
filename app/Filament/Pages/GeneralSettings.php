@@ -44,6 +44,8 @@ class GeneralSettings extends Page implements HasForms
 
     public string $accentColor = '';
 
+    public int $aiCostsPage = 1;
+
     // How stale the heartbeat (written every minute by routes/console.php) can be before we
     // call the cron dead rather than just between ticks - generous enough to absorb a slow
     // request or two without flapping.
@@ -299,15 +301,19 @@ class GeneralSettings extends Page implements HasForms
         $notification->send();
     }
 
+    // How many topics the "AI Costs" breakdown shows per page - a busy site could have hundreds
+    // of translated topics, so this is paginated rather than capped at a fixed top-N.
+    private const AI_COSTS_PER_PAGE = 15;
+
     /**
      * Aggregates every completed translation's estimated cost (BlogAiTranslationService writes
      * one per attempt, success or fail - a failed call can still have burned real tokens) into
-     * an overall total plus a per-topic breakdown, for the "AI Translation Costs" section below.
-     * Guarded the same way every blog_translation_jobs feature is: the cost columns can lag
-     * behind this code until "Update database" is clicked, since this host has no terminal
-     * access to run migrations any other way.
+     * an overall total plus a per-topic breakdown, for the "AI Costs" section below. Guarded the
+     * same way every blog_translation_jobs feature is: the cost columns can lag behind this code
+     * until "Update database" is clicked, since this host has no terminal access to run
+     * migrations any other way.
      *
-     * @return array{available: bool, totalCost: float, totalInputTokens: int, totalOutputTokens: int, totalJobs: int, unknownPricingCount: int, byTopic: \Illuminate\Support\Collection}
+     * @return array{available: bool, totalCost: float, totalInputTokens: int, totalOutputTokens: int, totalJobs: int, unknownPricingCount: int, byTopic: \Illuminate\Support\Collection, page: int, lastPage: int, totalTopics: int}
      */
     public function getAiCostStats(): array
     {
@@ -320,6 +326,9 @@ class GeneralSettings extends Page implements HasForms
                 'totalJobs' => 0,
                 'unknownPricingCount' => 0,
                 'byTopic' => collect(),
+                'page' => 1,
+                'lastPage' => 1,
+                'totalTopics' => 0,
             ];
         }
 
@@ -334,11 +343,15 @@ class GeneralSettings extends Page implements HasForms
         // complete when part of it couldn't actually be priced.
         $unknownPricingCount = (clone $attempted)->whereNull('estimated_cost_usd')->count();
 
+        $totalTopics = (clone $attempted)->distinct('group_key')->count('group_key');
+        $lastPage = max(1, (int) ceil($totalTopics / self::AI_COSTS_PER_PAGE));
+        $page = max(1, min($this->aiCostsPage, $lastPage));
+
         $byGroup = (clone $attempted)
             ->selectRaw('group_key, COALESCE(SUM(estimated_cost_usd), 0) as cost, COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens, COUNT(*) as translations')
             ->groupBy('group_key')
             ->orderByDesc('cost')
-            ->limit(50)
+            ->forPage($page, self::AI_COSTS_PER_PAGE)
             ->get();
 
         $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
@@ -371,7 +384,20 @@ class GeneralSettings extends Page implements HasForms
             'totalJobs' => (int) $totals->total_jobs,
             'unknownPricingCount' => $unknownPricingCount,
             'byTopic' => $byTopic,
+            'page' => $page,
+            'lastPage' => $lastPage,
+            'totalTopics' => $totalTopics,
         ];
+    }
+
+    public function previousAiCostsPage(): void
+    {
+        $this->aiCostsPage = max(1, $this->aiCostsPage - 1);
+    }
+
+    public function nextAiCostsPage(): void
+    {
+        $this->aiCostsPage++;
     }
 
     public function form(Form $form): Form

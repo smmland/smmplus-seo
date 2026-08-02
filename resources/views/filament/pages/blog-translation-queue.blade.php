@@ -95,7 +95,7 @@
         <x-filament::section>
         @if ($this->queue->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">
-                No blog topics have missing translations right now.
+                Every blog topic is fully translated and confirmed live.
             </p>
         @else
             <div class="overflow-x-auto">
@@ -105,6 +105,7 @@
                             <th class="p-2 text-start text-sm font-semibold">#</th>
                             <th class="p-2 text-start text-sm font-semibold">Topic (default language)</th>
                             <th class="p-2 text-start text-sm font-semibold">Missing languages</th>
+                            <th class="p-2 text-start text-sm font-semibold">Needs site update</th>
                             <th class="p-2 text-start text-sm font-semibold">Actions</th>
                         </tr>
                     </thead>
@@ -123,14 +124,13 @@
                                     <div class="flex flex-wrap gap-1">
                                         @foreach ($topic['missing'] as $language)
                                             @if (in_array($language->code, $topic['pendingLangs'], true))
-                                                <span class="inline-flex items-center gap-1 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 ring-1 ring-inset ring-primary-600/20 dark:bg-primary-400/10 dark:text-primary-400 dark:ring-primary-400/20">
-                                                    <x-filament::loading-indicator class="h-3 w-3" />
+                                                <x-filament::badge color="primary" size="xs" icon="heroicon-o-sparkles">
                                                     {{ $language->code }}
-                                                </span>
+                                                </x-filament::badge>
                                             @else
-                                                <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/20">
+                                                <x-filament::badge color="danger" size="xs">
                                                     {{ $language->code }}
-                                                </span>
+                                                </x-filament::badge>
                                             @endif
                                         @endforeach
                                     </div>
@@ -139,6 +139,22 @@
                                         <div class="bt-progress-track" style="margin-top: 6px;">
                                             <div class="bt-progress-bar"></div>
                                         </div>
+                                    @endif
+                                </td>
+                                <td class="p-2">
+                                    @if ($topic['needsUpdate']->isNotEmpty())
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach ($topic['needsUpdate'] as $language)
+                                                <x-filament::badge color="warning" size="xs" icon="heroicon-o-arrow-up-tray">
+                                                    {{ $language->code }}
+                                                </x-filament::badge>
+                                            @endforeach
+                                        </div>
+                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                            Translated in this tool - copy it onto the live site, then click Recheck.
+                                        </p>
+                                    @else
+                                        <span class="text-xs text-gray-400 dark:text-gray-500">—</span>
                                     @endif
                                 </td>
                                 <td class="p-2">

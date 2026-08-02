@@ -339,7 +339,13 @@ class BlogAiTranslationService
         $row->slug = $sourceRow->slug;
         $row->is_active = true;
         $row->is_translated = true;
-        $row->translation_checked_at = now();
+        // Deliberately NOT touching translation_checked_at here - that field means "confirmed
+        // live via BlogTranslationDetectionService's own fetch", not "we generated content for
+        // it". Leaving it at whatever it was (null for a first translation) is what makes a
+        // freshly-translated row correctly show as pending a real live-site confirmation
+        // (BlogTranslationQueue::needsSiteUpdate()) instead of looking confirmed the moment
+        // content is generated here - and as a side effect, makes it overdue for the next
+        // detection cron run (BlogTranslationDetectionService::dueQuery() prioritizes null).
         $row->article_title = $parsed['title'] ?? null;
         $row->seo_title = $parsed['seo_title'] ?? null;
         $row->meta_description = $parsed['meta_description'] ?? null;

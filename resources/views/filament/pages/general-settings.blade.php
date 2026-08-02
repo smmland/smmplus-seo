@@ -114,7 +114,7 @@
         </div>
     </form>
 
-    <x-filament::section heading="AI Translation Costs" description="Estimated spend on AI translation calls, based on approximate published per-model pricing - actual provider invoices may differ slightly.">
+    <x-filament::section heading="AI Costs" description="Estimated spend on AI translation calls, based on approximate published per-model pricing - actual provider invoices may differ slightly.">
         @php $aiCosts = $this->getAiCostStats(); @endphp
 
         @if (! $aiCosts['available'])
@@ -172,6 +172,35 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if ($aiCosts['lastPage'] > 1)
+                    <div class="mt-3 flex items-center justify-between gap-3">
+                        <p class="text-xs text-gray-400 dark:text-gray-500">
+                            Page {{ $aiCosts['page'] }} of {{ $aiCosts['lastPage'] }} ({{ $aiCosts['totalTopics'] }} topic{{ $aiCosts['totalTopics'] === 1 ? '' : 's' }})
+                        </p>
+                        <div class="flex items-center gap-2">
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-chevron-left"
+                                :disabled="$aiCosts['page'] <= 1"
+                                wire:click="previousAiCostsPage"
+                            >
+                                Previous
+                            </x-filament::button>
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-chevron-right"
+                                icon-position="after"
+                                :disabled="$aiCosts['page'] >= $aiCosts['lastPage']"
+                                wire:click="nextAiCostsPage"
+                            >
+                                Next
+                            </x-filament::button>
+                        </div>
+                    </div>
+                @endif
             @else
                 <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">No AI translations have run yet.</p>
             @endif

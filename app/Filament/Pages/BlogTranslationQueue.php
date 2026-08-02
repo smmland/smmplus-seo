@@ -80,14 +80,45 @@ class BlogTranslationQueue extends Page implements HasActions
                     return ! $row || $row->is_translated !== true;
                 });
 
+                $needsUpdate = $activeLanguages->filter(function (Language $language) use ($existingForGroup) {
+                    $row = $existingForGroup->get($language->code);
+
+                    return $row && $this->needsSiteUpdate($row);
+                });
+
                 return [
                     'url' => $englishRow,
                     'missing' => $missing,
+                    'needsUpdate' => $needsUpdate,
                     'pendingLangs' => $pendingByGroup->get($englishRow->group_key, collect())->pluck('target_lang')->all(),
                 ];
             })
-            ->filter(fn (array $topic) => $topic['missing']->isNotEmpty())
+            ->filter(fn (array $topic) => $topic['missing']->isNotEmpty() || $topic['needsUpdate']->isNotEmpty())
             ->values();
+    }
+
+    /**
+     * True when a language is marked translated (Url::is_translated) but that's never actually
+     * been confirmed against the live site, or was confirmed before the content it's based on
+     * last changed - covering two real gaps in is_translated on its own: BlogAiTranslationService
+     * sets it the moment a translation is generated, before anyone's put it on the live site
+     * (translation_checked_at null); and BlogTranslationDetectionService's hourly recheck leaves
+     * is_translated untouched on a fetch failure (translation_checked_at stays at its old value)
+     * - which includes the common case of the guessed target URL simply not existing live yet
+     * (a 404), not just transient errors. Either way, "is_translated=true" alone can't be trusted
+     * as "confirmed live" - this is the actual signal for that.
+     */
+    private function needsSiteUpdate(Url $row): bool
+    {
+        if ($row->is_translated !== true) {
+            return false;
+        }
+
+        if ($row->translation_checked_at === null) {
+            return true;
+        }
+
+        return $row->content_extracted_at !== null && $row->content_extracted_at->gt($row->translation_checked_at);
     }
 
     public function recheckTopic(string $groupKey, BlogTranslationDetectionService $detector): void
@@ -777,6 +808,9 @@ class BlogTranslationQueue extends Page implements HasActions
                 'isDefault' => $language->is_default,
                 'exists' => (bool) $row,
                 'isTranslated' => $row?->is_translated === true,
+                'needsSiteUpdate' => $row && $this->needsSiteUpdate($row),
+                'translationCheckedAt' => $row?->translation_checked_at,
+                'translationCheckNote' => $row?->translation_check_note,
                 'translationPending' => in_array($language->code, $pendingLangs, true),
                 'translationError' => $translationJobs->get($language->code)?->status === BlogTranslationJob::FAILED
                     ? $translationJobs->get($language->code)->message

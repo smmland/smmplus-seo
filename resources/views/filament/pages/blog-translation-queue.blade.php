@@ -1,5 +1,50 @@
 <x-filament-panels::page>
-    <div wire:poll.60s>
+    {{-- Indeterminate progress bar for anything translating in the background - plain hand-
+         written CSS (not Tailwind utility classes) for every property, including geometry that
+         would normally just be a couple of utility classes: this admin panel serves Filament's
+         pre-built CSS bundle (see blog-translation-details.blade.php's Fix-links switches for
+         the full story), and this time even plain, unrelated-to-that-bug classes like h-1,
+         w-24, and left-0 turned out to be missing from it too - so nothing here is left to
+         chance. Defined once on this real page load so it also applies inside the topic details
+         modal, whose content gets injected into the DOM dynamically. Bar color reads the panel's
+         live accent color (General Settings > Appearance) via Filament's own --primary-600
+         variable, the same one bg-primary-600 resolves to. --}}
+    <style>
+        .bt-progress-track {
+            position: relative;
+            height: 4px;
+            width: 80px;
+            overflow: hidden;
+            border-radius: 9999px;
+            background-color: #e5e7eb;
+        }
+        .dark .bt-progress-track {
+            background-color: rgba(255, 255, 255, .1);
+        }
+        .bt-progress-bar {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 28px;
+            border-radius: 9999px;
+            background-color: rgb(var(--primary-600));
+            animation: bt-progress-sweep 1.1s ease-in-out infinite;
+        }
+        @keyframes bt-progress-sweep {
+            0% { transform: translateX(-28px); }
+            100% { transform: translateX(80px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .bt-progress-bar {
+                animation: none;
+                width: 100%;
+                transform: none;
+            }
+        }
+    </style>
+
+    <div wire:poll.20s>
         <x-filament::section>
             <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
                 <span>Next automatic check (up to 40 URLs)</span>
@@ -29,9 +74,8 @@
                 </p>
             @endif
         </x-filament::section>
-    </div>
 
-    <x-filament::section>
+        <x-filament::section>
         @if ($this->queue->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">
                 No blog topics have missing translations right now.
@@ -61,11 +105,24 @@
                                 <td class="p-2">
                                     <div class="flex flex-wrap gap-1">
                                         @foreach ($topic['missing'] as $language)
-                                            <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/20">
-                                                {{ $language->code }}
-                                            </span>
+                                            @if (in_array($language->code, $topic['pendingLangs'], true))
+                                                <span class="inline-flex items-center gap-1 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 ring-1 ring-inset ring-primary-600/20 dark:bg-primary-400/10 dark:text-primary-400 dark:ring-primary-400/20">
+                                                    <x-filament::loading-indicator class="h-3 w-3" />
+                                                    {{ $language->code }}
+                                                </span>
+                                            @else
+                                                <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/20">
+                                                    {{ $language->code }}
+                                                </span>
+                                            @endif
                                         @endforeach
                                     </div>
+
+                                    @if (! empty($topic['pendingLangs']))
+                                        <div class="bt-progress-track" style="margin-top: 6px;">
+                                            <div class="bt-progress-bar"></div>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="p-2">
                                     <div class="flex items-center gap-2">
@@ -114,6 +171,7 @@
             </div>
         @endif
     </x-filament::section>
+    </div>
 
     {{-- Code-editor mode uses CodeMirror, vendored under resources/vendor-js/codemirror and
          streamed through the /editor-assets/ route (app/Http/Controllers/EditorAssetController)

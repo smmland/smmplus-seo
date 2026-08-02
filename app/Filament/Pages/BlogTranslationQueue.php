@@ -61,8 +61,16 @@ class BlogTranslationQueue extends Page implements HasActions
             ->get()
             ->groupBy('group_key');
 
+        $pendingByGroup = $this->translationTrackingAvailable()
+            ? BlogTranslationJob::query()
+                ->whereIn('group_key', $englishRows->pluck('group_key'))
+                ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
+                ->get()
+                ->groupBy('group_key')
+            : collect();
+
         return $englishRows
-            ->map(function (Url $englishRow) use ($existingByGroup, $activeLanguages) {
+            ->map(function (Url $englishRow) use ($existingByGroup, $activeLanguages, $pendingByGroup) {
                 $existingForGroup = $existingByGroup->get($englishRow->group_key, collect())->keyBy('lang');
 
                 $missing = $activeLanguages->filter(function (Language $language) use ($existingForGroup) {
@@ -74,6 +82,7 @@ class BlogTranslationQueue extends Page implements HasActions
                 return [
                     'url' => $englishRow,
                     'missing' => $missing,
+                    'pendingLangs' => $pendingByGroup->get($englishRow->group_key, collect())->pluck('target_lang')->all(),
                 ];
             })
             ->filter(fn (array $topic) => $topic['missing']->isNotEmpty())

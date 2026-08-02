@@ -88,10 +88,13 @@
 
                     @if (! $language['isDefault'])
                         @if ($language['translationPending'])
-                            <span class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
-                                <x-filament::loading-indicator class="h-4 w-4" />
-                                Translating in the background… this can take a few minutes for a long article.
-                            </span>
+                            <div class="flex flex-col gap-1.5">
+                                <span class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                    <x-filament::loading-indicator class="h-4 w-4" />
+                                    Translating in the background… this can take a few minutes for a long article.
+                                </span>
+                                <div class="bt-progress-track"><div class="bt-progress-bar"></div></div>
+                            </div>
                         @else
                             @if ($language['translationError'])
                                 <p class="max-w-xs text-xs text-danger-600 dark:text-danger-400">
@@ -141,6 +144,7 @@
                                         <x-filament::loading-indicator class="h-4 w-4" />
                                         Translating…
                                     </span>
+                                    <div class="bt-progress-track"><div class="bt-progress-bar"></div></div>
                                 @else
                                     @if ($language['translationError'])
                                         <span class="text-xs text-danger-600 dark:text-danger-400" title="{{ $language['translationError'] }}">

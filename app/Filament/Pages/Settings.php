@@ -30,6 +30,11 @@ class Settings extends Page implements HasForms
 
     public ?SyncRun $latestRun = null;
 
+    // How stale the heartbeat (written every minute by routes/console.php) can be before we
+    // call the cron dead rather than just between ticks - generous enough to absorb a slow
+    // request or two without flapping.
+    private const CRON_STALE_AFTER_MINUTES = 3;
+
     public function mount(SettingsService $settings): void
     {
         $this->form->fill([
@@ -38,6 +43,16 @@ class Settings extends Page implements HasForms
         ]);
 
         $this->latestRun = SyncRun::query()->latest('started_at')->first();
+    }
+
+    public function getCronStatus(SettingsService $settings): array
+    {
+        $heartbeat = $settings->getCronHeartbeatAt();
+
+        return [
+            'heartbeat' => $heartbeat,
+            'active' => $heartbeat !== null && $heartbeat->gt(now()->subMinutes(self::CRON_STALE_AFTER_MINUTES)),
+        ];
     }
 
     protected function getHeaderWidgets(): array

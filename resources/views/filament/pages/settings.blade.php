@@ -1,4 +1,27 @@
 <x-filament-panels::page>
+    <div wire:poll.30s>
+        @php $cronStatus = $this->getCronStatus(app(\App\Services\SettingsService::class)); @endphp
+        <x-filament::section>
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">Server cron</p>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
+                        @if ($cronStatus['active'])
+                            <x-filament::badge color="success">Active</x-filament::badge>
+                            <span>last checked in {{ $cronStatus['heartbeat']->diffForHumans() }}</span>
+                        @elseif ($cronStatus['heartbeat'])
+                            <x-filament::badge color="danger">Not detected</x-filament::badge>
+                            <span>last seen {{ $cronStatus['heartbeat']->diffForHumans() }} - the server's system crontab has stopped reaching this app.</span>
+                        @else
+                            <x-filament::badge color="danger">Not detected</x-filament::badge>
+                            <span>never seen - the required system cron entry (see README) isn't reaching this app.</span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </x-filament::section>
+    </div>
+
     <x-filament::section>
         <div class="flex flex-wrap items-center justify-between gap-4">
             <div>

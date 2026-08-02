@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\SettingsService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -7,6 +8,13 @@ use Illuminate\Support\Facades\Schedule;
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+// A trivial heartbeat, not tied to any real feature: it just proves the server's system
+// crontab is actually reaching `php artisan schedule:run` at all, which is what everything
+// else on this page depends on. The Settings page reads it back and shows whether it's
+// fresh - the only way to tell the cron entry is broken (missing, wrong PHP path, disabled)
+// without shell access to the server.
+Schedule::call(fn () => app(SettingsService::class)->recordCronHeartbeat())->everyMinute();
 
 // Runs every 15 minutes but the command itself gates on the admin-configurable
 // interval (Setting: sync_interval_hours), so changing it in the panel takes effect

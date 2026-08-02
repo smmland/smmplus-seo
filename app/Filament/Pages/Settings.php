@@ -2,6 +2,9 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\Settings\NewUrlsOverTimeChart;
+use App\Filament\Resources\SyncRunResource;
+use App\Models\SyncRun;
 use App\Services\SettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -25,12 +28,28 @@ class Settings extends Page implements HasForms
 
     public ?array $data = [];
 
+    public ?SyncRun $latestRun = null;
+
     public function mount(SettingsService $settings): void
     {
         $this->form->fill([
             'syncIntervalHours' => $settings->getSyncIntervalHours(),
             'sourceSitemapUrl' => $settings->getSourceSitemapUrl(),
         ]);
+
+        $this->latestRun = SyncRun::query()->latest('started_at')->first();
+    }
+
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            NewUrlsOverTimeChart::class,
+        ];
+    }
+
+    public function getSyncHistoryUrl(): string
+    {
+        return SyncRunResource::getUrl();
     }
 
     public function form(Form $form): Form

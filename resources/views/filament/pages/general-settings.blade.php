@@ -22,31 +22,69 @@
         </x-filament::section>
     </div>
 
-    @php $pendingMigrations = $this->pendingMigrationsCount(); @endphp
-    <x-filament::section>
-        <div class="flex flex-wrap items-center justify-between gap-4">
-            <div>
-                <p class="text-sm font-medium text-gray-950 dark:text-white">Database updates</p>
-                @if ($pendingMigrations > 0)
-                    <p class="text-sm text-warning-600 dark:text-warning-400">
-                        {{ $pendingMigrations }} update{{ $pendingMigrations === 1 ? '' : 's' }} waiting to be applied - click "Update database" after uploading new files, since there's no server terminal to run this from.
-                    </p>
-                @else
-                    <p class="text-sm text-gray-500 dark:text-gray-400">
-                        Up to date - nothing waiting to be applied.
-                    </p>
-                @endif
+    <x-filament::section heading="Panel updates" description="Install a new version of the panel and apply any database changes it needs - no server terminal required for either.">
+        <div class="space-y-5">
+            <div class="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                <p class="text-sm font-medium text-gray-950 dark:text-white">Install from zip</p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Upload the update zip file exactly as sent - it's installed over the panel's own files. Existing files are overwritten; nothing outside the zip is deleted, and <code class="rounded bg-gray-100 px-1 dark:bg-white/10">storage/</code> and <code class="rounded bg-gray-100 px-1 dark:bg-white/10">.env</code> are never touched.
+                </p>
+
+                <div class="mt-3 flex flex-wrap items-center gap-3">
+                    <input
+                        type="file"
+                        accept=".zip"
+                        wire:model="updateZip"
+                        class="fi-input block flex-1 rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                    >
+
+                    <x-filament::button
+                        color="danger"
+                        icon="heroicon-o-arrow-up-tray"
+                        :disabled="! $updateZip"
+                        wire:click="installUpdate"
+                        wire:loading.attr="disabled"
+                        wire:target="installUpdate,updateZip"
+                        wire:confirm="Install this update? It overwrites the panel's own files with what's in the zip - make sure it's the file you meant to upload."
+                    >
+                        Install update
+                    </x-filament::button>
+                </div>
+
+                <div wire:loading wire:target="updateZip" class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                    Uploading…
+                </div>
+
+                @error('updateZip')
+                    <p class="mt-2 text-xs text-danger-600 dark:text-danger-400">{{ $message }}</p>
+                @enderror
             </div>
 
-            <x-filament::button
-                color="gray"
-                icon="heroicon-o-circle-stack"
-                wire:click="runMigrations"
-                wire:loading.attr="disabled"
-                wire:target="runMigrations"
-            >
-                Update database
-            </x-filament::button>
+            @php $pendingMigrations = $this->pendingMigrationsCount(); @endphp
+            <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                <div>
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">Database updates</p>
+                    @if ($pendingMigrations > 0)
+                        <p class="text-sm text-warning-600 dark:text-warning-400">
+                            {{ $pendingMigrations }} update{{ $pendingMigrations === 1 ? '' : 's' }} waiting to be applied - click "Update database" after installing new files above.
+                        </p>
+                    @else
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            Up to date - nothing waiting to be applied.
+                        </p>
+                    @endif
+                </div>
+
+                <x-filament::button
+                    color="gray"
+                    icon="heroicon-o-circle-stack"
+                    wire:click="runMigrations"
+                    wire:loading.attr="disabled"
+                    wire:target="runMigrations"
+                >
+                    Update database
+                </x-filament::button>
+            </div>
         </div>
     </x-filament::section>
 

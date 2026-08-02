@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\PanelUpdateService;
 use App\Services\SettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -12,10 +13,12 @@ use Filament\Pages\Page;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Livewire\WithFileUploads;
 
 class GeneralSettings extends Page implements HasForms
 {
     use InteractsWithForms;
+    use WithFileUploads;
 
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
 
@@ -106,6 +109,32 @@ class GeneralSettings extends Page implements HasForms
             ->body($output !== '' ? $output : 'Nothing to update - already up to date.')
             ->success()
             ->send();
+    }
+
+    // Zip is whatever `git archive` produces - the same file sent for every update. Livewire
+    // handles the actual upload (to a temp disk) via $updateZip; this just hands the saved
+    // temp file to PanelUpdateService once "Install update" is clicked, rather than acting on
+    // every keystroke/selection change the way a live-validated form field would.
+    public $updateZip = null;
+
+    public function installUpdate(PanelUpdateService $updater): void
+    {
+        $this->validate([
+            'updateZip' => 'required|file|mimes:zip|max:51200',
+        ]);
+
+        $result = $updater->install($this->updateZip);
+
+        $notification = Notification::make()
+            ->title($result['ok'] ? 'Panel updated' : 'Update failed')
+            ->body($result['ok']
+                ? $result['message'].' If this update included a database change, click "Update database" below too.'
+                : $result['message']);
+
+        $result['ok'] ? $notification->success() : $notification->danger();
+        $notification->send();
+
+        $this->updateZip = null;
     }
 
     public function form(Form $form): Form

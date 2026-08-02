@@ -41,6 +41,10 @@ Schedule::command('translation:refresh-blog-status')->hourly()->withoutOverlappi
 // tick; --timeout must be >= TranslateBlogArticleJob's own $timeout (900s) or the worker would
 // kill a still-legitimately-running translation itself. withoutOverlapping() covers the case
 // where one translation runs long enough that the next tick fires while this one's still busy.
+// Skipped entirely while a panel update is installing (GeneralSettings::installUpdate) - the
+// update overwrites this app's own files, and a translation job picked up mid-swap could run
+// against a half-replaced codebase.
 Schedule::command('queue:work --queue=default --stop-when-empty --tries=1 --timeout=900')
     ->everyMinute()
-    ->withoutOverlapping(20);
+    ->withoutOverlapping(20)
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

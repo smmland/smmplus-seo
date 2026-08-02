@@ -27,7 +27,7 @@
             <div class="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
                 <p class="text-sm font-medium text-gray-950 dark:text-white">Install from zip</p>
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Upload the update zip file exactly as sent - it's installed over the panel's own files. Existing files are overwritten; nothing outside the zip is deleted, and <code class="rounded bg-gray-100 px-1 dark:bg-white/10">storage/</code> and <code class="rounded bg-gray-100 px-1 dark:bg-white/10">.env</code> are never touched.
+                    Upload the update zip file exactly as sent - it's installed over the panel's own files. Existing files are overwritten; nothing outside the zip is deleted, and <code class="rounded bg-gray-100 px-1 dark:bg-white/10">storage/</code> and <code class="rounded bg-gray-100 px-1 dark:bg-white/10">.env</code> are never touched. Refused if a background translation is currently queued or running, to keep the file swap from interrupting it mid-job.
                 </p>
 
                 <div class="mt-3 flex flex-wrap items-center gap-3">

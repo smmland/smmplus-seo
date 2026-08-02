@@ -8,6 +8,7 @@ use App\Models\Language;
 use App\Models\Url;
 use App\Services\BlogContentExtractionService;
 use App\Services\BlogTranslationDetectionService;
+use App\Services\SettingsService;
 use App\Services\TranslationSettingsService;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
@@ -276,6 +277,10 @@ class BlogTranslationQueue extends Page implements HasActions
             return ['ok' => false, 'message' => 'Database update needed first.'];
         }
 
+        if ($this->notifyIfPanelUpdateInProgress()) {
+            return ['ok' => false, 'message' => 'Panel update in progress.'];
+        }
+
         $sourceRow = $this->defaultLanguageRow($groupKey);
 
         if (! $sourceRow) {
@@ -320,6 +325,10 @@ class BlogTranslationQueue extends Page implements HasActions
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
+            return;
+        }
+
+        if ($this->notifyIfPanelUpdateInProgress()) {
             return;
         }
 
@@ -479,6 +488,25 @@ class BlogTranslationQueue extends Page implements HasActions
             ->body('This feature needs a database update first - go to General Settings and click "Update database", then try again.')
             ->danger()
             ->send();
+    }
+
+    // A panel update overwrites this app's own files mid-request - starting a new background
+    // translation while that's happening risks the job running against a half-swapped codebase.
+    // Returns true (and shows why) so callers can bail out the same way they do for
+    // translationTrackingAvailable().
+    private function notifyIfPanelUpdateInProgress(): bool
+    {
+        if (! app(SettingsService::class)->isPanelUpdateInProgress()) {
+            return false;
+        }
+
+        Notification::make()
+            ->title('Panel update in progress')
+            ->body('A file update is being installed right now - try again in a minute once it\'s done.')
+            ->warning()
+            ->send();
+
+        return true;
     }
 
     private function defaultLanguageRow(string $groupKey): ?Url

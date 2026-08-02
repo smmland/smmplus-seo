@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\BlogTranslationJob;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use ZipArchive;
 
@@ -16,24 +18,44 @@ use ZipArchive;
  *
  * This is inherently a self-modifying-code operation, so the two things that matter most are:
  * never letting an entry write outside the app root (path traversal), and never letting it touch
- * anything holding secrets or user data (.env, storage/) even if a future zip's contents were
- * ever built by hand rather than `git archive`, which wouldn't include those anyway.
+ * anything holding secrets or user data (.env, storage/). A `git archive` of this repo always
+ * contains a handful of tracked placeholder files under storage/ (the .gitignore files that keep
+ * otherwise-empty runtime directories in git) - those are harmless, so protected paths are
+ * silently skipped during install rather than rejecting the whole update over their presence.
+ * Only a genuinely unsafe entry (path traversal, absolute path, null byte) aborts the install.
  */
 class PanelUpdateService
 {
-    // Never touched by an update, regardless of what's in the zip - storage holds uploaded
-    // content/logs/framework runtime state, and isn't (or shouldn't be) part of a source code
-    // update.
+    // Skipped during install, regardless of what's in the zip - storage holds uploaded
+    // content/logs/framework runtime state and isn't (or shouldn't be) part of a source code
+    // update; .env holds secrets. A normal `git archive` includes neither the real .env nor any
+    // real storage/ content, only inert .gitignore placeholders, so skipping these never drops
+    // anything an update actually needs to ship.
     private const PROTECTED_PREFIXES = ['storage/'];
+
+    public function __construct(private SettingsService $settings) {}
 
     /**
      * @return array{ok: bool, message: string, fileCount?: int}
      */
     public function install(UploadedFile $zipFile): array
     {
+        if ($this->hasBackgroundWorkRunning()) {
+            return [
+                'ok' => false,
+                'message' => 'A background translation job is currently queued or running - wait for it to finish (check the Blog Translation page) before installing an update, so the file swap can\'t interrupt it mid-run.',
+            ];
+        }
+
+        if (! $this->settings->acquirePanelUpdateLock()) {
+            return ['ok' => false, 'message' => 'Another update is already being installed - wait for it to finish.'];
+        }
+
         $zip = new ZipArchive();
 
         if ($zip->open($zipFile->getRealPath()) !== true) {
+            $this->settings->releasePanelUpdateLock();
+
             return ['ok' => false, 'message' => 'Could not open that file as a zip archive.'];
         }
 
@@ -57,9 +79,30 @@ class PanelUpdateService
             if (File::isDirectory($stagingDir)) {
                 File::deleteDirectory($stagingDir);
             }
+
+            $this->settings->releasePanelUpdateLock();
         }
     }
 
+    // The only background work this app has is queued blog translations (routes/console.php's
+    // queue:work tick) - refusing to start an update while one's in flight avoids the file swap
+    // landing mid-job and corrupting its result. Guarded the same way as everywhere else that
+    // touches this table: it might not exist yet on a host that hasn't clicked "Update database"
+    // since this feature shipped.
+    private function hasBackgroundWorkRunning(): bool
+    {
+        if (! Schema::hasTable('blog_translation_jobs')) {
+            return false;
+        }
+
+        return BlogTranslationJob::query()
+            ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
+            ->exists();
+    }
+
+    // Only rejects the whole zip for entries that could actually cause harm if extracted -
+    // writing outside the app root. Protected paths (storage/, .env) are handled separately, by
+    // skipping them at copy time instead of aborting here.
     private function assertEntriesAreSafe(ZipArchive $zip): void
     {
         for ($i = 0; $i < $zip->numFiles; $i++) {
@@ -72,20 +115,21 @@ class PanelUpdateService
             if (str_contains($entry, '..') || str_starts_with($entry, '/') || str_contains($entry, "\0")) {
                 throw new RuntimeException("Refused: unsafe path in zip ({$entry}).");
             }
+        }
+    }
 
-            foreach (self::PROTECTED_PREFIXES as $prefix) {
-                if ($entry === $prefix || str_starts_with($entry, $prefix)) {
-                    throw new RuntimeException("Refused: zip contains a protected path ({$entry}). Updates never touch storage/ or .env.");
-                }
-            }
-
-            // Exact filename match only - unlike a prefix check, this doesn't also catch
-            // harmless files like .env.example or .env.testing that merely start with ".env"
-            // but hold no real secrets.
-            if ($entry === '.env' || str_ends_with($entry, '/.env')) {
-                throw new RuntimeException("Refused: zip contains a protected path ({$entry}). Updates never touch storage/ or .env.");
+    private function isProtectedPath(string $relative): bool
+    {
+        foreach (self::PROTECTED_PREFIXES as $prefix) {
+            if ($relative === $prefix || str_starts_with($relative, $prefix)) {
+                return true;
             }
         }
+
+        // Exact filename match only - unlike a prefix check, this doesn't also catch harmless
+        // files like .env.example or .env.testing that merely start with ".env" but hold no
+        // real secrets.
+        return $relative === '.env' || str_ends_with($relative, '/.env');
     }
 
     private function copyIntoApp(string $stagingDir): int
@@ -94,6 +138,11 @@ class PanelUpdateService
 
         foreach (File::allFiles($stagingDir) as $file) {
             $relative = $file->getRelativePathname();
+
+            if ($this->isProtectedPath($relative)) {
+                continue;
+            }
+
             $destination = base_path($relative);
 
             File::ensureDirectoryExists(dirname($destination));

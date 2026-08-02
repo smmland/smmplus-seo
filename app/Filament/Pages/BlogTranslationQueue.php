@@ -20,6 +20,7 @@ use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Computed;
+use ZipArchive;
 
 class BlogTranslationQueue extends Page implements HasActions
 {
@@ -446,6 +447,101 @@ class BlogTranslationQueue extends Page implements HasActions
             ->body("All {$languageName} content for this topic has been removed.")
             ->success()
             ->send();
+    }
+
+    /**
+     * Builds a downloadable zip for the checked languages: one {lang}.html per language (its
+     * final content - the manually edited version if one exists, else the raw
+     * AI-extracted/translated HTML) plus a single meta_seo.txt aggregating each selected
+     * language's page title, meta keywords, and meta description in the same [lang]-block
+     * format used for manual SEO handoff elsewhere.
+     */
+    public function downloadSeoExport(string $groupKey, array $langCodes): mixed
+    {
+        $langCodes = array_values(array_unique(array_filter($langCodes)));
+
+        if (empty($langCodes)) {
+            Notification::make()
+                ->title('Select at least one language first')
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
+        $rows = Url::query()
+            ->where('group_key', $groupKey)
+            ->where('pattern_type', 'BLOG')
+            ->where('is_active', true)
+            ->whereIn('lang', $langCodes)
+            ->get()
+            ->keyBy('lang');
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'seo-export-').'.zip';
+
+        $zip = new ZipArchive();
+        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+        $metaBlocks = [];
+
+        // Same [code] / label / blank-line layout the admin already hands off manually - keeping
+        // it identical means this can drop straight into whatever process already consumes that
+        // format, instead of needing its own new parser.
+        foreach ($langCodes as $code) {
+            $row = $rows->get($code);
+
+            if (! $row) {
+                continue;
+            }
+
+            $zip->addFromString("{$code}.html", $this->exportableContentHtml($row));
+
+            $metaBlocks[] = implode("\n", [
+                "[{$code}]",
+                'Page title:',
+                $row->seo_title ?? '',
+                '',
+                'Meta-keywords:',
+                $row->meta_keywords ?? '',
+                '',
+                'Meta-description:',
+                $row->meta_description ?? '',
+            ]);
+        }
+
+        if (empty($metaBlocks)) {
+            $zip->close();
+            @unlink($zipPath);
+
+            Notification::make()
+                ->title('Nothing to export')
+                ->body('None of the selected languages have any content for this topic.')
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
+        $zip->addFromString('meta_seo.txt', implode("\n\n---\n\n", $metaBlocks)."\n");
+        $zip->close();
+
+        return response()->streamDownload(function () use ($zipPath) {
+            readfile($zipPath);
+            @unlink($zipPath);
+        }, "seo-export-{$groupKey}.zip", ['Content-Type' => 'application/zip']);
+    }
+
+    private function exportableContentHtml(Url $row): string
+    {
+        if (filled($row->edited_content)) {
+            return $row->edited_content;
+        }
+
+        $contentPath = "blog/{$row->slug}/content-{$row->lang}.html";
+
+        return Storage::disk('public')->exists($contentPath)
+            ? Storage::disk('public')->get($contentPath)
+            : '';
     }
 
     private function queueTranslation(Url $sourceRow, string $groupKey, string $targetLangCode): void

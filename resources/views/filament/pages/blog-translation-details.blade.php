@@ -52,6 +52,76 @@
         </div>
     @endif
 
+    <div
+        x-data="{ exportOpen: false, exportSelected: {{ Illuminate\Support\Js::from($languages->mapWithKeys(fn ($l) => [$l['code'] => $l['exists'] && ! $l['isDefault']])->all()) }} }"
+        class="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10"
+    >
+        <button type="button" @click="exportOpen = !exportOpen" class="flex w-full items-center justify-between gap-2 text-start text-sm font-medium text-gray-950 dark:text-white">
+            <span class="flex items-center gap-2">
+                <x-filament::icon icon="heroicon-o-arrow-down-tray" class="h-4 w-4 text-gray-400" />
+                Download SEO export
+            </span>
+            <x-filament::icon icon="heroicon-o-chevron-down" x-show="!exportOpen" class="h-4 w-4 text-gray-400" />
+            <x-filament::icon icon="heroicon-o-chevron-up" x-show="exportOpen" x-cloak class="h-4 w-4 text-gray-400" />
+        </button>
+
+        <div x-show="exportOpen" x-cloak class="mt-3 space-y-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+                Pick which languages to include, then download a zip with one HTML file per language ({{ '{lang}.html' }}) plus a single <code class="rounded bg-gray-100 px-1 dark:bg-white/10">meta_seo.txt</code> listing each one's page title, meta keywords, and meta description.
+            </p>
+
+            <table class="w-full text-start text-xs">
+                <thead>
+                    <tr class="text-gray-500 dark:text-gray-400">
+                        <th class="p-1.5 text-start font-medium"></th>
+                        <th class="p-1.5 text-start font-medium">Language</th>
+                        <th class="p-1.5 text-start font-medium">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($languages as $language)
+                        <tr class="border-t border-gray-950/5 dark:border-white/10">
+                            <td class="p-1.5">
+                                <input
+                                    type="checkbox"
+                                    x-model="exportSelected['{{ $language['code'] }}']"
+                                    {{ $language['exists'] ? '' : 'disabled' }}
+                                    class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
+                                >
+                            </td>
+                            <td class="p-1.5 text-gray-700 dark:text-gray-200">
+                                <span class="font-medium">{{ strtoupper($language['code']) }}</span>
+                                <span class="text-gray-400 dark:text-gray-500">{{ $language['name'] }}</span>
+                                @if ($language['isDefault'])
+                                    <x-filament::badge color="gray" size="xs">Default</x-filament::badge>
+                                @endif
+                            </td>
+                            <td class="p-1.5">
+                                @if (! $language['exists'])
+                                    <x-filament::badge color="gray" size="xs">No content</x-filament::badge>
+                                @elseif ($language['isTranslated'])
+                                    <x-filament::badge color="success" size="xs">Published</x-filament::badge>
+                                @else
+                                    <x-filament::badge color="warning" size="xs">Newly translated</x-filament::badge>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+
+            <div class="flex justify-end">
+                <x-filament::button
+                    size="sm"
+                    icon="heroicon-o-arrow-down-tray"
+                    @click="$wire.downloadSeoExport({{ Illuminate\Support\Js::from($groupKey) }}, Object.keys(exportSelected).filter(code => exportSelected[code]))"
+                >
+                    Download zip
+                </x-filament::button>
+            </div>
+        </div>
+    </div>
+
     <div class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
         @foreach ($languages as $language)
             <button

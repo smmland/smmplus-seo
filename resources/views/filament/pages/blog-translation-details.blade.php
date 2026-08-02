@@ -12,7 +12,7 @@
 
 <div x-data="{ tab: '{{ $defaultLangCode }}' }" class="space-y-4">
     @if ($englishRow)
-        <div class="flex items-start gap-3 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+        <div class="flex flex-wrap items-start gap-3 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
             <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-primary-600 ring-1 ring-gray-950/5 dark:bg-white/10 dark:text-primary-400 dark:ring-white/10">
                 <x-filament::icon icon="heroicon-o-document-text" class="h-5 w-5" />
             </div>
@@ -34,6 +34,21 @@
                     </p>
                 @endif
             </div>
+
+            {{-- Lives here (not inside a specific language tab) because it operates on the whole
+                 topic - whichever language is next missing, not "the language you happen to be
+                 looking at" - so it stays visible no matter which tab is open. --}}
+            <x-filament::button
+                size="sm"
+                color="primary"
+                icon="heroicon-o-sparkles"
+                class="shrink-0"
+                wire:click="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
+                wire:loading.attr="disabled"
+                wire:target="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
+            >
+                Translate next missing language
+            </x-filament::button>
         </div>
     @endif
 
@@ -64,21 +79,6 @@
 
     @foreach ($languages as $language)
         <div x-show="tab === '{{ $language['code'] }}'" x-cloak>
-            @if ($language['isDefault'])
-                <div class="mb-4 flex items-center justify-end">
-                    <x-filament::button
-                        size="sm"
-                        color="primary"
-                        icon="heroicon-o-sparkles"
-                        wire:click="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
-                        wire:loading.attr="disabled"
-                        wire:target="translateNextMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }})"
-                    >
-                        Translate next missing language
-                    </x-filament::button>
-                </div>
-            @endif
-
             @if (! $language['exists'])
                 <div class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-gray-300 px-6 py-10 text-center dark:border-white/10">
                     <x-filament::icon icon="heroicon-o-language" class="h-8 w-8 text-gray-300 dark:text-gray-600" />

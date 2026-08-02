@@ -548,9 +548,16 @@
                                 <p class="text-xs text-gray-400">No links found in this content.</p>
                             </template>
                             <template x-for="(link, i) in links" :key="i">
-                                <div class="flex items-center gap-2">
-                                    <span class="w-32 shrink-0 truncate text-xs text-gray-500 dark:text-gray-400" x-text="link.text"></span>
-                                    <input type="text" x-model="link.href" class="{{ $panelInput }} flex-1">
+                                <div class="space-y-1 border-b border-gray-950/5 pb-1.5 last:border-0 last:pb-0 dark:border-white/10">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-32 shrink-0 truncate text-xs text-gray-500 dark:text-gray-400" x-text="link.text"></span>
+                                        <input type="text" x-model="link.href" class="{{ $panelInput }} flex-1">
+                                    </div>
+                                    <div class="flex items-center gap-3 ps-1 text-xs text-gray-600 dark:text-gray-300">
+                                        <label class="flex items-center gap-1"><input type="checkbox" x-model="link.nofollow" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> nofollow</label>
+                                        <label class="flex items-center gap-1"><input type="checkbox" x-model="link.sponsored" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> sponsored</label>
+                                        <label class="flex items-center gap-1"><input type="checkbox" x-model="link.ugc" class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"> ugc</label>
+                                    </div>
                                 </div>
                             </template>
                             <x-filament::button size="xs" color="gray" @click="applyLinks()" x-show="links.length > 0">

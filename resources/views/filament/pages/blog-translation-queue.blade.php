@@ -280,15 +280,29 @@
                         }
                     });
                     this.html = doc.body.innerHTML;
+                    // This tool lives inside Code mode, alongside the CodeMirror instance itself -
+                    // without pushing the result into it, the editor keeps showing the pre-edit
+                    // text, and typing into it afterwards would overwrite `html` right back with
+                    // that stale value on the next keystroke.
+                    if (this.codeMirror) this.codeMirror.setValue(this.html);
                     this.showImages = false;
                 },
                 scanLinks() {
                     const doc = new DOMParser().parseFromString(this.html, 'text/html');
-                    this.links = [...doc.querySelectorAll('a[href]')].map((a, i) => ({
-                        index: i,
-                        href: a.getAttribute('href') || '',
-                        text: (a.textContent || '').trim().slice(0, 40),
-                    }));
+                    this.links = [...doc.querySelectorAll('a[href]')].map((a, i) => {
+                        const relTokens = (a.getAttribute('rel') || '').split(/\s+/).filter(Boolean);
+                        return {
+                            index: i,
+                            href: a.getAttribute('href') || '',
+                            text: (a.textContent || '').trim().slice(0, 40),
+                            nofollow: relTokens.includes('nofollow'),
+                            sponsored: relTokens.includes('sponsored'),
+                            ugc: relTokens.includes('ugc'),
+                            // Any other rel tokens (author, license, noopener, ...) are preserved
+                            // as-is so applying these three SEO checkboxes doesn't clobber them.
+                            otherRel: relTokens.filter((t) => !['nofollow', 'sponsored', 'ugc'].includes(t)),
+                        };
+                    });
                     this.showLinks = true;
                     this.showImages = false;
                 },
@@ -298,9 +312,21 @@
                     this.links.forEach((item) => {
                         if (links[item.index]) {
                             links[item.index].setAttribute('href', item.href);
+                            const rel = [
+                                ...item.otherRel,
+                                ...(item.nofollow ? ['nofollow'] : []),
+                                ...(item.sponsored ? ['sponsored'] : []),
+                                ...(item.ugc ? ['ugc'] : []),
+                            ];
+                            if (rel.length) {
+                                links[item.index].setAttribute('rel', rel.join(' '));
+                            } else {
+                                links[item.index].removeAttribute('rel');
+                            }
                         }
                     });
                     this.html = doc.body.innerHTML;
+                    if (this.codeMirror) this.codeMirror.setValue(this.html);
                     this.showLinks = false;
                 },
 

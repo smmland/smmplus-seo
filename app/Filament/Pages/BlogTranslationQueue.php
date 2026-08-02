@@ -100,13 +100,17 @@ class BlogTranslationQueue extends Page implements HasActions
     /**
      * True when a language is marked translated (Url::is_translated) but that's never actually
      * been confirmed against the live site, or was confirmed before the content it's based on
-     * last changed - covering two real gaps in is_translated on its own: BlogAiTranslationService
-     * sets it the moment a translation is generated, before anyone's put it on the live site
-     * (translation_checked_at null); and BlogTranslationDetectionService's hourly recheck leaves
-     * is_translated untouched on a fetch failure (translation_checked_at stays at its old value)
-     * - which includes the common case of the guessed target URL simply not existing live yet
-     * (a 404), not just transient errors. Either way, "is_translated=true" alone can't be trusted
-     * as "confirmed live" - this is the actual signal for that.
+     * last changed - covering real gaps in is_translated on its own: BlogTranslationDetectionService's
+     * hourly recheck leaves is_translated untouched on a fetch failure (translation_checked_at
+     * stays at its old value) - which includes the common case of the guessed target URL simply
+     * not existing live yet (a 404), not just transient errors.
+     *
+     * translation_checked_at alone isn't quite enough to trust either: BlogAiTranslationService
+     * used to set it itself the instant a translation was generated (fixed, but topics
+     * translated before that fix still carry the stale value it left behind - there was never a
+     * migration to undo it retroactively). translation_title is the tell: a genuine live check
+     * (checkRow()) always sets it in the same write as translation_checked_at, so a row with the
+     * latter but not the former was never actually fetched and confirmed - old bug or not.
      */
     private function needsSiteUpdate(Url $row): bool
     {
@@ -114,7 +118,7 @@ class BlogTranslationQueue extends Page implements HasActions
             return false;
         }
 
-        if ($row->translation_checked_at === null) {
+        if ($row->translation_checked_at === null || $row->translation_title === null) {
             return true;
         }
 

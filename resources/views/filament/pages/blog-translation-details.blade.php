@@ -84,76 +84,6 @@
                     </x-filament::button>
                 @endif
             @else
-                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <a
-                        href="{{ $language['sourceUrl'] }}"
-                        target="_blank"
-                        rel="noopener"
-                        class="inline-flex items-center gap-1 text-sm text-primary-600 hover:underline dark:text-primary-400"
-                    >
-                        Open live page
-                        <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="h-4 w-4" />
-                    </a>
-
-                    <div class="flex flex-wrap gap-1">
-                        @if (! $language['isDefault'] && ! $language['isTranslated'])
-                            <x-filament::button
-                                size="sm"
-                                color="gray"
-                                icon="heroicon-o-sparkles"
-                                wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                                wire:loading.attr="disabled"
-                                wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                            >
-                                Re-translate with AI
-                            </x-filament::button>
-                        @endif
-
-                        <x-filament::button
-                            size="sm"
-                            color="gray"
-                            icon="heroicon-o-arrow-path"
-                            wire:click="extractContent({{ $language['urlId'] }})"
-                            wire:loading.attr="disabled"
-                            wire:target="extractContent({{ $language['urlId'] }})"
-                        >
-                            {{ $language['contentExtracted'] ? 'Re-extract content' : 'Extract content' }}
-                        </x-filament::button>
-                    </div>
-                </div>
-
-                @php
-                    $copyFields = [
-                        'Title' => $language['articleTitle'],
-                        '<title>' => $language['seoTitle'],
-                        'Meta description' => $language['metaDescription'],
-                        'Meta keywords' => $language['metaKeywords'],
-                        'OG title' => $language['ogTitle'],
-                        'OG description' => $language['ogDescription'],
-                        'Twitter title' => $language['twitterTitle'],
-                        'Twitter description' => $language['twitterDescription'],
-                    ];
-                @endphp
-
-                <dl class="mb-4 space-y-1.5 text-sm">
-                    @foreach ($copyFields as $label => $value)
-                        <div class="flex items-start justify-between gap-2" x-data="{ copied: false }">
-                            <div class="min-w-0 flex-1">
-                                <dt class="inline font-medium text-gray-700 dark:text-gray-200">{{ $label }}:</dt>
-                                <dd class="inline text-gray-600 dark:text-gray-300">{{ $value ?? '—' }}</dd>
-                            </div>
-                            @if ($value)
-                                <button
-                                    type="button"
-                                    @click="navigator.clipboard.writeText({{ Illuminate\Support\Js::from($value) }}); copied = true; setTimeout(() => copied = false, 1500)"
-                                    class="shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
-                                    x-text="copied ? 'Copied!' : 'Copy'"
-                                ></button>
-                            @endif
-                        </div>
-                    @endforeach
-                </dl>
-
                 <div
                     x-data="blogEditor(
                         {{ $language['urlId'] }},
@@ -163,6 +93,74 @@
                         {{ Illuminate\Support\Js::from($language['editedPreviewUrlTemplate']) }}
                     )"
                 >
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <a
+                            href="{{ $language['sourceUrl'] }}"
+                            target="_blank"
+                            rel="noopener"
+                            class="inline-flex items-center gap-1 text-sm text-primary-600 hover:underline dark:text-primary-400"
+                        >
+                            Open live page
+                            <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="h-4 w-4" />
+                        </a>
+
+                        <div class="flex flex-wrap gap-1">
+                            @if (! $language['isDefault'] && ! $language['isTranslated'])
+                                <x-filament::button
+                                    size="sm"
+                                    color="gray"
+                                    icon="heroicon-o-sparkles"
+                                    @click="retranslateAndRefresh({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                    x-bind:disabled="retranslating"
+                                >
+                                    <span x-text="retranslating ? 'Translating…' : 'Re-translate with AI'"></span>
+                                </x-filament::button>
+                            @endif
+
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-arrow-path"
+                                @click="extractAndRefresh()"
+                                x-bind:disabled="extracting"
+                            >
+                                <span x-text="extracting ? 'Extracting…' : {{ Illuminate\Support\Js::from($language['contentExtracted'] ? 'Re-extract content' : 'Extract content') }}"></span>
+                            </x-filament::button>
+                        </div>
+                    </div>
+
+                    @php
+                        $copyFields = [
+                            'Title' => $language['articleTitle'],
+                            '<title>' => $language['seoTitle'],
+                            'Meta description' => $language['metaDescription'],
+                            'Meta keywords' => $language['metaKeywords'],
+                            'OG title' => $language['ogTitle'],
+                            'OG description' => $language['ogDescription'],
+                            'Twitter title' => $language['twitterTitle'],
+                            'Twitter description' => $language['twitterDescription'],
+                        ];
+                    @endphp
+
+                    <dl class="mb-4 space-y-1.5 text-sm">
+                        @foreach ($copyFields as $label => $value)
+                            <div class="flex items-start justify-between gap-2" x-data="{ copied: false }">
+                                <div class="min-w-0 flex-1">
+                                    <dt class="inline font-medium text-gray-700 dark:text-gray-200">{{ $label }}:</dt>
+                                    <dd class="inline text-gray-600 dark:text-gray-300">{{ $value ?? '—' }}</dd>
+                                </div>
+                                @if ($value)
+                                    <button
+                                        type="button"
+                                        @click="navigator.clipboard.writeText({{ Illuminate\Support\Js::from($value) }}); copied = true; setTimeout(() => copied = false, 1500)"
+                                        class="shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
+                                        x-text="copied ? 'Copied!' : 'Copy'"
+                                    ></button>
+                                @endif
+                            </div>
+                        @endforeach
+                    </dl>
+
                     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
                         <div class="flex gap-1 rounded-lg bg-gray-100 p-0.5 dark:bg-white/5">
                             <button

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BlogContentAssetController;
+use App\Http\Controllers\EditorAssetController;
 use App\Http\Controllers\SitemapController;
 use Illuminate\Support\Facades\Route;
 
@@ -10,3 +11,4 @@ Route::get('/sitemap_index.xml', [SitemapController::class, 'index']);
 Route::get('/sitemap-{category}.xml', [SitemapController::class, 'category']);
 
 Route::get('/blog-content/{path}', [BlogContentAssetController::class, 'show'])->where('path', '.*');
+Route::get('/editor-assets/{path}', [EditorAssetController::class, 'show'])->where('path', '.*');

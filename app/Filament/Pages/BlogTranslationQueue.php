@@ -101,12 +101,22 @@ class BlogTranslationQueue extends Page implements HasActions
             ->send();
     }
 
-    public function extractContent(int $urlId, BlogContentExtractionService $extractor): void
+    /**
+     * Returns the fresh content (not just void + a notification) because this is called both
+     * from a plain wire:click (the queue table row, which ignores the return value) and from the
+     * visual/code editor's own JS via $wire.call() - the editor's Alpine state was already
+     * initialized once from the old content when the modal first mounted, and a Livewire re-render
+     * alone won't refresh it (morphs preserve already-mounted x-data instead of re-running it), so
+     * the caller needs the fresh HTML handed back directly to update it client-side.
+     *
+     * @return array{ok: bool, error?: string, contentHtml?: string}
+     */
+    public function extractContent(int $urlId, BlogContentExtractionService $extractor): array
     {
         $row = Url::query()->find($urlId);
 
         if (! $row) {
-            return;
+            return ['ok' => false, 'error' => 'URL not found.'];
         }
 
         $result = $extractor->extract($row);
@@ -120,7 +130,7 @@ class BlogTranslationQueue extends Page implements HasActions
                 ->danger()
                 ->send();
 
-            return;
+            return ['ok' => false, 'error' => $result['error']];
         }
 
         $titleNote = $result['articleTitle'] ? "Title: \"{$result['articleTitle']}\". " : '';
@@ -138,6 +148,8 @@ class BlogTranslationQueue extends Page implements HasActions
                     ->url($result['contentUrl'], shouldOpenInNewTab: true),
             ])
             ->send();
+
+        return ['ok' => true, 'contentHtml' => Storage::disk('public')->get($result['contentPath']) ?? ''];
     }
 
     /**
@@ -237,7 +249,15 @@ class BlogTranslationQueue extends Page implements HasActions
      * works whether or not that language already has a Url row (a real page might not exist on
      * the live site yet), since BlogAiTranslationService creates one if needed.
      */
-    public function translateLanguage(string $groupKey, string $targetLangCode, BlogAiTranslationService $translator): void
+    /**
+     * Returns the fresh content (see the docblock on extractContent() for why) - only matters
+     * for the "re-translate an already-open, already-editor-mounted language tab" case; a
+     * language with no row yet gets a brand new Alpine mount from Livewire's morph regardless,
+     * since the whole "no page exists yet" block gets swapped out for the editor block.
+     *
+     * @return array{ok: bool, message: string, contentHtml?: string}
+     */
+    public function translateLanguage(string $groupKey, string $targetLangCode, BlogAiTranslationService $translator): array
     {
         $sourceRow = $this->defaultLanguageRow($groupKey);
 
@@ -247,7 +267,7 @@ class BlogTranslationQueue extends Page implements HasActions
                 ->danger()
                 ->send();
 
-            return;
+            return ['ok' => false, 'message' => 'Could not find the default-language content for this topic.'];
         }
 
         $result = $translator->translate($sourceRow, $targetLangCode);
@@ -261,6 +281,17 @@ class BlogTranslationQueue extends Page implements HasActions
         $result['ok'] ? $notification->success() : $notification->danger();
 
         $notification->send();
+
+        if (! $result['ok']) {
+            return $result;
+        }
+
+        $targetRow = Url::query()->where('group_key', $groupKey)->where('lang', $targetLangCode)->first();
+        $contentHtml = ($targetRow && $targetRow->content_extraction_path)
+            ? (Storage::disk('public')->get($targetRow->content_extraction_path) ?? '')
+            : '';
+
+        return ['ok' => true, 'message' => $result['message'], 'contentHtml' => $contentHtml];
     }
 
     /**

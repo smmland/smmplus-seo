@@ -68,41 +68,41 @@
                                     </div>
                                 </td>
                                 <td class="p-2">
-                                    <div class="flex flex-wrap gap-1">
+                                    <div class="flex items-center gap-2">
                                         <x-filament::button
                                             size="sm"
-                                            color="gray"
-                                            icon="heroicon-o-arrow-path"
-                                            wire:click="recheckTopic({{ Illuminate\Support\Js::from($topic['url']->group_key) }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="recheckTopic({{ Illuminate\Support\Js::from($topic['url']->group_key) }})"
-                                        >
-                                            Recheck
-                                        </x-filament::button>
-
-                                        <x-filament::button
-                                            size="sm"
-                                            color="gray"
-                                            icon="heroicon-o-photo"
-                                            wire:click="extractContent({{ $topic['url']->id }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="extractContent({{ $topic['url']->id }})"
-                                        >
-                                            Extract content
-                                        </x-filament::button>
-
-                                        <x-filament::button
-                                            size="sm"
-                                            color="gray"
                                             icon="heroicon-o-information-circle"
                                             wire:click="mountAction('viewTopic', {{ Illuminate\Support\Js::from(['groupKey' => $topic['url']->group_key, 'title' => $topic['url']->article_title ?? $topic['url']->slug]) }})"
                                         >
                                             Details
                                         </x-filament::button>
+
+                                        <div class="flex items-center gap-0.5 rounded-lg p-0.5 ring-1 ring-inset ring-gray-950/10 dark:ring-white/10">
+                                            <x-filament::icon-button
+                                                icon="heroicon-o-arrow-path"
+                                                color="gray"
+                                                size="sm"
+                                                label="Recheck"
+                                                tooltip="Recheck this topic"
+                                                wire:click="recheckTopic({{ Illuminate\Support\Js::from($topic['url']->group_key) }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="recheckTopic({{ Illuminate\Support\Js::from($topic['url']->group_key) }})"
+                                            />
+                                            <x-filament::icon-button
+                                                icon="heroicon-o-photo"
+                                                color="gray"
+                                                size="sm"
+                                                label="Extract content"
+                                                tooltip="Extract content"
+                                                wire:click="extractContent({{ $topic['url']->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="extractContent({{ $topic['url']->id }})"
+                                            />
+                                        </div>
                                     </div>
 
                                     @if ($topic['url']->content_extracted_at)
-                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                        <p class="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
                                             Last extracted {{ $topic['url']->content_extracted_at->diffForHumans() }}
                                         </p>
                                     @endif

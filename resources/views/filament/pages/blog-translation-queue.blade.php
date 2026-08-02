@@ -61,9 +61,9 @@
                                 <td class="p-2">
                                     <div class="flex flex-wrap gap-1">
                                         @foreach ($topic['missing'] as $language)
-                                            <x-filament::badge color="warning">
+                                            <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/20">
                                                 {{ $language->code }}
-                                            </x-filament::badge>
+                                            </span>
                                         @endforeach
                                     </div>
                                 </td>

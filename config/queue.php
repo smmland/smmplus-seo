@@ -40,7 +40,10 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Above TranslateBlogArticleJob's own 900s timeout (the longest-running job on this
+            // queue) - otherwise a worker still legitimately mid-translation would have its job
+            // considered "lost" and released for reprocessing well before it could ever finish.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 1000),
             'after_commit' => false,
         ],
 

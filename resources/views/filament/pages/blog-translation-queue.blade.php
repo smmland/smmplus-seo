@@ -159,7 +159,6 @@
                 editedPreviewUrl: editedPreviewUrl || null,
                 saving: false,
                 extracting: false,
-                retranslating: false,
                 copiedOriginal: false,
                 copiedEdited: false,
 
@@ -243,18 +242,14 @@
                         this.originalHtml = result.contentHtml;
                     });
                 },
+                // Translation now runs on the background queue (routes/console.php) rather than
+                // inline in this request, so this call only queues it - it doesn't come back
+                // with the finished content to hot-swap in. The "Translating…" badge (server-
+                // rendered from BlogTranslationJob's status, refreshed by this modal's own
+                // wire:poll) is what tells the admin it's done; closing and reopening this topic
+                // afterwards picks up the fresh translation, same as reopening it any other time.
                 retranslateAndRefresh(groupKey, langCode) {
-                    this.retranslating = true;
-                    this.$wire.call('translateLanguage', groupKey, langCode).then((result) => {
-                        this.retranslating = false;
-                        if (!result || !result.ok) return;
-                        if (this.html === this.originalHtml) {
-                            this.html = result.contentHtml;
-                            if (this.mode === 'code' && this.codeMirror) this.codeMirror.setValue(this.html);
-                            if (this.mode === 'visual') this.renderVisual();
-                        }
-                        this.originalHtml = result.contentHtml;
-                    });
+                    this.$wire.call('translateLanguage', groupKey, langCode);
                 },
                 copyEdited() {
                     navigator.clipboard.writeText(this.html || '');

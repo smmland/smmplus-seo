@@ -10,7 +10,7 @@
     $panelLabel = 'mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400';
 @endphp
 
-<div x-data="{ tab: '{{ $defaultLangCode }}' }" class="space-y-4">
+<div x-data="{ tab: '{{ $defaultLangCode }}' }" class="space-y-4" wire:poll.10s>
     @if ($englishRow)
         <div class="flex flex-wrap items-start gap-3 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
             <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-primary-600 ring-1 ring-gray-950/5 dark:bg-white/10 dark:text-primary-400 dark:ring-white/10">
@@ -87,16 +87,28 @@
                     </p>
 
                     @if (! $language['isDefault'])
-                        <x-filament::button
-                            size="sm"
-                            color="gray"
-                            icon="heroicon-o-sparkles"
-                            wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                            wire:loading.attr="disabled"
-                            wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                        >
-                            Translate with AI
-                        </x-filament::button>
+                        @if ($language['translationPending'])
+                            <span class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                <x-filament::loading-indicator class="h-4 w-4" />
+                                Translating in the background… this can take a few minutes for a long article.
+                            </span>
+                        @else
+                            @if ($language['translationError'])
+                                <p class="max-w-xs text-xs text-danger-600 dark:text-danger-400">
+                                    Last attempt failed: {{ $language['translationError'] }}
+                                </p>
+                            @endif
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-sparkles"
+                                wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                wire:loading.attr="disabled"
+                                wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                            >
+                                {{ $language['translationError'] ? 'Retry translation' : 'Translate with AI' }}
+                            </x-filament::button>
+                        @endif
                     @endif
                 </div>
             @else
@@ -122,17 +134,28 @@
                             <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="h-4 w-4" />
                         </a>
 
-                        <div class="flex flex-wrap gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             @if (! $language['isDefault'] && ! $language['isTranslated'])
-                                <x-filament::button
-                                    size="sm"
-                                    color="gray"
-                                    icon="heroicon-o-sparkles"
-                                    @click="retranslateAndRefresh({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                                    x-bind:disabled="retranslating"
-                                >
-                                    <span x-text="retranslating ? 'Translating…' : 'Re-translate with AI'"></span>
-                                </x-filament::button>
+                                @if ($language['translationPending'])
+                                    <span class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                        <x-filament::loading-indicator class="h-4 w-4" />
+                                        Translating…
+                                    </span>
+                                @else
+                                    @if ($language['translationError'])
+                                        <span class="text-xs text-danger-600 dark:text-danger-400" title="{{ $language['translationError'] }}">
+                                            Last attempt failed
+                                        </span>
+                                    @endif
+                                    <x-filament::button
+                                        size="sm"
+                                        color="gray"
+                                        icon="heroicon-o-sparkles"
+                                        @click="retranslateAndRefresh({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                    >
+                                        {{ $language['translationError'] ? 'Retry translation' : 'Re-translate with AI' }}
+                                    </x-filament::button>
+                                @endif
                             @endif
 
                             <x-filament::button

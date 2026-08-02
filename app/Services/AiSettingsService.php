@@ -47,65 +47,46 @@ class AiSettingsService
         'chatgpt' => 'gpt-4o',
     ];
 
-    // Verbatim from smmland/smmplus-extensions (smmplus-tools/popup.js, buildPrompt()) per
-    // explicit request to use it as the starting point - only the dynamic JS template values
-    // (folder, data.html, ...) were swapped for this system's {{token}} placeholders. Everything
-    // else (the git/repo workflow, the RTL rules, the meta_seo.txt format) is untouched, even
-    // where it doesn't yet match how this panel will actually consume the AI's reply - expected
-    // to be edited once the real translate call is built.
+    // Replaces an earlier placeholder ported verbatim from smmplus-extensions' old git/repo
+    // workflow (create files, commit, push) that told the model to translate into 17 hardcoded
+    // languages at once and never referenced {{target_language}} anywhere - the model had no
+    // reliable signal for which single language the caller actually wanted, and would default to
+    // whichever one it picked from that list (observed: asking for fa returned ru). This version
+    // is built for the single-JSON-object contract this service actually parses (prepended
+    // separately as RESPONSE_CONTRACT) and names the target language up front and repeatedly.
     private const DEFAULT_BLOG_TRANSLATION_PROMPT = <<<'PROMPT'
-        I need you to create a new blog translation folder for my website.
+        Translate the blog article below from its original language into {{target_language}} -
+        and only {{target_language}}. Do not translate into any other language, and do not leave
+        any sentence, word, or fragment untranslated in the original language.
 
-        ## Project context
-        - Repo: smmland/smmplus-website
-        - Branch: claude/add-blog-folder-structure-baXrG
-        - All blog files live under: blogs/<folder-name>/
-        - Files are pure HTML fragments (NO <html>, <head>, <body>, <style> wrappers)
-        - All styling via Tailwind CSS utility classes — zero inline style="" attributes
-        - Content is injected via {{ post['content']|raw }} in a Twig CMS
+        Translate like a native, professional {{target_language}}-speaking copywriter would
+        rewrite this article for a {{target_language}}-speaking audience - not a literal,
+        word-for-word translation. Keep the same meaning, tone, and level of detail, but let
+        phrasing, idioms, and sentence structure read naturally in {{target_language}}.
 
-        ## Task
-        Create the folder: blogs/{{slug}}/
+        Rules:
+        - Preserve the HTML exactly: every tag, attribute, and class name stays as-is. Translate
+          only the visible text content.
+        - Never translate HTML tag names, attribute names, class names, or URLs.
+        - Keep numbers, code snippets, and brand/product names unchanged unless a localized form
+          of the brand name is already standard in {{target_language}}.
+        - Match the article's existing heading structure and paragraph breaks - don't merge,
+          split, or reorder sections.
 
-        ### Step 1 — Translations
-        Translate en.html into these 17 languages and save each as a separate file:
-        ru, tr, bp, ko, ar, es, th, vi, fr, zh, de, id, it, ja, pl, uk, fa
+        ## Article title
+        {{title}}
 
-        ### Step 2 — RTL fix (ar.html and fa.html only)
-        For Arabic and Persian files apply these rules:
-        - Add dir="rtl" to block-level elements only: p, h1, h2, h3, h4, h5, h6, li, ul, ol, td, th
-        - Do NOT add dir="rtl" to inline elements: span, a
-        - Replace pl-12 with pr-12 on all <ul> elements
-
-        ### Step 3 — meta_seo.txt
-        Create blogs/{{slug}}/meta_seo.txt using the SEO data I provide.
-        File format for each language:
-        [lang_code]
-        Page title:
-        <title>
-
-        Meta-keywords:
-        <keywords>
-
-        Meta-description:
-        <description>
-
-        ---
-
-        Supported lang codes: en, ar, bp, de, es, fa, fr, id, it, ja, ko, pl, ru, th, tr, uk, vi, zh
-
-        ### Step 4 — Commit & push
-        Commit all files with a clear message and push to the branch above.
-
-        ---
-
-        ## Input — English HTML content:
+        ## Article body (HTML)
         {{content}}
 
-        ## Input — SEO metadata (English only, translate the rest):
-        Page title: {{meta_title}}
-        Meta-keywords: {{meta_keywords}}
-        Meta-description: {{meta_description}}
+        ## SEO metadata to translate into {{target_language}} as well
+        <title> tag: {{meta_title}}
+        Meta description: {{meta_description}}
+        Meta keywords: {{meta_keywords}}
+        Open Graph title: {{og_title}}
+        Open Graph description: {{og_description}}
+        Twitter title: {{twitter_title}}
+        Twitter description: {{twitter_description}}
         PROMPT;
 
     public function getProvider(): string

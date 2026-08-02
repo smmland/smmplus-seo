@@ -2,9 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Jobs\TranslateBlogArticleJob;
+use App\Models\BlogTranslationJob;
 use App\Models\Language;
 use App\Models\Url;
-use App\Services\BlogAiTranslationService;
 use App\Services\BlogContentExtractionService;
 use App\Services\BlogTranslationDetectionService;
 use App\Services\TranslationSettingsService;
@@ -246,19 +247,18 @@ class BlogTranslationQueue extends Page implements HasActions
     }
 
     /**
-     * Translates the topic's default-language content into one specific missing language -
-     * works whether or not that language already has a Url row (a real page might not exist on
-     * the live site yet), since BlogAiTranslationService creates one if needed.
-     */
-    /**
-     * Returns the fresh content (see the docblock on extractContent() for why) - only matters
-     * for the "re-translate an already-open, already-editor-mounted language tab" case; a
-     * language with no row yet gets a brand new Alpine mount from Livewire's morph regardless,
-     * since the whole "no page exists yet" block gets swapped out for the editor block.
+     * Queues the topic's default-language content for translation into one specific missing
+     * language - works whether or not that language already has a Url row (a real page might
+     * not exist on the live site yet), since TranslateBlogArticleJob creates one if needed.
      *
-     * @return array{ok: bool, message: string, contentHtml?: string}
+     * Runs on the queue (routes/console.php schedules the worker) rather than inline in this
+     * request: a large article can legitimately take several minutes for the AI to translate
+     * well, which is both longer than this shared host's PHP execution limit and long enough
+     * that blocking the admin's browser on it would be a bad experience regardless.
+     *
+     * @return array{ok: bool, message: string}
      */
-    public function translateLanguage(string $groupKey, string $targetLangCode, BlogAiTranslationService $translator): array
+    public function translateLanguage(string $groupKey, string $targetLangCode): array
     {
         $sourceRow = $this->defaultLanguageRow($groupKey);
 
@@ -271,37 +271,35 @@ class BlogTranslationQueue extends Page implements HasActions
             return ['ok' => false, 'message' => 'Could not find the default-language content for this topic.'];
         }
 
-        $result = $translator->translate($sourceRow, $targetLangCode);
+        if ($this->hasPendingTranslation($groupKey, $targetLangCode)) {
+            Notification::make()
+                ->title('Already translating')
+                ->body('This language is already queued or in progress - no need to queue it again.')
+                ->warning()
+                ->send();
+
+            return ['ok' => true, 'message' => 'Already queued.'];
+        }
+
+        $this->queueTranslation($sourceRow, $groupKey, $targetLangCode);
 
         unset($this->queue);
 
-        $notification = Notification::make()
-            ->title($result['ok'] ? 'Translated' : 'Translation failed')
-            ->body($result['message']);
+        Notification::make()
+            ->title('Translation queued')
+            ->body('Translating in the background - this can take a few minutes for a long article. Reopen this tab once it\'s done.')
+            ->success()
+            ->send();
 
-        $result['ok'] ? $notification->success() : $notification->danger();
-
-        $notification->send();
-
-        if (! $result['ok']) {
-            return $result;
-        }
-
-        $targetRow = Url::query()->where('group_key', $groupKey)->where('lang', $targetLangCode)->first();
-        $contentHtml = ($targetRow && $targetRow->content_extraction_path)
-            ? (Storage::disk('public')->get($targetRow->content_extraction_path) ?? '')
-            : '';
-
-        return ['ok' => true, 'message' => $result['message'], 'contentHtml' => $contentHtml];
+        return ['ok' => true, 'message' => 'Translation queued.'];
     }
 
     /**
-     * The quick-access version on the default-language tab: translates whichever missing
-     * language comes first, one at a time - a single AI translation call can already run close
-     * to this shared host's PHP execution limit, so working through a large backlog is done by
-     * clicking again (same pattern as the "Run check now" batch button), not in one shot.
+     * The quick-access version on the default-language tab: queues whichever missing language
+     * comes first. Click again for the next one once it's done - same "work through the backlog
+     * a step at a time" pattern as the "Run check now" batch button elsewhere.
      */
-    public function translateNextMissingLanguage(string $groupKey, BlogAiTranslationService $translator): void
+    public function translateNextMissingLanguage(string $groupKey): void
     {
         $sourceRow = $this->defaultLanguageRow($groupKey);
 
@@ -320,12 +318,22 @@ class BlogTranslationQueue extends Page implements HasActions
             ->get()
             ->keyBy('lang');
 
+        $pendingLangs = BlogTranslationJob::query()
+            ->where('group_key', $groupKey)
+            ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
+            ->pluck('target_lang')
+            ->all();
+
         $missingLanguage = Language::query()
             ->where('is_active', true)
             ->where('is_default', false)
             ->orderBy('sort_order')
             ->get(['code', 'name'])
-            ->first(function (Language $language) use ($existingByLang) {
+            ->first(function (Language $language) use ($existingByLang, $pendingLangs) {
+                if (in_array($language->code, $pendingLangs, true)) {
+                    return false;
+                }
+
                 $row = $existingByLang->get($language->code);
 
                 return ! $row || $row->is_translated !== true;
@@ -333,25 +341,44 @@ class BlogTranslationQueue extends Page implements HasActions
 
         if (! $missingLanguage) {
             Notification::make()
-                ->title('Nothing left to translate')
-                ->body('Every active language already has a translation for this topic.')
+                ->title($pendingLangs ? 'Already translating' : 'Nothing left to translate')
+                ->body($pendingLangs
+                    ? 'The remaining missing language(s) are already queued or in progress.'
+                    : 'Every active language already has a translation for this topic.')
                 ->success()
                 ->send();
 
             return;
         }
 
-        $result = $translator->translate($sourceRow, $missingLanguage->code);
+        $this->queueTranslation($sourceRow, $groupKey, $missingLanguage->code);
 
         unset($this->queue);
 
-        $notification = Notification::make()
-            ->title($result['ok'] ? "Translated into {$missingLanguage->name}" : 'Translation failed')
-            ->body($result['message']);
+        Notification::make()
+            ->title("Queued translation into {$missingLanguage->name}")
+            ->body('Translating in the background - this can take a few minutes for a long article.')
+            ->success()
+            ->send();
+    }
 
-        $result['ok'] ? $notification->success() : $notification->danger();
+    private function queueTranslation(Url $sourceRow, string $groupKey, string $targetLangCode): void
+    {
+        BlogTranslationJob::query()->updateOrCreate(
+            ['group_key' => $groupKey, 'target_lang' => $targetLangCode],
+            ['status' => BlogTranslationJob::QUEUED, 'message' => null],
+        );
 
-        $notification->send();
+        TranslateBlogArticleJob::dispatch($sourceRow->id, $targetLangCode, $groupKey);
+    }
+
+    private function hasPendingTranslation(string $groupKey, string $targetLangCode): bool
+    {
+        return BlogTranslationJob::query()
+            ->where('group_key', $groupKey)
+            ->where('target_lang', $targetLangCode)
+            ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
+            ->exists();
     }
 
     private function defaultLanguageRow(string $groupKey): ?Url
@@ -400,7 +427,17 @@ class BlogTranslationQueue extends Page implements HasActions
             ->orderBy('sort_order')
             ->get(['code', 'name', 'is_default']);
 
-        $languages = $languageDefs->map(function (Language $language) use ($rows) {
+        $translationJobs = BlogTranslationJob::query()
+            ->where('group_key', $groupKey)
+            ->get()
+            ->keyBy('target_lang');
+
+        $pendingLangs = $translationJobs
+            ->filter(fn (BlogTranslationJob $job) => in_array($job->status, BlogTranslationJob::PENDING_STATUSES, true))
+            ->keys()
+            ->all();
+
+        $languages = $languageDefs->map(function (Language $language) use ($rows, $pendingLangs, $translationJobs) {
             /** @var ?Url $row */
             $row = $rows->get($language->code);
 
@@ -429,6 +466,10 @@ class BlogTranslationQueue extends Page implements HasActions
                 'isDefault' => $language->is_default,
                 'exists' => (bool) $row,
                 'isTranslated' => $row?->is_translated === true,
+                'translationPending' => in_array($language->code, $pendingLangs, true),
+                'translationError' => $translationJobs->get($language->code)?->status === BlogTranslationJob::FAILED
+                    ? $translationJobs->get($language->code)->message
+                    : null,
                 'sourceUrl' => $row?->source_url,
                 'urlId' => $row?->id,
                 'articleTitle' => $row?->article_title,

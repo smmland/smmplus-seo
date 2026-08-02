@@ -33,3 +33,14 @@ Schedule::command('gateway:auto-block-ips')->everyFiveMinutes()->withoutOverlapp
 // (Translation Settings), so running this hourly just means newly-published or
 // newly-translated posts don't wait long to be picked up.
 Schedule::command('translation:refresh-blog-status')->hourly()->withoutOverlapping();
+
+// Processes queued jobs (currently just TranslateBlogArticleJob) - this shared host has no
+// persistent `queue:work` process (no SSH access to keep one running), so the queue is drained
+// a batch at a time off the same schedule:run tick everything else here rides on instead.
+// --stop-when-empty exits once drained rather than idling, so this doesn't overlap the next
+// tick; --timeout must be >= TranslateBlogArticleJob's own $timeout (900s) or the worker would
+// kill a still-legitimately-running translation itself. withoutOverlapping() covers the case
+// where one translation runs long enough that the next tick fires while this one's still busy.
+Schedule::command('queue:work --queue=default --stop-when-empty --tries=1 --timeout=900')
+    ->everyMinute()
+    ->withoutOverlapping(20);

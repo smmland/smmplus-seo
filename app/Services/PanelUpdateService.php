@@ -21,10 +21,10 @@ use ZipArchive;
  */
 class PanelUpdateService
 {
-    // Never touched by an update, regardless of what's in the zip - .env holds secrets, storage
-    // holds uploaded content/logs/framework runtime state, neither is (or should be) part of a
-    // source code update.
-    private const PROTECTED_PREFIXES = ['storage/', '.env'];
+    // Never touched by an update, regardless of what's in the zip - storage holds uploaded
+    // content/logs/framework runtime state, and isn't (or shouldn't be) part of a source code
+    // update.
+    private const PROTECTED_PREFIXES = ['storage/'];
 
     /**
      * @return array{ok: bool, message: string, fileCount?: int}
@@ -77,6 +77,13 @@ class PanelUpdateService
                 if ($entry === $prefix || str_starts_with($entry, $prefix)) {
                     throw new RuntimeException("Refused: zip contains a protected path ({$entry}). Updates never touch storage/ or .env.");
                 }
+            }
+
+            // Exact filename match only - unlike a prefix check, this doesn't also catch
+            // harmless files like .env.example or .env.testing that merely start with ".env"
+            // but hold no real secrets.
+            if ($entry === '.env' || str_ends_with($entry, '/.env')) {
+                throw new RuntimeException("Refused: zip contains a protected path ({$entry}). Updates never touch storage/ or .env.");
             }
         }
     }

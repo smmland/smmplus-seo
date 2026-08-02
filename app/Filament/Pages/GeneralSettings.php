@@ -2,12 +2,16 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\AiSettingsService;
 use App\Services\PanelUpdateService;
 use App\Services\SettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Artisan;
@@ -30,12 +34,39 @@ class GeneralSettings extends Page implements HasForms
 
     public ?array $data = [];
 
+    public ?array $aiData = [];
+
+    public ?array $aiTestResult = null;
+
     public string $accentColor = '';
 
     // How stale the heartbeat (written every minute by routes/console.php) can be before we
     // call the cron dead rather than just between ticks - generous enough to absorb a slow
     // request or two without flapping.
     private const CRON_STALE_AFTER_MINUTES = 3;
+
+    // Curated rather than free text, to avoid a typo'd model id silently breaking translation -
+    // "Custom" (below, reveals a plain text field) covers whatever a provider ships after this
+    // list was written, since neither list can stay current forever.
+    private const CLAUDE_MODELS = [
+        'claude-sonnet-4-5-20250929' => 'Claude Sonnet 4.5',
+        'claude-sonnet-5' => 'Claude Sonnet 5',
+        'claude-opus-5' => 'Claude Opus 5',
+        'claude-fable-5' => 'Claude Fable 5',
+        'claude-haiku-4-5-20251001' => 'Claude Haiku 4.5',
+        'custom' => 'Custom / other…',
+    ];
+
+    private const CHATGPT_MODELS = [
+        'gpt-4o' => 'GPT-4o',
+        'gpt-4o-mini' => 'GPT-4o mini',
+        'gpt-4.1' => 'GPT-4.1',
+        'gpt-4.1-mini' => 'GPT-4.1 mini',
+        'gpt-5' => 'GPT-5',
+        'o3' => 'o3',
+        'o4-mini' => 'o4-mini',
+        'custom' => 'Custom / other…',
+    ];
 
     // Reached from the account menu (top-right avatar -> Settings) instead of the sidebar -
     // see AdminPanelProvider::panel()'s userMenuItems().
@@ -44,13 +75,34 @@ class GeneralSettings extends Page implements HasForms
         return false;
     }
 
-    public function mount(SettingsService $settings): void
+    // Filament pages only wire up the default 'form' unless every form in use is listed here -
+    // AI settings save independently of the account form below (picking a model shouldn't force
+    // re-entering the account password, which that form requires on every save).
+    protected function getForms(): array
+    {
+        return ['form', 'aiForm'];
+    }
+
+    public function mount(SettingsService $settings, AiSettingsService $aiSettings): void
     {
         $this->form->fill([
             'email' => Auth::user()->email,
         ]);
 
         $this->accentColor = $settings->getAccentColorKey();
+
+        $claudeModel = $aiSettings->getModel('claude');
+        $chatgptModel = $aiSettings->getModel('chatgpt');
+
+        $this->aiForm->fill([
+            'aiProvider' => $aiSettings->getProvider(),
+            // Never pre-filled with the real secret - blank means "keep the saved one" on save.
+            'aiApiKey' => null,
+            'aiModelClaude' => array_key_exists($claudeModel, self::CLAUDE_MODELS) ? $claudeModel : 'custom',
+            'aiModelClaudeCustom' => array_key_exists($claudeModel, self::CLAUDE_MODELS) ? null : $claudeModel,
+            'aiModelChatgpt' => array_key_exists($chatgptModel, self::CHATGPT_MODELS) ? $chatgptModel : 'custom',
+            'aiModelChatgptCustom' => array_key_exists($chatgptModel, self::CHATGPT_MODELS) ? null : $chatgptModel,
+        ]);
     }
 
     public function getAccentColorPresets(): array
@@ -135,6 +187,100 @@ class GeneralSettings extends Page implements HasForms
         $notification->send();
 
         $this->updateZip = null;
+    }
+
+    public function aiForm(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Section::make('AI translation connection')
+                    ->description('Used to auto-translate blog content that\'s missing a language. Pick one provider and enter its API key - "Test connection" checks it against the provider directly, without saving first.')
+                    ->schema([
+                        Select::make('aiProvider')
+                            ->label('Provider')
+                            ->options(AiSettingsService::PROVIDER_LABELS)
+                            ->required()
+                            ->live(),
+
+                        TextInput::make('aiApiKey')
+                            ->label('API key')
+                            ->password()
+                            ->revealable()
+                            ->helperText(fn (Get $get) => app(AiSettingsService::class)->hasApiKey($get('aiProvider'))
+                                ? 'A key is already saved for this provider - leave blank to keep it, or type a new one to replace it.'
+                                : 'No key saved yet for this provider.'),
+
+                        Select::make('aiModelClaude')
+                            ->label('Claude model')
+                            ->options(self::CLAUDE_MODELS)
+                            ->visible(fn (Get $get) => $get('aiProvider') === 'claude')
+                            ->live()
+                            ->helperText('The Anthropic model used for translation calls - pick Custom to enter a model id directly if the provider ships something newer than this list.'),
+
+                        TextInput::make('aiModelClaudeCustom')
+                            ->label('Custom Claude model id')
+                            ->visible(fn (Get $get) => $get('aiProvider') === 'claude' && $get('aiModelClaude') === 'custom'),
+
+                        Select::make('aiModelChatgpt')
+                            ->label('ChatGPT model')
+                            ->options(self::CHATGPT_MODELS)
+                            ->visible(fn (Get $get) => $get('aiProvider') === 'chatgpt')
+                            ->live()
+                            ->helperText('The OpenAI model used for translation calls - pick Custom to enter a model id directly if the provider ships something newer than this list.'),
+
+                        TextInput::make('aiModelChatgptCustom')
+                            ->label('Custom ChatGPT model id')
+                            ->visible(fn (Get $get) => $get('aiProvider') === 'chatgpt' && $get('aiModelChatgpt') === 'custom'),
+                    ])
+                    ->columns(2),
+            ])
+            ->statePath('aiData');
+    }
+
+    public function saveAiSettings(AiSettingsService $aiSettings): void
+    {
+        $data = $this->aiForm->getState();
+
+        $aiSettings->setProvider($data['aiProvider']);
+        $aiSettings->setApiKey($data['aiProvider'], $data['aiApiKey'] ?: null);
+
+        // Only the selected provider's model field is actually visible (and so present in
+        // $data - Filament excludes hidden fields from form state entirely), and that's also
+        // the only one this save should touch: the other provider's stored model is left alone
+        // rather than being blanked out by a field that was never rendered this time.
+        if ($data['aiProvider'] === 'claude') {
+            $claudeModel = $data['aiModelClaude'] === 'custom' ? ($data['aiModelClaudeCustom'] ?? '') : $data['aiModelClaude'];
+            $aiSettings->setModel('claude', $claudeModel ?: null);
+        } else {
+            $chatgptModel = $data['aiModelChatgpt'] === 'custom' ? ($data['aiModelChatgptCustom'] ?? '') : $data['aiModelChatgpt'];
+            $aiSettings->setModel('chatgpt', $chatgptModel ?: null);
+        }
+
+        // The typed key was only ever meant to reach storage (encrypted) - don't leave it
+        // sitting in the live form state after a successful save.
+        $this->aiForm->fill([...$this->aiForm->getState(), 'aiApiKey' => null]);
+
+        Notification::make()
+            ->title('AI settings saved')
+            ->success()
+            ->send();
+    }
+
+    public function testAiConnection(AiSettingsService $aiSettings): void
+    {
+        $data = $this->aiForm->getState();
+        $provider = $data['aiProvider'];
+        $apiKey = filled($data['aiApiKey']) ? $data['aiApiKey'] : ($aiSettings->getApiKey($provider) ?? '');
+
+        $this->aiTestResult = $aiSettings->testConnection($provider, $apiKey);
+
+        $notification = Notification::make()
+            ->title($this->aiTestResult['ok'] ? 'Connection successful' : 'Connection failed')
+            ->body($this->aiTestResult['message']);
+
+        $this->aiTestResult['ok'] ? $notification->success() : $notification->danger();
+
+        $notification->send();
     }
 
     public function form(Form $form): Form

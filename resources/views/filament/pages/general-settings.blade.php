@@ -88,6 +88,32 @@
         </div>
     </x-filament::section>
 
+    <form wire:submit="saveAiSettings">
+        {{ $this->aiForm }}
+
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+            <x-filament::button type="submit">
+                Save AI settings
+            </x-filament::button>
+
+            <x-filament::button
+                type="button"
+                color="gray"
+                wire:click="testAiConnection"
+                wire:loading.attr="disabled"
+                wire:target="testAiConnection"
+            >
+                Test AI connection
+            </x-filament::button>
+
+            @if ($aiTestResult)
+                <span class="text-sm {{ $aiTestResult['ok'] ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }}">
+                    {{ $aiTestResult['message'] }}
+                </span>
+            @endif
+        </div>
+    </form>
+
     <x-filament::section heading="Appearance" description="Pick the panel's accent color - used for the active nav item, primary buttons, links and switches throughout.">
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
             @foreach ($this->getAccentColorPresets() as $key => $preset)

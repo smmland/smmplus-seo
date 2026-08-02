@@ -10,26 +10,10 @@
             <x-filament::button
                 type="button"
                 color="gray"
-                wire:click="testAiConnection"
-                wire:loading.attr="disabled"
-                wire:target="testAiConnection"
-            >
-                Test AI connection
-            </x-filament::button>
-
-            <x-filament::button
-                type="button"
-                color="gray"
                 wire:click="resetPromptToDefault"
             >
                 Reset prompt to default
             </x-filament::button>
-
-            @if ($aiTestResult)
-                <span class="text-sm {{ $aiTestResult['ok'] ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }}">
-                    {{ $aiTestResult['message'] }}
-                </span>
-            @endif
         </div>
 
         <div class="mt-4 rounded-lg border border-gray-200 p-3 text-xs text-gray-500 dark:border-white/10 dark:text-gray-400">

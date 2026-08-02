@@ -565,8 +565,18 @@
                              it, Alpine ends up interleaved with CodeMirror's render cycle often
                              enough to desync its internal line-measurement cache from the DOM,
                              throwing "Cannot read properties of undefined (reading 'map')" from
-                             deep inside codemirror.js on every keystroke. --}}
-                        <div x-ref="codeContainer" wire:ignore class="h-72 w-full overflow-auto rounded-xl text-xs ring-1 ring-gray-950/5 dark:ring-white/10">
+                             deep inside codemirror.js on every keystroke.
+
+                             The @click handler below works around a separate issue: inside this
+                             modal (which uses Alpine's x-trap focus trap), clicking into
+                             CodeMirror's own scroller never actually focuses its hidden textarea
+                             once the document is tall enough to scroll - CodeMirror's own
+                             mousedown-driven focus+cursor-placement silently fails to stick, so
+                             the editor renders normally but every keystroke is a no-op. Driving
+                             focus and cursor placement ourselves from the click coordinates
+                             (confirmed reliable even though the trap fights CodeMirror elsewhere)
+                             makes typing actually work. --}}
+                        <div x-ref="codeContainer" wire:ignore @click="if (codeMirror) { codeMirror.setCursor(codeMirror.coordsChar({ left: $event.clientX, top: $event.clientY }, 'window')); codeMirror.focus(); }" class="h-72 w-full overflow-auto rounded-xl text-xs ring-1 ring-gray-950/5 dark:ring-white/10">
                             <div x-ignore class="h-full w-full"></div>
                         </div>
 

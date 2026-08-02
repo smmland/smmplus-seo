@@ -36,60 +36,6 @@ class BlogAiTranslationService
 
     public function __construct(private readonly AiSettingsService $aiSettings) {}
 
-    /**
-     * Translates one blog topic's title, SEO meta, and content into $targetLangCode using the
-     * configured AI provider and the user's configurable prompt, then saves the result onto a
-     * Url row for that language (creating one if it doesn't exist yet) using the same fields and
-     * content-file layout manual extraction already produces, so the rest of the panel (preview,
-     * copy tools, the visual editor) works on an AI translation exactly like an extracted one.
-     *
-     * @return array{ok: bool, message: string}
-     */
-    public function translate(Url $sourceRow, string $targetLangCode): array
-    {
-        // Best-effort only - many shared hosts disable this override, but it costs nothing to
-        // try, and a single translation call (large content + AI generation time) can easily
-        // exceed a default 30s PHP execution limit otherwise.
-        @set_time_limit(170);
-
-        $provider = $this->aiSettings->getProvider();
-        $apiKey = $this->aiSettings->getApiKey($provider);
-
-        if (! $apiKey) {
-            return ['ok' => false, 'message' => "No API key saved for \"{$provider}\" - add one on the Translation Settings page first."];
-        }
-
-        if (! $sourceRow->content_extraction_path || ! Storage::disk('public')->exists($sourceRow->content_extraction_path)) {
-            return ['ok' => false, 'message' => 'The source content hasn\'t been extracted yet - click "Extract content" on the default-language tab first.'];
-        }
-
-        $sourceContent = Storage::disk('public')->get($sourceRow->content_extraction_path);
-
-        $targetLanguage = Language::query()->where('code', $targetLangCode)->value('name') ?? $targetLangCode;
-
-        $prompt = $this->buildPrompt($sourceRow, $sourceContent, $targetLanguage);
-
-        $result = match ($provider) {
-            'claude' => $this->callClaude($apiKey, $this->aiSettings->getModel('claude'), $prompt),
-            'chatgpt' => $this->callChatgpt($apiKey, $this->aiSettings->getModel('chatgpt'), $prompt),
-            default => ['ok' => false, 'message' => "Unknown provider \"{$provider}\"."],
-        };
-
-        if (! $result['ok']) {
-            return $result;
-        }
-
-        $parsed = $this->parseJsonResponse($result['text']);
-
-        if (! $parsed || ! isset($parsed['content'])) {
-            return ['ok' => false, 'message' => 'The AI\'s reply could not be parsed as the expected JSON - try again, or check the prompt in Translation Settings.'];
-        }
-
-        $this->saveTranslation($sourceRow, $targetLangCode, $parsed);
-
-        return ['ok' => true, 'message' => "Translated into {$targetLanguage} and saved."];
-    }
-
     private function buildPrompt(Url $sourceRow, string $sourceContent, string $targetLanguage): string
     {
         $replacements = [
@@ -112,38 +58,6 @@ class BlogAiTranslationService
     }
 
     /**
-     * @return array{ok: bool, message?: string, text?: string}
-     */
-    private function callClaude(string $apiKey, string $model, string $prompt): array
-    {
-        try {
-            $response = Http::withHeaders($this->claudeHeaders($apiKey))
-                ->timeout(170)
-                ->post('https://api.anthropic.com/v1/messages', $this->claudeRequestPayload($model, $prompt));
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
-        }
-
-        return $this->extractClaudeText($response);
-    }
-
-    /**
-     * @return array{ok: bool, message?: string, text?: string}
-     */
-    private function callChatgpt(string $apiKey, string $model, string $prompt): array
-    {
-        try {
-            $response = Http::withHeaders($this->chatgptHeaders($apiKey))
-                ->timeout(170)
-                ->post('https://api.openai.com/v1/chat/completions', $this->chatgptRequestPayload($model, $prompt));
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
-        }
-
-        return $this->extractChatgptText($response);
-    }
-
-    /**
      * Translates several already-queued jobs at once via concurrent outbound HTTP requests
      * (Http::pool) instead of one at a time - this is what "N concurrent translations" (AI
      * Settings) means in practice on a host with no persistent worker process to run several
@@ -151,7 +65,7 @@ class BlogAiTranslationService
      * same provider/model/key for all of them since only one is configured system-wide.
      *
      * @param  Collection<int, \App\Models\BlogTranslationJob>  $jobs
-     * @return array<int, array{ok: bool, message: string}> keyed by BlogTranslationJob id
+     * @return array<int, array{ok: bool, message: string, provider?: string, model?: string, input_tokens?: int, output_tokens?: int, estimated_cost_usd?: ?float}> keyed by BlogTranslationJob id
      */
     public function translateManyConcurrently(Collection $jobs): array
     {
@@ -219,8 +133,21 @@ class BlogAiTranslationService
                     ? ($provider === 'claude' ? $this->extractClaudeText($response) : $this->extractChatgptText($response))
                     : ['ok' => false, 'message' => 'Connection error: '.($response instanceof \Throwable ? $response->getMessage() : 'the request failed.')];
 
+                // Present whenever the request actually reached the provider (even a failed one
+                // that still burned tokens - e.g. the reasoning-budget-exhausted case) - absent
+                // for a pure transport failure, where nothing was sent or billed.
+                $usage = isset($extracted['inputTokens'])
+                    ? [
+                        'provider' => $provider,
+                        'model' => $model,
+                        'input_tokens' => $extracted['inputTokens'],
+                        'output_tokens' => $extracted['outputTokens'],
+                        'estimated_cost_usd' => $this->aiSettings->estimateCost($model, $extracted['inputTokens'], $extracted['outputTokens']),
+                    ]
+                    : [];
+
                 if (! $extracted['ok']) {
-                    $results[$jobId] = $extracted;
+                    $results[$jobId] = ['ok' => false, 'message' => $extracted['message'], ...$usage];
 
                     continue;
                 }
@@ -228,13 +155,13 @@ class BlogAiTranslationService
                 $parsed = $this->parseJsonResponse($extracted['text']);
 
                 if (! $parsed || ! isset($parsed['content'])) {
-                    $results[$jobId] = ['ok' => false, 'message' => 'The AI\'s reply could not be parsed as the expected JSON - try again, or check the prompt in Translation Settings.'];
+                    $results[$jobId] = ['ok' => false, 'message' => 'The AI\'s reply could not be parsed as the expected JSON - try again, or check the prompt in Translation Settings.', ...$usage];
 
                     continue;
                 }
 
                 $this->saveTranslation($p['sourceRow'], $p['targetLangCode'], $parsed);
-                $results[$jobId] = ['ok' => true, 'message' => "Translated into {$p['targetLanguage']} and saved."];
+                $results[$jobId] = ['ok' => true, 'message' => "Translated into {$p['targetLanguage']} and saved.", ...$usage];
             }
         }
 
@@ -272,16 +199,24 @@ class BlogAiTranslationService
             return ['ok' => false, 'message' => 'HTTP '.$response->status().': '.$this->errorSnippet($response->json('error.message') ?? $response->body())];
         }
 
+        // Captured on every successful HTTP response regardless of what's in it - a reply that
+        // fails to parse, or an empty one, still burned real tokens and should still count
+        // toward the cost dashboard.
+        $usage = [
+            'inputTokens' => (int) ($response->json('usage.input_tokens') ?? 0),
+            'outputTokens' => (int) ($response->json('usage.output_tokens') ?? 0),
+        ];
+
         $text = collect($response->json('content', []))
             ->where('type', 'text')
             ->pluck('text')
             ->implode('');
 
         if ($text === '') {
-            return ['ok' => false, 'message' => 'Claude returned an empty response.'];
+            return ['ok' => false, 'message' => 'Claude returned an empty response.', ...$usage];
         }
 
-        return ['ok' => true, 'text' => $text];
+        return ['ok' => true, 'text' => $text, ...$usage];
     }
 
     private function chatgptHeaders(string $apiKey): array
@@ -325,6 +260,14 @@ class BlogAiTranslationService
             return ['ok' => false, 'message' => 'HTTP '.$response->status().': '.$this->errorSnippet($response->json('error.message') ?? $response->body())];
         }
 
+        // Captured on every successful HTTP response regardless of what's in it - a reasoning
+        // model burning its whole budget on hidden reasoning still consumed (and gets billed
+        // for) every one of those tokens, even though extraction below fails for that reply.
+        $usage = [
+            'inputTokens' => (int) ($response->json('usage.prompt_tokens') ?? 0),
+            'outputTokens' => (int) ($response->json('usage.completion_tokens') ?? 0),
+        ];
+
         $text = $response->json('choices.0.message.content');
 
         if (! $text) {
@@ -337,13 +280,13 @@ class BlogAiTranslationService
             // a genuinely empty reply so it's obvious a bigger budget (or a non-reasoning model
             // like GPT-4o) is what's needed, not a prompt fix.
             if ($finishReason === 'length' && $reasoningTokens) {
-                return ['ok' => false, 'message' => "ChatGPT used its entire token budget on internal reasoning ({$reasoningTokens} tokens) and stopped before writing a reply. Try a non-reasoning model (e.g. GPT-4o) in AI Settings, which doesn't have this issue."];
+                return ['ok' => false, 'message' => "ChatGPT used its entire token budget on internal reasoning ({$reasoningTokens} tokens) and stopped before writing a reply. Try a non-reasoning model (e.g. GPT-4o) in AI Settings, which doesn't have this issue.", ...$usage];
             }
 
-            return ['ok' => false, 'message' => 'ChatGPT returned an empty response'.($finishReason ? " (finish_reason: {$finishReason})" : '').'.'];
+            return ['ok' => false, 'message' => 'ChatGPT returned an empty response'.($finishReason ? " (finish_reason: {$finishReason})" : '').'.', ...$usage];
         }
 
-        return ['ok' => true, 'text' => $text];
+        return ['ok' => true, 'text' => $text, ...$usage];
     }
 
     // Matches OpenAI's reasoning-capable chat completions models - the o-series and gpt-5 family

@@ -15,6 +15,24 @@ class AiSettingsService
         'chatgpt' => 'ChatGPT (OpenAI)',
     ];
 
+    // USD per 1M tokens, approximate published list pricing - used only to estimate spend on the
+    // cost dashboard, not billed anywhere. A model not listed here (a custom/newer model id) has
+    // no known rate, so its jobs show token counts but no dollar estimate rather than guessing.
+    public const MODEL_PRICING_PER_MILLION_TOKENS = [
+        'claude-sonnet-4-5-20250929' => ['input' => 3.00, 'output' => 15.00],
+        'claude-sonnet-5' => ['input' => 3.00, 'output' => 15.00],
+        'claude-opus-5' => ['input' => 15.00, 'output' => 75.00],
+        'claude-fable-5' => ['input' => 0.80, 'output' => 4.00],
+        'claude-haiku-4-5-20251001' => ['input' => 0.80, 'output' => 4.00],
+        'gpt-4o' => ['input' => 2.50, 'output' => 10.00],
+        'gpt-4o-mini' => ['input' => 0.15, 'output' => 0.60],
+        'gpt-4.1' => ['input' => 2.00, 'output' => 8.00],
+        'gpt-4.1-mini' => ['input' => 0.40, 'output' => 1.60],
+        'gpt-5' => ['input' => 2.50, 'output' => 10.00],
+        'o3' => ['input' => 2.00, 'output' => 8.00],
+        'o4-mini' => ['input' => 1.10, 'output' => 4.40],
+    ];
+
     // Documented for the prompt editor's UI - what {{token}} gets substituted with, once the
     // actual translate call is wired up in a later phase. Exact-string substitution only, so
     // prose in the prompt that merely *looks* like a token (e.g. a Twig "{{ post['content'] }}"
@@ -195,6 +213,22 @@ class AiSettingsService
     public function setMaxConcurrentTranslations(int $count): void
     {
         $this->set(self::KEY_MAX_CONCURRENT_TRANSLATIONS, (string) max(1, min($count, self::MAX_CONCURRENT_TRANSLATIONS_CEILING)));
+    }
+
+    /**
+     * Returns null (rather than 0) for a model with no known rate - the caller needs to tell
+     * "genuinely free" apart from "we don't know this model's price", since the latter should
+     * show as unknown on the cost dashboard, not silently count as $0.
+     */
+    public function estimateCost(string $model, int $inputTokens, int $outputTokens): ?float
+    {
+        $rate = self::MODEL_PRICING_PER_MILLION_TOKENS[$model] ?? null;
+
+        if (! $rate) {
+            return null;
+        }
+
+        return ($inputTokens / 1_000_000 * $rate['input']) + ($outputTokens / 1_000_000 * $rate['output']);
     }
 
     /**

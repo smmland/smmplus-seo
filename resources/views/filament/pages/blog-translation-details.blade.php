@@ -94,7 +94,7 @@
         <button type="button" @click="exportOpen = !exportOpen" class="flex w-full items-center justify-between gap-2 text-start text-sm font-medium text-gray-950 dark:text-white">
             <span class="flex items-center gap-2">
                 <x-filament::icon icon="heroicon-o-arrow-down-tray" class="h-4 w-4 text-gray-400" />
-                Download SEO export
+                Download translate export
             </span>
             <x-filament::icon icon="heroicon-o-chevron-down" x-show="!exportOpen" class="h-4 w-4 text-gray-400" />
             <x-filament::icon icon="heroicon-o-chevron-up" x-show="exportOpen" x-cloak class="h-4 w-4 text-gray-400" />

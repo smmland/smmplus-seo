@@ -17,5 +17,14 @@ class BlogTranslationJob extends Model
     // debugging.
     public const PENDING_STATUSES = [self::QUEUED, self::RUNNING];
 
-    protected $fillable = ['group_key', 'target_lang', 'status', 'message'];
+    protected $fillable = [
+        'group_key', 'target_lang', 'status', 'message',
+        'provider', 'model', 'input_tokens', 'output_tokens', 'estimated_cost_usd',
+    ];
+
+    protected $casts = [
+        'input_tokens' => 'integer',
+        'output_tokens' => 'integer',
+        'estimated_cost_usd' => 'decimal:6',
+    ];
 }

@@ -32,6 +32,10 @@ class ProcessBlogTranslationQueueCommand extends Command
             return self::SUCCESS;
         }
 
+        // The cost-tracking columns can lag behind this code on a host with no terminal access -
+        // deploys land before "Update database" is clicked, so this must not assume they exist.
+        $costTrackingAvailable = Schema::hasColumn('blog_translation_jobs', 'estimated_cost_usd');
+
         $concurrency = $aiSettings->getMaxConcurrentTranslations();
         $deadline = now()->addSeconds(self::TIME_BUDGET_SECONDS);
         $processed = 0;
@@ -54,10 +58,22 @@ class ProcessBlogTranslationQueueCommand extends Command
             foreach ($batch as $job) {
                 $result = $results[$job->id] ?? ['ok' => false, 'message' => 'No result returned.'];
 
-                $job->update([
+                $update = [
                     'status' => $result['ok'] ? BlogTranslationJob::DONE : BlogTranslationJob::FAILED,
                     'message' => $result['message'],
-                ]);
+                ];
+
+                if ($costTrackingAvailable) {
+                    $update += [
+                        'provider' => $result['provider'] ?? null,
+                        'model' => $result['model'] ?? null,
+                        'input_tokens' => $result['input_tokens'] ?? null,
+                        'output_tokens' => $result['output_tokens'] ?? null,
+                        'estimated_cost_usd' => $result['estimated_cost_usd'] ?? null,
+                    ];
+                }
+
+                $job->update($update);
 
                 $processed++;
             }

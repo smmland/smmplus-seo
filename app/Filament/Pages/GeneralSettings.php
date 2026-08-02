@@ -2,6 +2,9 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\BlogTranslationJob;
+use App\Models\Language;
+use App\Models\Url;
 use App\Services\AiSettingsService;
 use App\Services\PanelUpdateService;
 use App\Services\SettingsService;
@@ -17,6 +20,7 @@ use Filament\Pages\Page;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Livewire\WithFileUploads;
 
 class GeneralSettings extends Page implements HasForms
@@ -293,6 +297,81 @@ class GeneralSettings extends Page implements HasForms
         $this->aiTestResult['ok'] ? $notification->success() : $notification->danger();
 
         $notification->send();
+    }
+
+    /**
+     * Aggregates every completed translation's estimated cost (BlogAiTranslationService writes
+     * one per attempt, success or fail - a failed call can still have burned real tokens) into
+     * an overall total plus a per-topic breakdown, for the "AI Translation Costs" section below.
+     * Guarded the same way every blog_translation_jobs feature is: the cost columns can lag
+     * behind this code until "Update database" is clicked, since this host has no terminal
+     * access to run migrations any other way.
+     *
+     * @return array{available: bool, totalCost: float, totalInputTokens: int, totalOutputTokens: int, totalJobs: int, unknownPricingCount: int, byTopic: \Illuminate\Support\Collection}
+     */
+    public function getAiCostStats(): array
+    {
+        if (! Schema::hasTable('blog_translation_jobs') || ! Schema::hasColumn('blog_translation_jobs', 'estimated_cost_usd')) {
+            return [
+                'available' => false,
+                'totalCost' => 0.0,
+                'totalInputTokens' => 0,
+                'totalOutputTokens' => 0,
+                'totalJobs' => 0,
+                'unknownPricingCount' => 0,
+                'byTopic' => collect(),
+            ];
+        }
+
+        $attempted = BlogTranslationJob::query()->whereNotNull('provider');
+
+        $totals = (clone $attempted)
+            ->selectRaw('COALESCE(SUM(estimated_cost_usd), 0) as total_cost, COALESCE(SUM(input_tokens), 0) as total_input, COALESCE(SUM(output_tokens), 0) as total_output, COUNT(*) as total_jobs')
+            ->first();
+
+        // A custom/unlisted model has no known rate (AiSettingsService::estimateCost() returns
+        // null rather than guessing) - called out separately so the total doesn't silently look
+        // complete when part of it couldn't actually be priced.
+        $unknownPricingCount = (clone $attempted)->whereNull('estimated_cost_usd')->count();
+
+        $byGroup = (clone $attempted)
+            ->selectRaw('group_key, COALESCE(SUM(estimated_cost_usd), 0) as cost, COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens, COUNT(*) as translations')
+            ->groupBy('group_key')
+            ->orderByDesc('cost')
+            ->limit(50)
+            ->get();
+
+        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        $topics = Url::query()
+            ->where('lang', $defaultLangCode)
+            ->whereIn('group_key', $byGroup->pluck('group_key'))
+            ->get(['group_key', 'article_title', 'source_url'])
+            ->keyBy('group_key');
+
+        $byTopic = $byGroup->map(function ($row) use ($topics) {
+            $topic = $topics->get($row->group_key);
+
+            return [
+                'groupKey' => $row->group_key,
+                'title' => $topic?->article_title ?: ($topic?->source_url ?: $row->group_key),
+                'sourceUrl' => $topic?->source_url,
+                'cost' => (float) $row->cost,
+                'inputTokens' => (int) $row->input_tokens,
+                'outputTokens' => (int) $row->output_tokens,
+                'translations' => (int) $row->translations,
+            ];
+        });
+
+        return [
+            'available' => true,
+            'totalCost' => (float) $totals->total_cost,
+            'totalInputTokens' => (int) $totals->total_input,
+            'totalOutputTokens' => (int) $totals->total_output,
+            'totalJobs' => (int) $totals->total_jobs,
+            'unknownPricingCount' => $unknownPricingCount,
+            'byTopic' => $byTopic,
+        ];
     }
 
     public function form(Form $form): Form

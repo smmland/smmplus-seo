@@ -289,6 +289,26 @@
                                             Last attempt failed
                                         </span>
                                     @endif
+
+                                    {{-- Fetches this topic's default-language page plus every one of its
+                                         translated languages and compares titles, refreshing whether each
+                                         one is confirmed live - not just this tab's language, but always
+                                         available from here regardless of this language's current state
+                                         (confirmed/needsUpdate/hidden), unlike the needsUpdate banner's own
+                                         "Recheck now" further down, which only shows up once something's
+                                         already flagged as needing attention. --}}
+                                    <x-filament::button
+                                        size="sm"
+                                        color="gray"
+                                        outlined
+                                        icon="heroicon-o-arrow-path"
+                                        wire:click="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                                    >
+                                        Recheck
+                                    </x-filament::button>
+
                                     <x-filament::button
                                         size="sm"
                                         color="gray"

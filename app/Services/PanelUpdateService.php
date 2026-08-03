@@ -33,7 +33,33 @@ class PanelUpdateService
     // anything an update actually needs to ship.
     private const PROTECTED_PREFIXES = ['storage/'];
 
+    // A tracked file at the repo root (panel-manifest.json), so every `git archive` zip carries
+    // it automatically with no separate build step. Its presence and "app" field are what
+    // distinguish a real update package for this panel from any other random zip an admin might
+    // upload by mistake - see assertIsGenuineUpdateZip().
+    private const APP_MANIFEST_FILENAME = 'panel-manifest.json';
+
+    private const APP_ID = 'smmplus-seo-panel';
+
     public function __construct(private SettingsService $settings) {}
+
+    /**
+     * The version currently installed on this server (read from this app's own files, not the
+     * zip being uploaded) - null before this feature's first update ever lands, since older
+     * update zips never carried panel-manifest.json.
+     */
+    public function currentVersion(): ?string
+    {
+        $path = base_path(self::APP_MANIFEST_FILENAME);
+
+        if (! File::exists($path)) {
+            return null;
+        }
+
+        $manifest = json_decode(File::get($path), true);
+
+        return is_array($manifest) ? ($manifest['version'] ?? null) : null;
+    }
 
     /**
      * @return array{ok: bool, message: string, fileCount?: int}
@@ -62,6 +88,7 @@ class PanelUpdateService
         $stagingDir = storage_path('app/panel-update-'.uniqid());
 
         try {
+            $manifest = $this->assertIsGenuineUpdateZip($zip);
             $this->assertEntriesAreSafe($zip);
 
             File::ensureDirectoryExists($stagingDir);
@@ -72,7 +99,9 @@ class PanelUpdateService
 
             $this->bustCaches();
 
-            return ['ok' => true, 'message' => "{$fileCount} file(s) installed.", 'fileCount' => $fileCount];
+            $versionNote = isset($manifest['version']) ? " Now on version {$manifest['version']}." : '';
+
+            return ['ok' => true, 'message' => "{$fileCount} file(s) installed.{$versionNote}", 'fileCount' => $fileCount];
         } catch (RuntimeException $e) {
             return ['ok' => false, 'message' => $e->getMessage()];
         } finally {
@@ -98,6 +127,36 @@ class PanelUpdateService
         return BlogTranslationJob::query()
             ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
             ->exists();
+    }
+
+    // Checked before anything is extracted - refuses a zip outright if it isn't recognizably a
+    // real update package for this panel, so an admin who accidentally selects the wrong file
+    // (a backup, some other download, last week's zip mixed up with a new one) gets a clear
+    // refusal instead of having a random zip's contents extracted over the app's own files.
+    //
+    // @return array{app?: string, version?: string}
+    private function assertIsGenuineUpdateZip(ZipArchive $zip): array
+    {
+        $raw = $zip->getFromName(self::APP_MANIFEST_FILENAME);
+
+        if ($raw === false) {
+            throw new RuntimeException(
+                'Refused: this doesn\'t look like a smmplus-seo panel update zip - '
+                .self::APP_MANIFEST_FILENAME.' is missing. Make sure you\'re uploading the exact '
+                .'update file you were given, not some other zip.'
+            );
+        }
+
+        $manifest = json_decode($raw, true);
+
+        if (! is_array($manifest) || ($manifest['app'] ?? null) !== self::APP_ID) {
+            throw new RuntimeException(
+                'Refused: this zip\'s '.self::APP_MANIFEST_FILENAME.' doesn\'t identify it as a '
+                .'smmplus-seo panel update - refusing to install it.'
+            );
+        }
+
+        return $manifest;
     }
 
     // Only rejects the whole zip for entries that could actually cause harm if extracted -

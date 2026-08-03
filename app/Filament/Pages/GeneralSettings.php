@@ -176,6 +176,14 @@ class GeneralSettings extends Page implements HasForms
     // every keystroke/selection change the way a live-validated form field would.
     public $updateZip = null;
 
+    // Read straight from this app's own files each render, not cached anywhere - always
+    // reflects whatever was actually installed last, including right after installUpdate() below
+    // swaps the files in.
+    public function panelVersion(): ?string
+    {
+        return app(PanelUpdateService::class)->currentVersion();
+    }
+
     public function installUpdate(PanelUpdateService $updater): void
     {
         $this->validate([

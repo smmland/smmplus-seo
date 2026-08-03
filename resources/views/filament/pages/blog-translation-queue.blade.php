@@ -94,12 +94,22 @@
 
         <x-filament::section>
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <input
-                    type="text"
-                    wire:model.live.debounce.400ms="search"
-                    placeholder="Search by slug, title, or URL…"
-                    class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
-                >
+                <div class="flex flex-wrap items-center gap-2">
+                    <input
+                        type="text"
+                        wire:model.live.debounce.400ms="search"
+                        placeholder="Search by slug, title, or URL…"
+                        class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                    >
+                    <select
+                        wire:model.live="statusFilter"
+                        class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                    >
+                        @foreach ($this::STATUS_FILTERS as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
                 <p class="text-xs text-gray-400 dark:text-gray-500">
                     {{ $this->queue['total'] }} topic{{ $this->queue['total'] === 1 ? '' : 's' }}
                 </p>
@@ -107,7 +117,13 @@
 
         @if ($this->queue['topics']->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">
-                {{ $search !== '' ? 'No topics match that search.' : 'No blog topics found yet.' }}
+                @if ($search !== '')
+                    No topics match that search.
+                @elseif ($statusFilter !== 'all')
+                    No topics match "{{ $this::STATUS_FILTERS[$statusFilter] }}" - try switching the filter to "All topics".
+                @else
+                    No blog topics found yet.
+                @endif
             </p>
         @else
             <div class="overflow-x-auto">

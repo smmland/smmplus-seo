@@ -35,14 +35,30 @@ class BlogTranslationQueue extends Page implements HasActions
 
     public string $search = '';
 
+    // Defaults to the one that matters most day-to-day (topics still missing a language) rather
+    // than showing everything unfiltered - "all topics" is one dropdown change away, not gone.
+    public string $statusFilter = 'missing';
+
     public int $queuePage = 1;
 
-    // Every blog topic is shown here (not just ones missing something) - the admin asked for a
-    // single browsable list they can search/paginate to find and re-translate any topic, not
-    // only ones currently flagged as needing attention.
+    // Every blog topic is browsable here (not just ones missing something), filtered down by
+    // statusFilter rather than hard-coded to "needs attention" - the admin asked for a single
+    // list they can search/filter/paginate to find and re-translate any topic.
     private const QUEUE_PER_PAGE = 20;
 
+    public const STATUS_FILTERS = [
+        'missing' => 'Has a missing language',
+        'needsUpdate' => 'Needs a site update',
+        'confirmed' => 'Fully confirmed live',
+        'all' => 'All topics',
+    ];
+
     public function updatedSearch(): void
+    {
+        $this->queuePage = 1;
+    }
+
+    public function updatedStatusFilter(): void
     {
         $this->queuePage = 1;
     }
@@ -87,14 +103,16 @@ class BlogTranslationQueue extends Page implements HasActions
             });
         }
 
-        $total = (clone $englishQuery)->count();
-        $lastPage = max(1, (int) ceil($total / self::QUEUE_PER_PAGE));
-        $page = max(1, min($this->queuePage, $lastPage));
-
-        $englishRows = $englishQuery->orderBy('source_url')->forPage($page, self::QUEUE_PER_PAGE)->get();
+        // statusFilter depends on each topic's computed per-language state (needsSiteUpdate() in
+        // particular isn't a simple column comparison - it weighs several fields together), so
+        // it can't be expressed as a WHERE clause the way search can. Every topic matching the
+        // search has to be loaded and have its state computed before the filter (and so the
+        // final page count) can be resolved - fine at this app's actual scale (a single site's
+        // blog, realistically dozens to a few hundred topics, not millions).
+        $englishRows = $englishQuery->orderBy('source_url')->get();
 
         if ($englishRows->isEmpty()) {
-            return ['topics' => collect(), 'page' => $page, 'lastPage' => $lastPage, 'total' => $total];
+            return ['topics' => collect(), 'page' => 1, 'lastPage' => 1, 'total' => 0];
         }
 
         $existingByGroup = Url::query()
@@ -112,7 +130,7 @@ class BlogTranslationQueue extends Page implements HasActions
                 ->groupBy('group_key')
             : collect();
 
-        $topics = $englishRows->map(function (Url $englishRow) use ($existingByGroup, $activeLanguages, $pendingByGroup) {
+        $allTopics = $englishRows->map(function (Url $englishRow) use ($existingByGroup, $activeLanguages, $pendingByGroup) {
             $existingForGroup = $existingByGroup->get($englishRow->group_key, collect())->keyBy('lang');
             $pendingLangs = $pendingByGroup->get($englishRow->group_key, collect())->pluck('target_lang')->all();
 
@@ -131,7 +149,24 @@ class BlogTranslationQueue extends Page implements HasActions
                 'languages' => $languages,
                 'pendingLangs' => $pendingLangs,
             ];
+        });
+
+        $filtered = $allTopics->filter(function (array $topic) {
+            $nonDefault = $topic['languages']->where('state', '!=', 'default');
+
+            return match ($this->statusFilter) {
+                'missing' => $nonDefault->contains(fn (array $l) => $l['state'] === 'missing'),
+                'needsUpdate' => $nonDefault->contains(fn (array $l) => $l['state'] === 'needsUpdate'),
+                'confirmed' => $nonDefault->isNotEmpty() && $nonDefault->every(fn (array $l) => $l['state'] === 'confirmed'),
+                default => true, // 'all'
+            };
         })->values();
+
+        $total = $filtered->count();
+        $lastPage = max(1, (int) ceil($total / self::QUEUE_PER_PAGE));
+        $page = max(1, min($this->queuePage, $lastPage));
+
+        $topics = $filtered->slice(($page - 1) * self::QUEUE_PER_PAGE, self::QUEUE_PER_PAGE)->values();
 
         return ['topics' => $topics, 'page' => $page, 'lastPage' => $lastPage, 'total' => $total];
     }

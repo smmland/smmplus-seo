@@ -35,6 +35,12 @@ class BlogAiTranslationService
         translate HTML tag names, attribute names, class names, or URLs.
         TEXT;
 
+    // A long article with a large token budget can legitimately take several minutes to
+    // generate. This runs off a scheduled CLI command (ProcessBlogTranslationQueueCommand), not
+    // a web request, so there's no short execution-time ceiling to fit under - the real limit is
+    // that command's own ~850s time budget per batch, and this stays comfortably under it.
+    private const REQUEST_TIMEOUT_SECONDS = 600;
+
     public function __construct(private readonly AiSettingsService $aiSettings) {}
 
     private function buildPrompt(Url $sourceRow, string $sourceContent, string $targetLanguage): string
@@ -120,8 +126,8 @@ class BlogAiTranslationService
         if ($toSend->isNotEmpty()) {
             $responses = Http::pool(fn (Pool $pool) => $toSend->map(
                 fn ($p, $jobId) => $provider === 'claude'
-                    ? $pool->as((string) $jobId)->withHeaders($this->claudeHeaders($apiKey))->timeout(170)->post('https://api.anthropic.com/v1/messages', $this->claudeRequestPayload($model, $p['prompt']))
-                    : $pool->as((string) $jobId)->withHeaders($this->chatgptHeaders($apiKey))->timeout(170)->post('https://api.openai.com/v1/chat/completions', $this->chatgptRequestPayload($model, $p['prompt']))
+                    ? $pool->as((string) $jobId)->withHeaders($this->claudeHeaders($apiKey))->timeout(self::REQUEST_TIMEOUT_SECONDS)->post('https://api.anthropic.com/v1/messages', $this->claudeRequestPayload($model, $p['prompt']))
+                    : $pool->as((string) $jobId)->withHeaders($this->chatgptHeaders($apiKey))->timeout(self::REQUEST_TIMEOUT_SECONDS)->post('https://api.openai.com/v1/chat/completions', $this->chatgptRequestPayload($model, $p['prompt']))
             )->all());
 
             foreach ($toSend as $jobId => $p) {

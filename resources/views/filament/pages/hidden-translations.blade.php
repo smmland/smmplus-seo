@@ -1,5 +1,34 @@
 <x-filament-panels::page>
     <x-filament::section
+        heading="Unflagged content"
+        description="A page that already had a translated version live on the site before this admin ever used AI translation here - discovered normally by the sitemap sync, then only ever had 'Extract content' run on it - never gets the internal is_translated flag set (only an actual AI translation or a Recheck sets it), so it reads as missing in every list despite its content being right there. This finds and fixes those in one click - safe to run any time, it only ever touches rows that already have real extracted content."
+    >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm text-gray-600 dark:text-gray-300">
+                @if ($this->unflaggedContentCount > 0)
+                    <strong>{{ $this->unflaggedContentCount }}</strong> row{{ $this->unflaggedContentCount === 1 ? '' : 's' }} with real content that {{ $this->unflaggedContentCount === 1 ? 'was' : 'were' }} never flagged as translated.
+                @else
+                    Nothing to fix - every row with extracted content is already flagged correctly.
+                @endif
+            </p>
+
+            @if ($this->unflaggedContentCount > 0)
+                <x-filament::button
+                    size="sm"
+                    color="warning"
+                    icon="heroicon-o-wrench"
+                    wire:click="fixUnflaggedContent"
+                    wire:loading.attr="disabled"
+                    wire:target="fixUnflaggedContent"
+                    wire:confirm="Flag {{ $this->unflaggedContentCount }} row(s) as translated? Each one already has real extracted content - this only sets the flag so they show up correctly."
+                >
+                    Fix all
+                </x-filament::button>
+            @endif
+        </div>
+    </x-filament::section>
+
+    <x-filament::section
         heading="Hidden translations"
         description="Every translation SyncService has hidden (is_active flagged false) because its guessed URL wasn't in the real sitemap - never deleted, just not shown in the normal list. Reactivate one at a time, or all at once."
     >

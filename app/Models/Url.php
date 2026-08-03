@@ -41,7 +41,27 @@ class Url extends Model
     }
 
     /**
-     * True when this row is marked translated (is_translated) but that's never actually been
+     * True when this row clearly represents translated content - either explicitly flagged
+     * (is_translated, set by BlogAiTranslationService after an AI translation, or by
+     * BlogTranslationDetectionService after confirming one live) or, for a row nothing ever
+     * explicitly checked, because real content has been extracted from it
+     * (content_extraction_path). A non-default-language BLOG row only exists in the first place
+     * because SyncService discovered a real live page there (a site that was already
+     * multi-language before this admin ever used AI translation) or this tool created it, so
+     * extracted content on it is already strong evidence on its own - is_translated is never set
+     * by the plain "Extract content" action (BlogContentExtractionService), only by an actual
+     * translation attempt or a live-site check, so a naturally-multi-language page that was only
+     * ever extracted (never AI-translated, never Recheck'd) would otherwise read as "missing"
+     * forever despite its content being sitting right there - see BlogTranslationQueue's several
+     * "missing language" filters, all of which go through this rather than the raw column.
+     */
+    public function looksTranslated(): bool
+    {
+        return $this->is_translated === true || filled($this->content_extraction_path);
+    }
+
+    /**
+     * True when this row is marked translated (looksTranslated()) but that's never actually been
      * confirmed against the live site, or was confirmed before the content it's based on last
      * changed - covering real gaps in is_translated on its own: BlogTranslationDetectionService's
      * hourly recheck leaves is_translated untouched on a fetch failure (translation_checked_at
@@ -70,7 +90,7 @@ class Url extends Model
             return true;
         }
 
-        if ($this->is_translated !== true) {
+        if (! $this->looksTranslated()) {
             return false;
         }
 

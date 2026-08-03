@@ -28,8 +28,20 @@ class HiddenTranslationService
         return Url::query()
             ->where('pattern_type', 'BLOG')
             ->where('is_active', false)
-            ->where('is_translated', true)
-            ->where('lang', '!=', $this->defaultLangCode());
+            ->where('lang', '!=', $this->defaultLangCode())
+            ->where($this->looksTranslatedClause());
+    }
+
+    // Matches Url::looksTranslated() as a query - is_translated OR real extracted content, not
+    // is_translated alone. A row from a site that was already multi-language before this admin
+    // ever used AI translation here (discovered by the normal sitemap sync, then just had
+    // "Extract content" run on it) never gets is_translated set at all, so restricting to that
+    // column alone would silently skip it from every list on this page, same bug as before.
+    private function looksTranslatedClause(): \Closure
+    {
+        return function ($query) {
+            $query->where('is_translated', true)->orWhereNotNull('content_extraction_path');
+        };
     }
 
     public function count(): int
@@ -101,13 +113,53 @@ class HiddenTranslationService
         return Url::query()
             ->where('pattern_type', 'BLOG')
             ->where('lang', '!=', $defaultLang)
-            ->where('is_translated', true)
+            ->where($this->looksTranslatedClause())
             ->whereNotIn('group_key', $activeGroupKeys);
     }
 
     public function orphanedCount(): int
     {
         return $this->orphanedQuery()->count();
+    }
+
+    // Matches "content_extraction_path is set, but is_translated was never explicitly set true" -
+    // whereNull is needed alongside where(false): SQL's != true doesn't match NULL, and a never-
+    // checked row's is_translated is NULL, not false.
+    private function unflaggedContentQuery(): Builder
+    {
+        return Url::query()
+            ->where('pattern_type', 'BLOG')
+            ->where('lang', '!=', $this->defaultLangCode())
+            ->whereNotNull('content_extraction_path')
+            ->where(function ($query) {
+                $query->whereNull('is_translated')->orWhere('is_translated', false);
+            });
+    }
+
+    public function unflaggedContentCount(): int
+    {
+        return $this->unflaggedContentQuery()->count();
+    }
+
+    /**
+     * Backfills is_translated=true for every row that already has real extracted content but was
+     * never explicitly flagged - the data-level fix behind Url::looksTranslated() (which patches
+     * the same gap at read time everywhere it's checked, but leaves the underlying column
+     * inconsistent forever unless this actually runs). Safe to run any number of times: only ever
+     * touches rows matching unflaggedContentQuery(), which shrinks to nothing once they're fixed.
+     *
+     * @return int how many rows were fixed
+     */
+    public function fixUnflaggedContent(): int
+    {
+        $query = $this->unflaggedContentQuery();
+        $count = $query->count();
+
+        if ($count > 0) {
+            $query->update(['is_translated' => true]);
+        }
+
+        return $count;
     }
 
     /**

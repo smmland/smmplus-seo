@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Computed;
 
 /**
- * A dedicated, detailed view of every translation that isn't showing up in the normal Blog
- * Translation Queue list, for two unrelated reasons:
+ * A dedicated, detailed view of every translation that isn't showing up correctly in the normal
+ * Blog Translation Queue list, for several unrelated reasons:
  *
  * - Hidden: SyncService flagged it is_active = false because its guessed URL wasn't in the real
  *   sitemap. Never deleted, just not shown - see HiddenTranslationService::query().
@@ -19,6 +19,12 @@ use Livewire\Attributes\Computed;
  *   default-language topic, almost always because the original article was renamed/removed on
  *   the live site after this translation was made. Also never deleted, but there's no "topic" for
  *   it to attach back to automatically - see HiddenTranslationService::orphanedQuery().
+ * - No database record: a translated file exists on disk with no Url row at all - see
+ *   HiddenTranslationService::scanForFilesWithNoRow().
+ * - Unflagged content: a Url row and its extracted content both exist and are perfectly fine, but
+ *   is_translated was never explicitly set (a page that was already multi-language before this
+ *   admin ever used AI translation, only ever "Extract content"'d, not translated or Recheck'd
+ *   through this tool) - see HiddenTranslationService::unflaggedContentQuery().
  */
 class HiddenTranslations extends Page
 {
@@ -70,6 +76,41 @@ class HiddenTranslations extends Page
     public function nextOrphanPage(): void
     {
         $this->orphanPage++;
+    }
+
+    #[Computed]
+    public function unflaggedContentCount(): int
+    {
+        return app(HiddenTranslationService::class)->unflaggedContentCount();
+    }
+
+    /**
+     * A row from a site that was already multi-language before this admin ever used AI
+     * translation here - discovered normally by SyncService, then just had "Extract content" run
+     * on it - never gets is_translated set (only an actual translation attempt or a live-site
+     * check sets it), so it reads as "missing" everywhere despite its content being right there.
+     * Url::looksTranslated() already patches this at read time, but this actually fixes the
+     * underlying data so it's correct everywhere, including outside this panel's own queries.
+     */
+    public function fixUnflaggedContent(): void
+    {
+        $count = app(HiddenTranslationService::class)->fixUnflaggedContent();
+
+        unset($this->unflaggedContentCount);
+        unset($this->hiddenTranslations);
+        unset($this->orphanedTranslations);
+
+        if ($count === 0) {
+            Notification::make()->title('Nothing to fix')->warning()->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title("Fixed {$count} row(s)")
+            ->body('These already had real translated content, just never got flagged - they now show up correctly in Blog Translation Queue.')
+            ->success()
+            ->send();
     }
 
     /**

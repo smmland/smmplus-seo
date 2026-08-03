@@ -160,7 +160,7 @@ class BlogTranslationQueue extends Page implements HasActions
 
                     $row = $existingByLang->get($language->code);
 
-                    return ! $row || $row->is_translated !== true;
+                    return ! $row || ! $row->looksTranslated();
                 });
 
             foreach ($missingLanguages as $language) {
@@ -327,7 +327,7 @@ class BlogTranslationQueue extends Page implements HasActions
             return 'hidden';
         }
 
-        if (! $row || $row->is_translated !== true) {
+        if (! $row || ! $row->looksTranslated()) {
             return 'missing';
         }
 
@@ -741,7 +741,7 @@ class BlogTranslationQueue extends Page implements HasActions
 
                 $row = $existingByLang->get($language->code);
 
-                return ! $row || $row->is_translated !== true;
+                return ! $row || ! $row->looksTranslated();
             });
 
         if (! $missingLanguage) {
@@ -824,7 +824,7 @@ class BlogTranslationQueue extends Page implements HasActions
 
                 $row = $existingByLang->get($language->code);
 
-                return ! $row || $row->is_translated !== true;
+                return ! $row || ! $row->looksTranslated();
             });
 
         if ($missingLanguages->isEmpty()) {
@@ -1153,7 +1153,7 @@ class BlogTranslationQueue extends Page implements HasActions
                 'name' => $language->name,
                 'isDefault' => $language->is_default,
                 'exists' => (bool) $row,
-                'isTranslated' => $row?->is_translated === true,
+                'isTranslated' => $row !== null && $row->looksTranslated(),
                 'isHidden' => $row !== null && $row->is_active === false,
                 'needsSiteUpdate' => $row && $this->needsSiteUpdate($row),
                 'siteUpdateOverride' => $row?->site_update_override === true,

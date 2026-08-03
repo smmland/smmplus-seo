@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Language;
 use App\Models\SyncRun;
 use App\Models\Url;
 use Illuminate\Support\Facades\Cache;
@@ -129,6 +130,21 @@ class SyncService
                         ->orWhereNull('is_ai_guessed');
                 });
             }
+
+            // Belt-and-suspenders on top of the is_ai_guessed exemption above: a blog translation
+            // (any non-default-language row under pattern_type BLOG) is never something this sync
+            // is meant to govern the lifecycle of at all, regardless of how it got here or whether
+            // is_ai_guessed happens to be set correctly on it - older rows translated before that
+            // column existed, or ones this admin recovered by hand, could still lack the flag and
+            // fall straight back into this same "silently deactivated by the next sync" trap
+            // otherwise. Blog Translation Queue's own tools (delete/reactivate/recheck) are the
+            // only things that should ever flip is_active for one of these - this sync should
+            // never touch them either way.
+            $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
+            $pruneQuery->where(function ($query) use ($defaultLang) {
+                $query->where('pattern_type', '!=', 'BLOG')
+                    ->orWhere('lang', $defaultLang);
+            });
 
             $removed = $pruneQuery->update(['is_active' => false]);
 

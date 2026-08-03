@@ -345,6 +345,12 @@ class BlogAiTranslationService
         $row->pattern_type = $sourceRow->pattern_type;
         $row->slug = $sourceRow->slug;
         $row->is_active = true;
+        // Exempts this row from SyncService's "not in the sitemap -> deactivate" pruning
+        // permanently, regardless of confirmation status - see the migration that added this
+        // column for why that matters.
+        if (Schema::hasColumn('urls', 'is_ai_guessed')) {
+            $row->is_ai_guessed = true;
+        }
         $row->is_translated = true;
         // Deliberately NOT touching translation_checked_at here - that field means "confirmed
         // live via BlogTranslationDetectionService's own fetch", not "we generated content for

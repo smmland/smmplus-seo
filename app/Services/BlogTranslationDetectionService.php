@@ -6,6 +6,7 @@ use App\Models\Language;
 use App\Models\Url;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class BlogTranslationDetectionService
 {
@@ -170,6 +171,12 @@ class BlogTranslationDetectionService
         $row->pattern_type = $defaultRow->pattern_type;
         $row->slug = $defaultRow->slug;
         $row->is_active = true;
+        // Exempts this row from SyncService's "not in the sitemap -> deactivate" pruning
+        // permanently - its source_url is a guessed pattern, not something ever pulled from a
+        // real sitemap, so it's expected to keep being absent from future sitemap fetches too.
+        if (Schema::hasColumn('urls', 'is_ai_guessed')) {
+            $row->is_ai_guessed = true;
+        }
         $row->is_translated = true;
         $row->translation_title = $title;
         $row->translation_checked_at = now();

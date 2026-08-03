@@ -134,6 +134,8 @@
                             <td class="p-1.5">
                                 @if (! $language['exists'])
                                     <x-filament::badge color="gray" size="xs">No content</x-filament::badge>
+                                @elseif ($language['isHidden'] ?? false)
+                                    <x-filament::badge color="warning" size="xs">Hidden</x-filament::badge>
                                 @elseif ($language['needsSiteUpdate'])
                                     <x-filament::badge color="warning" size="xs">Needs site update</x-filament::badge>
                                 @elseif ($language['isTranslated'])
@@ -183,6 +185,8 @@
                     <x-filament::icon icon="heroicon-m-star" class="h-3.5 w-3.5" style="color: rgb(var(--warning-500))" />
                 @elseif (! $language['exists'])
                     <x-filament::icon icon="heroicon-m-minus-circle" class="h-3.5 w-3.5 opacity-50" />
+                @elseif ($language['isHidden'] ?? false)
+                    <x-filament::icon icon="heroicon-m-eye-slash" class="h-3.5 w-3.5" style="color: rgb(var(--warning-600))" />
                 @elseif ($language['needsSiteUpdate'])
                     <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3.5 w-3.5" style="color: rgb(var(--warning-600))" />
                 @elseif ($language['isTranslated'])
@@ -325,7 +329,27 @@
                          this admin panel serves Filament's pre-built CSS bundle, which was never
                          compiled with those specific shades since nothing else in it happens to
                          use them (same root cause as the progress bar's --primary-600 usage). --}}
-                    @if (! $language['isDefault'] && $language['needsSiteUpdate'] && ! $language['translationPending'])
+                    @if (! $language['isDefault'] && ($language['isHidden'] ?? false) && ! $language['translationPending'])
+                        {{-- Never deleted - SyncService only ever flips is_active when a
+                             translation's guessed URL isn't in the real sitemap (which every
+                             AI-guessed URL never is, confirmed live or not - see the migration
+                             that added is_ai_guessed). Reactivating also marks this row
+                             is_ai_guessed so a future sync can't hide it again. --}}
+                        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 text-sm" style="background-color: rgba(var(--warning-500), .1)">
+                            <span style="color: rgb(var(--warning-700))">
+                                This translation still exists but is currently hidden - most likely by an old sitemap-sync bug that's now fixed. It was never deleted, only flagged inactive. Reactivate it to bring it back into the list and make it available for export again.
+                            </span>
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-eye"
+                                wire:click="reactivateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                wire:loading.attr="disabled"
+                            >
+                                Reactivate
+                            </x-filament::button>
+                        </div>
+                    @elseif (! $language['isDefault'] && $language['needsSiteUpdate'] && ! $language['translationPending'])
                         <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 text-sm" style="background-color: rgba(var(--warning-500), .1)">
                             <span style="color: rgb(var(--warning-700))">
                                 @if ($language['siteUpdateOverride'])

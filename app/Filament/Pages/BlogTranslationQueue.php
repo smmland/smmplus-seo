@@ -54,6 +54,7 @@ class BlogTranslationQueue extends Page implements HasActions
         'missing' => 'Has a missing language',
         'needsUpdate' => 'Needs a site update',
         'confirmed' => 'Fully confirmed live',
+        'hidden' => 'Has a hidden translation',
         'all' => 'All topics',
     ];
 
@@ -133,9 +134,11 @@ class BlogTranslationQueue extends Page implements HasActions
                 continue;
             }
 
+            // No is_active filter - a hidden-but-translated row must not be mistaken for
+            // "missing" and re-queued for a fresh (paid) AI translation it doesn't need; it just
+            // needs reactivateLanguage()/reactivateAllHiddenTranslations(), not a re-translate.
             $existingByLang = Url::query()
                 ->where('group_key', $groupKey)
-                ->where('is_active', true)
                 ->get()
                 ->keyBy('lang');
 
@@ -231,9 +234,13 @@ class BlogTranslationQueue extends Page implements HasActions
             return ['topics' => collect(), 'page' => 1, 'lastPage' => 1, 'total' => 0];
         }
 
+        // No is_active filter here (deliberately, unlike the other per-language lookups this
+        // class used to share this same shape with) - a hidden row (SyncService's sitemap-sync
+        // pruning, see needsSiteUpdate()'s neighbor languageState() below) still has to come
+        // through so its language shows as "hidden" instead of silently reading as "missing" and
+        // disappearing from every list, which was exactly the bug being fixed here.
         $existingByGroup = Url::query()
             ->where('pattern_type', 'BLOG')
-            ->where('is_active', true)
             ->whereIn('group_key', $englishRows->pluck('group_key'))
             ->get()
             ->groupBy('group_key');
@@ -280,6 +287,7 @@ class BlogTranslationQueue extends Page implements HasActions
                 'missing' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['missing', 'pending'], true)),
                 'needsUpdate' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['needsUpdate', 'pending'], true)),
                 'confirmed' => $nonDefault->isNotEmpty() && $nonDefault->every(fn (array $l) => $l['state'] === 'confirmed'),
+                'hidden' => $nonDefault->contains(fn (array $l) => $l['state'] === 'hidden'),
                 default => true, // 'all'
             };
         })->values();
@@ -294,10 +302,12 @@ class BlogTranslationQueue extends Page implements HasActions
     }
 
     /**
-     * One of: default (the source language), pending (queued/running), missing (no row, or
-     * exists but never translated), needsUpdate (translated but not confirmed live -
-     * needsSiteUpdate()), confirmed (translated and confirmed live). Mirrors the tab-icon states
-     * already used in the topic details popup, just computed once here for the list view too.
+     * One of: default (the source language), pending (queued/running), hidden (a row exists and
+     * was translated, but is_active is false - see SyncService's is_ai_guessed exemption),
+     * missing (no row, or exists but never translated), needsUpdate (translated but not
+     * confirmed live - needsSiteUpdate()), confirmed (translated and confirmed live). Mirrors the
+     * tab-icon states already used in the topic details popup, just computed once here for the
+     * list view too.
      */
     private function languageState(Language $language, ?Url $row, array $pendingLangs): string
     {
@@ -307,6 +317,13 @@ class BlogTranslationQueue extends Page implements HasActions
 
         if (in_array($language->code, $pendingLangs, true)) {
             return 'pending';
+        }
+
+        // Checked before "missing" - a hidden-but-translated row must never read the same as
+        // "never translated", or reactivateLanguage()/reactivateAllHiddenTranslations() would
+        // have nothing left for the admin to actually find and recover.
+        if ($row && $row->is_active === false) {
+            return 'hidden';
         }
 
         if (! $row || $row->is_translated !== true) {
@@ -381,6 +398,103 @@ class BlogTranslationQueue extends Page implements HasActions
             ->body($row->site_update_override
                 ? 'This language will show as needing an update regardless of what the automatic check found, until you clear this or retranslate it.'
                 : 'Handed back to the automatic live check.')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * How many translated (non-default) languages are currently hidden (is_active = false)
+     * across every blog topic - shown as a recovery banner at the top of the list so the answer
+     * to "did those disappear or are they just hidden" is visible without hunting through
+     * individual topics: nothing SyncService does ever calls delete(), it only ever flips this
+     * flag, so this count is always the complete, accurate list of what's recoverable.
+     */
+    #[Computed]
+    public function hiddenTranslationsCount(): int
+    {
+        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        return Url::query()
+            ->where('pattern_type', 'BLOG')
+            ->where('is_active', false)
+            ->where('is_translated', true)
+            ->where('lang', '!=', $defaultLangCode)
+            ->count();
+    }
+
+    /**
+     * One-click recovery for every hidden translation across every topic at once - the bulk
+     * counterpart to reactivateLanguage() below, for when a sync has hidden more than a handful
+     * and going through them one language at a time isn't practical.
+     */
+    public function reactivateAllHiddenTranslations(): void
+    {
+        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        $query = Url::query()
+            ->where('pattern_type', 'BLOG')
+            ->where('is_active', false)
+            ->where('is_translated', true)
+            ->where('lang', '!=', $defaultLangCode);
+
+        $count = $query->count();
+
+        if ($count === 0) {
+            Notification::make()->title('Nothing to reactivate')->warning()->send();
+
+            return;
+        }
+
+        $updates = ['is_active' => true];
+
+        // Marks every recovered row as AI-guessed too (not just newly-created ones), so
+        // SyncService's pruning permanently leaves it alone from now on instead of hiding it
+        // again on some future sync - see the migration that added this column.
+        if (Schema::hasColumn('urls', 'is_ai_guessed')) {
+            $updates['is_ai_guessed'] = true;
+        }
+
+        $query->update($updates);
+
+        unset($this->queue);
+        unset($this->hiddenTranslationsCount);
+
+        Notification::make()
+            ->title("Reactivated {$count} hidden translation(s)")
+            ->body('They\'re visible again and won\'t be hidden by a sitemap sync anymore.')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Brings back one hidden language for one topic - the row and its content were never
+     * deleted (SyncService only ever flips is_active), so this just flips it back and marks it
+     * AI-guessed (in case it predates that column) so a future sync can't hide it again.
+     */
+    public function reactivateLanguage(string $groupKey, string $targetLangCode): void
+    {
+        $row = Url::query()->where('group_key', $groupKey)->where('lang', $targetLangCode)->first();
+
+        if (! $row) {
+            Notification::make()->title('Nothing to reactivate')->warning()->send();
+
+            return;
+        }
+
+        $row->is_active = true;
+
+        if (Schema::hasColumn('urls', 'is_ai_guessed')) {
+            $row->is_ai_guessed = true;
+        }
+
+        $row->save();
+
+        unset($this->queue);
+        unset($this->hiddenTranslationsCount);
+
+        Notification::make()
+            ->title('Reactivated')
+            ->body('This translation is visible again and won\'t be hidden by a sitemap sync anymore.')
             ->success()
             ->send();
     }
@@ -661,9 +775,10 @@ class BlogTranslationQueue extends Page implements HasActions
             return;
         }
 
+        // No is_active filter - a hidden-but-translated row must not be mistaken for "missing"
+        // and re-queued for a fresh (paid) AI translation it doesn't need.
         $existingByLang = Url::query()
             ->where('group_key', $groupKey)
-            ->where('is_active', true)
             ->get()
             ->keyBy('lang');
 
@@ -743,9 +858,10 @@ class BlogTranslationQueue extends Page implements HasActions
             return;
         }
 
+        // No is_active filter - a hidden-but-translated row must not be mistaken for "missing"
+        // and re-queued for a fresh (paid) AI translation it doesn't need.
         $existingByLang = Url::query()
             ->where('group_key', $groupKey)
-            ->where('is_active', true)
             ->get()
             ->keyBy('lang');
 
@@ -872,10 +988,12 @@ class BlogTranslationQueue extends Page implements HasActions
             return null;
         }
 
+        // No is_active filter - exporting a hidden-but-translated language still makes sense
+        // (this export exists precisely to copy content onto the live site, which is also how an
+        // admin would recover from finding one hidden via reactivateLanguage() below).
         $rows = Url::query()
             ->where('group_key', $groupKey)
             ->where('pattern_type', 'BLOG')
-            ->where('is_active', true)
             ->whereIn('lang', $langCodes)
             ->get()
             ->keyBy('lang');
@@ -1043,10 +1161,11 @@ class BlogTranslationQueue extends Page implements HasActions
     {
         $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
 
+        // No is_active filter - a hidden row still needs to reach the popup so its language can
+        // show the "hidden, reactivate?" banner below instead of silently looking untranslated.
         $rows = Url::query()
             ->where('group_key', $groupKey)
             ->where('pattern_type', 'BLOG')
-            ->where('is_active', true)
             ->get()
             ->keyBy('lang');
 
@@ -1094,6 +1213,7 @@ class BlogTranslationQueue extends Page implements HasActions
                 'isDefault' => $language->is_default,
                 'exists' => (bool) $row,
                 'isTranslated' => $row?->is_translated === true,
+                'isHidden' => $row !== null && $row->is_active === false,
                 'needsSiteUpdate' => $row && $this->needsSiteUpdate($row),
                 'siteUpdateOverride' => $row?->site_update_override === true,
                 'translationCheckedAt' => $row?->translation_checked_at,

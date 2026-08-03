@@ -10,7 +10,7 @@ class Url extends Model
 
     protected $fillable = [
         'source_url', 'path', 'lang', 'pattern_type', 'slug', 'group_key',
-        'source_lastmod', 'priority', 'changefreq', 'is_hidden', 'is_manual',
+        'source_lastmod', 'priority', 'changefreq', 'is_hidden', 'is_manual', 'is_ai_guessed',
         'is_active', 'first_seen_at', 'last_seen_at',
         'translation_title', 'is_translated', 'translation_checked_at', 'translation_check_note', 'auto_hidden_for_translation',
         'site_update_override',
@@ -28,6 +28,7 @@ class Url extends Model
             'last_seen_at' => 'datetime',
             'is_hidden' => 'boolean',
             'is_manual' => 'boolean',
+            'is_ai_guessed' => 'boolean',
             'is_active' => 'boolean',
             'priority' => 'float',
             'is_translated' => 'boolean',

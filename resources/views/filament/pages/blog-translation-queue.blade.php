@@ -92,6 +92,34 @@
             @endif
         </x-filament::section>
 
+        {{-- Nothing SyncService does ever calls delete() on a translated row - it only ever
+             flips is_active when a guessed translation URL isn't in the real sitemap (see
+             SyncService's is_ai_guessed exemption). This banner exists to answer "did those
+             disappear or are they just hidden" directly, and to make recovering them a single
+             click instead of a mystery. --}}
+        @if ($this->hiddenTranslationsCount > 0)
+            <x-filament::section>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <x-filament::icon icon="heroicon-o-eye-slash" class="mt-0.5 h-5 w-5 shrink-0" style="color: rgb(var(--warning-600))" />
+                        <span>
+                            <strong>{{ $this->hiddenTranslationsCount }}</strong> translation{{ $this->hiddenTranslationsCount === 1 ? '' : 's' }} across your topics {{ $this->hiddenTranslationsCount === 1 ? 'is' : 'are' }} currently hidden - most likely by a sitemap-sync bug that's now fixed. Nothing was deleted, they were only flagged inactive. Use the "Has a hidden translation" filter above to review them one at a time, or reactivate everything at once now.
+                        </span>
+                    </div>
+                    <x-filament::button
+                        size="sm"
+                        color="warning"
+                        icon="heroicon-o-eye"
+                        wire:click="reactivateAllHiddenTranslations"
+                        wire:loading.attr="disabled"
+                        wire:confirm="Reactivate all {{ $this->hiddenTranslationsCount }} hidden translation(s)? They'll become visible again and protected from being hidden by a future sitemap sync."
+                    >
+                        Reactivate all
+                    </x-filament::button>
+                </div>
+            </x-filament::section>
+        @endif
+
         <x-filament::section>
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <input
@@ -219,6 +247,7 @@
                                                     'missing' => 'Not translated',
                                                     'needsUpdate' => 'Translated - needs a site update',
                                                     'confirmed' => 'Confirmed live',
+                                                    'hidden' => 'Hidden - was translated, now hidden (probably by a sitemap sync) - open Details to reactivate it',
                                                 } }}"
                                             >
                                                 {{ strtoupper($language['code']) }}
@@ -234,6 +263,9 @@
                                                         @break
                                                     @case('confirmed')
                                                         <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" style="color: rgb(var(--success-600))" />
+                                                        @break
+                                                    @case('hidden')
+                                                        <x-filament::icon icon="heroicon-m-eye-slash" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
                                                         @break
                                                     @default
                                                         <x-filament::icon icon="heroicon-m-x-circle" class="h-3 w-3 opacity-50" />

@@ -6,14 +6,19 @@ use App\Models\Url;
 use App\Services\HiddenTranslationService;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Computed;
 
 /**
- * A dedicated, detailed view of every translation SyncService has hidden (is_active = false) -
- * the Blog Translation Queue page already surfaces these via its "hidden" filter and a
- * dismiss-in-place banner, but this page exists for when the admin wants to see all of them at
- * once with when they were translated/last checked and their status, rather than hunting through
- * individual topics.
+ * A dedicated, detailed view of every translation that isn't showing up in the normal Blog
+ * Translation Queue list, for two unrelated reasons:
+ *
+ * - Hidden: SyncService flagged it is_active = false because its guessed URL wasn't in the real
+ *   sitemap. Never deleted, just not shown - see HiddenTranslationService::query().
+ * - Orphaned: its group_key ("blog:{old-slug}") no longer matches any currently-active
+ *   default-language topic, almost always because the original article was renamed/removed on
+ *   the live site after this translation was made. Also never deleted, but there's no "topic" for
+ *   it to attach back to automatically - see HiddenTranslationService::orphanedQuery().
  */
 class HiddenTranslations extends Page
 {
@@ -31,6 +36,10 @@ class HiddenTranslations extends Page
 
     public int $page = 1;
 
+    public string $orphanSearch = '';
+
+    public int $orphanPage = 1;
+
     private const PER_PAGE = 20;
 
     public function updatedSearch(): void
@@ -46,6 +55,21 @@ class HiddenTranslations extends Page
     public function nextPage(): void
     {
         $this->page++;
+    }
+
+    public function updatedOrphanSearch(): void
+    {
+        $this->orphanPage = 1;
+    }
+
+    public function previousOrphanPage(): void
+    {
+        $this->orphanPage = max(1, $this->orphanPage - 1);
+    }
+
+    public function nextOrphanPage(): void
+    {
+        $this->orphanPage++;
     }
 
     /**
@@ -91,6 +115,46 @@ class HiddenTranslations extends Page
         return ['items' => $items, 'page' => $page, 'lastPage' => $lastPage, 'total' => $total];
     }
 
+    /**
+     * @return array{items: \Illuminate\Support\Collection, page: int, lastPage: int, total: int}
+     */
+    #[Computed]
+    public function orphanedTranslations(): array
+    {
+        $hidden = app(HiddenTranslationService::class);
+        $query = $hidden->orphanedQuery();
+
+        if ($this->orphanSearch !== '') {
+            $query->where(function ($q) {
+                $q->where('slug', 'like', "%{$this->orphanSearch}%")
+                    ->orWhere('article_title', 'like', "%{$this->orphanSearch}%")
+                    ->orWhere('source_url', 'like', "%{$this->orphanSearch}%");
+            });
+        }
+
+        $total = (clone $query)->count();
+        $lastPage = max(1, (int) ceil($total / self::PER_PAGE));
+        $page = max(1, min($this->orphanPage, $lastPage));
+
+        $rows = $query->orderByRaw('COALESCE(translation_checked_at, last_seen_at) desc')
+            ->forPage($page, self::PER_PAGE)
+            ->get();
+
+        $items = $rows->map(function (Url $row) {
+            $previewPath = "blog/{$row->slug}/preview-{$row->lang}.html";
+            $editedPreviewPath = "blog/{$row->slug}/edited-preview-{$row->lang}.html";
+
+            return [
+                'row' => $row,
+                'previewUrl' => Storage::disk('public')->exists($editedPreviewPath)
+                    ? url('/blog-content/'.$editedPreviewPath)
+                    : (Storage::disk('public')->exists($previewPath) ? url('/blog-content/'.$previewPath) : null),
+            ];
+        });
+
+        return ['items' => $items, 'page' => $page, 'lastPage' => $lastPage, 'total' => $total];
+    }
+
     public function reactivate(int $urlId): void
     {
         $row = Url::query()->find($urlId);
@@ -104,6 +168,7 @@ class HiddenTranslations extends Page
         app(HiddenTranslationService::class)->reactivate($row);
 
         unset($this->hiddenTranslations);
+        unset($this->orphanedTranslations);
 
         Notification::make()
             ->title('Reactivated')
@@ -124,10 +189,42 @@ class HiddenTranslations extends Page
 
         $this->page = 1;
         unset($this->hiddenTranslations);
+        unset($this->orphanedTranslations);
 
         Notification::make()
             ->title("Reactivated {$count} hidden translation(s)")
             ->body('They\'re visible again and won\'t be hidden by a sitemap sync anymore.')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * For an orphaned row specifically - there's no topic left for it to reattach to
+     * automatically, so once the admin has opened its preview and copied whatever they still
+     * needed from it, this clears it out. Mirrors BlogTranslationQueue::deleteTranslation()'s own
+     * cleanup (content/preview files plus the row itself).
+     */
+    public function deleteOrphaned(int $urlId): void
+    {
+        $row = Url::query()->find($urlId);
+
+        if (! $row) {
+            return;
+        }
+
+        $baseDir = "blog/{$row->slug}";
+        Storage::disk('public')->delete([
+            "{$baseDir}/content-{$row->lang}.html",
+            "{$baseDir}/preview-{$row->lang}.html",
+            "{$baseDir}/edited-preview-{$row->lang}.html",
+        ]);
+
+        $row->delete();
+
+        unset($this->orphanedTranslations);
+
+        Notification::make()
+            ->title('Deleted')
             ->success()
             ->send();
     }

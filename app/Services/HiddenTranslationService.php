@@ -73,4 +73,38 @@ class HiddenTranslationService
 
         return $count;
     }
+
+    /**
+     * A second, unrelated way a translation can become invisible in every list, is_active aside:
+     * group_key for a blog post is always "blog:{slug}" (UrlClassifierService), fixed on the
+     * translation row at the moment it was created (BlogAiTranslationService::saveTranslation()).
+     * If the original article's own slug/URL later changes (renamed on the live site) or its
+     * default-language row stops being active, the default-language sync keeps recalculating
+     * *that* row's own group_key/is_active - but nothing ever goes back and updates the
+     * translation rows that were keyed to its old group_key. Every list here (including "hidden"
+     * above) is built by walking active default-language topics outward to their translations, so
+     * a row stuck on a group_key with no matching active default row is never reached by any of
+     * them - translated, not deleted, just orphaned from the topic it was translated for.
+     */
+    public function orphanedQuery(): Builder
+    {
+        $defaultLang = $this->defaultLangCode();
+
+        $activeGroupKeys = Url::query()
+            ->where('pattern_type', 'BLOG')
+            ->where('lang', $defaultLang)
+            ->where('is_active', true)
+            ->pluck('group_key');
+
+        return Url::query()
+            ->where('pattern_type', 'BLOG')
+            ->where('lang', '!=', $defaultLang)
+            ->where('is_translated', true)
+            ->whereNotIn('group_key', $activeGroupKeys);
+    }
+
+    public function orphanedCount(): int
+    {
+        return $this->orphanedQuery()->count();
+    }
 }

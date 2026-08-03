@@ -228,4 +228,73 @@ class HiddenTranslations extends Page
             ->success()
             ->send();
     }
+
+    // null until the admin explicitly runs the scan - walking every blog/{slug}/ directory on
+    // disk is more work than the two queries above, so this only happens on demand rather than on
+    // every page load/poll.
+    public ?array $diskScanResults = null;
+
+    public function scanDisk(): void
+    {
+        $this->diskScanResults = app(HiddenTranslationService::class)->scanForFilesWithNoRow();
+
+        Notification::make()
+            ->title(count($this->diskScanResults) > 0
+                ? count($this->diskScanResults).' file(s) found with no database record'
+                : 'Nothing found')
+            ->body(count($this->diskScanResults) > 0
+                ? 'These are real translated files on disk - recover each one to bring it back into every list, or delete it if you don\'t need it.'
+                : 'Every translated file on disk already has a matching database record.')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Turns one scan result back into a real, working Url row (HiddenTranslationService::
+     * recoverFileAsRow()) - after this, the topic shows up normally everywhere (Blog Translation
+     * Queue, and this page's own Hidden/Orphaned sections if it turns out to need either).
+     */
+    public function recoverFromDisk(string $slug, string $lang): void
+    {
+        app(HiddenTranslationService::class)->recoverFileAsRow($slug, $lang);
+
+        $this->diskScanResults = collect($this->diskScanResults)
+            ->reject(fn (array $r) => $r['slug'] === $slug && $r['lang'] === $lang)
+            ->values()
+            ->all();
+
+        unset($this->hiddenTranslations);
+        unset($this->orphanedTranslations);
+
+        Notification::make()
+            ->title('Recovered')
+            ->body('A database record now exists for this file - it shows up in Blog Translation Queue as needing a site-update confirmation, since there\'s no record of whether it was ever actually live.')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * For a scan result the admin has decided not to recover (e.g. genuinely stale content from
+     * an article that's long gone) - deletes just the file, since there's no database row to go
+     * with it.
+     */
+    public function deleteDiskFile(string $slug, string $lang): void
+    {
+        $baseDir = "blog/{$slug}";
+        Storage::disk('public')->delete([
+            "{$baseDir}/content-{$lang}.html",
+            "{$baseDir}/preview-{$lang}.html",
+            "{$baseDir}/edited-preview-{$lang}.html",
+        ]);
+
+        $this->diskScanResults = collect($this->diskScanResults)
+            ->reject(fn (array $r) => $r['slug'] === $slug && $r['lang'] === $lang)
+            ->values()
+            ->all();
+
+        Notification::make()
+            ->title('Deleted')
+            ->success()
+            ->send();
+    }
 }

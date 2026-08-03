@@ -272,4 +272,85 @@
             </div>
         @endif
     </x-filament::section>
+
+    <x-filament::section
+        heading="Files with no database record"
+        description="A translated file can exist on disk with no database row pointing at it at all - deeper than hidden or orphaned above (both still have a row to find). This happens if a topic was ever renamed after a translation was made and then deleted: the delete looked for the file under the new name and missed it, removing only the database row. Run a scan to find any of these and recover them."
+    >
+        <div class="mb-3">
+            <x-filament::button
+                size="sm"
+                color="gray"
+                icon="heroicon-o-magnifying-glass"
+                wire:click="scanDisk"
+                wire:loading.attr="disabled"
+                wire:target="scanDisk"
+            >
+                Scan disk for content with no database record
+            </x-filament::button>
+        </div>
+
+        @if ($diskScanResults === null)
+            <p class="text-sm text-gray-500 dark:text-gray-400">Not run yet.</p>
+        @elseif (empty($diskScanResults))
+            <p class="text-sm text-gray-500 dark:text-gray-400">Nothing found - every translated file on disk has a matching database record.</p>
+        @else
+            <div class="overflow-x-auto">
+                <table class="fi-ta-table w-full text-start">
+                    <thead>
+                        <tr>
+                            <th class="p-2 text-start text-sm font-semibold">#</th>
+                            <th class="p-2 text-start text-sm font-semibold">Slug</th>
+                            <th class="p-2 text-start text-sm font-semibold">Language</th>
+                            <th class="p-2 text-start text-sm font-semibold">File size</th>
+                            <th class="p-2 text-start text-sm font-semibold">Last modified</th>
+                            <th class="p-2 text-start text-sm font-semibold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($diskScanResults as $i => $result)
+                            <tr wire:key="diskscan-{{ $result['slug'] }}-{{ $result['lang'] }}" class="border-t border-gray-100 dark:border-white/5 align-top">
+                                <td class="p-2 text-sm text-gray-500 dark:text-gray-400">{{ $i + 1 }}</td>
+                                <td class="p-2 text-gray-700 dark:text-gray-200">{{ $result['slug'] }}</td>
+                                <td class="p-2">
+                                    <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 dark:text-gray-300 dark:ring-white/10">
+                                        {{ strtoupper($result['lang']) }}
+                                    </span>
+                                </td>
+                                <td class="p-2 text-sm text-gray-600 dark:text-gray-300">{{ number_format($result['size'] / 1024, 1) }} KB</td>
+                                <td class="p-2 text-sm text-gray-600 dark:text-gray-300">{{ $result['modifiedAt']->diffForHumans() }}</td>
+                                <td class="p-2">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <x-filament::button
+                                            size="sm"
+                                            color="success"
+                                            icon="heroicon-o-arrow-path"
+                                            wire:click="recoverFromDisk({{ Illuminate\Support\Js::from($result['slug']) }}, {{ Illuminate\Support\Js::from($result['lang']) }})"
+                                            wire:loading.attr="disabled"
+                                        >
+                                            Recover
+                                        </x-filament::button>
+                                        <x-filament::button
+                                            size="sm"
+                                            color="danger"
+                                            outlined
+                                            icon="heroicon-o-trash"
+                                            wire:click="deleteDiskFile({{ Illuminate\Support\Js::from($result['slug']) }}, {{ Illuminate\Support\Js::from($result['lang']) }})"
+                                            wire:confirm="Delete this file permanently? There's no database record and no way to undo this."
+                                        >
+                                            Delete
+                                        </x-filament::button>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="mt-3 text-xs text-gray-400 dark:text-gray-500">
+                {{ count($diskScanResults) }} file{{ count($diskScanResults) === 1 ? '' : 's' }} found
+            </p>
+        @endif
+    </x-filament::section>
 </x-filament-panels::page>

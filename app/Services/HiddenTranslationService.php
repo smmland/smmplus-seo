@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Language;
 use App\Models\Url;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Recovery for translations SyncService has hidden (is_active = false, see the is_ai_guessed
@@ -106,5 +108,130 @@ class HiddenTranslationService
     public function orphanedCount(): int
     {
         return $this->orphanedQuery()->count();
+    }
+
+    /**
+     * A third, more severe way a translation can be invisible everywhere: hidden and orphaned
+     * above both still have a database row to find (is_active=false, or a stale group_key) - this
+     * finds translated content files on disk (storage/app/public/blog/{slug}/content-{lang}.html)
+     * with no Url row at all for that slug+lang, in any state. saveTranslation() always writes
+     * the database row before the content file, so this shouldn't happen from a translation made
+     * through this tool working normally - but deleteTranslation()'s file cleanup targets paths
+     * built from the row's *current* slug, so if a topic was ever recategorized (slug changed)
+     * between when a translation was made and when it was deleted, that cleanup silently misses
+     * the file saved under the old slug while still deleting the row - leaving exactly this: a
+     * real, readable translated file with nothing in the database pointing at it anymore.
+     *
+     * @return array<int, array{slug: string, lang: string, path: string, size: int, modifiedAt: \Illuminate\Support\Carbon}>
+     */
+    public function scanForFilesWithNoRow(): array
+    {
+        $disk = Storage::disk('public');
+        $defaultLang = $this->defaultLangCode();
+        $found = [];
+
+        if (! $disk->exists('blog')) {
+            return $found;
+        }
+
+        foreach ($disk->directories('blog') as $slugDir) {
+            $slug = basename($slugDir);
+
+            foreach ($disk->files($slugDir) as $file) {
+                if (! preg_match('/^content-([a-z]{2,3})\.html$/', basename($file), $m)) {
+                    continue;
+                }
+
+                $lang = $m[1];
+
+                if ($lang === $defaultLang) {
+                    continue;
+                }
+
+                $exists = Url::query()
+                    ->where('group_key', "blog:{$slug}")
+                    ->where('lang', $lang)
+                    ->exists();
+
+                if ($exists) {
+                    continue;
+                }
+
+                $found[] = [
+                    'slug' => $slug,
+                    'lang' => $lang,
+                    'path' => $file,
+                    'size' => $disk->size($file),
+                    'modifiedAt' => Carbon::createFromTimestamp($disk->lastModified($file)),
+                ];
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * Recreates a Url row for a file scanForFilesWithNoRow() found, from the file itself - the
+     * content is real and complete, only the database record pointing at it was ever missing.
+     * The recovered row starts as "translated, not yet confirmed live" (needsSiteUpdate() reads
+     * true from the null translation_checked_at, same as any other fresh translation) rather than
+     * guessing at its real status, since there's no record of when or whether it was ever
+     * actually confirmed against the live site.
+     */
+    public function recoverFileAsRow(string $slug, string $lang): Url
+    {
+        $groupKey = "blog:{$slug}";
+        $defaultLang = $this->defaultLangCode();
+
+        $englishRow = Url::query()
+            ->where('group_key', $groupKey)
+            ->where('lang', $defaultLang)
+            ->first();
+
+        $scheme = $englishRow ? (parse_url($englishRow->source_url, PHP_URL_SCHEME) ?: 'https') : 'https';
+        $host = $englishRow ? parse_url($englishRow->source_url, PHP_URL_HOST) : null;
+
+        if (! $host) {
+            $anyRow = Url::query()->whereNotNull('source_url')->first();
+            $host = $anyRow ? parse_url($anyRow->source_url, PHP_URL_HOST) : null;
+        }
+
+        $sourceUrl = $host ? "{$scheme}://{$host}/{$lang}/blog/{$slug}" : "https://unknown-host/{$lang}/blog/{$slug}";
+
+        $contentPath = "blog/{$slug}/content-{$lang}.html";
+        $previewPath = "blog/{$slug}/preview-{$lang}.html";
+
+        // The content file itself is just the article body (no <title> tag to read) - but the
+        // preview file wrapping it is a full document with one, built from whatever title was on
+        // record at translation time (BlogAiTranslationService::saveTranslation()).
+        $articleTitle = null;
+        if (Storage::disk('public')->exists($previewPath)) {
+            $previewHtml = Storage::disk('public')->get($previewPath);
+            if (preg_match('/<title>(.*?)\s*-\s*preview<\/title>/s', $previewHtml, $m)) {
+                $articleTitle = html_entity_decode(trim($m[1]));
+            }
+        }
+
+        $attributes = [
+            'source_url' => $sourceUrl,
+            'path' => "/{$lang}/blog/{$slug}",
+            'pattern_type' => 'BLOG',
+            'slug' => $slug,
+            'is_active' => true,
+            'is_translated' => true,
+            'article_title' => $articleTitle,
+            'content_extraction_path' => $contentPath,
+            'content_extracted_at' => Storage::disk('public')->lastModified($contentPath)
+                ? Carbon::createFromTimestamp(Storage::disk('public')->lastModified($contentPath))
+                : now(),
+            'first_seen_at' => now(),
+            'last_seen_at' => now(),
+        ];
+
+        if (Schema::hasColumn('urls', 'is_ai_guessed')) {
+            $attributes['is_ai_guessed'] = true;
+        }
+
+        return Url::query()->create(array_merge(['group_key' => $groupKey, 'lang' => $lang], $attributes));
     }
 }

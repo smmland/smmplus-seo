@@ -93,9 +93,21 @@
         </x-filament::section>
 
         <x-filament::section>
-        @if ($this->queue->isEmpty())
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <input
+                    type="text"
+                    wire:model.live.debounce.400ms="search"
+                    placeholder="Search by slug, title, or URL…"
+                    class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                >
+                <p class="text-xs text-gray-400 dark:text-gray-500">
+                    {{ $this->queue['total'] }} topic{{ $this->queue['total'] === 1 ? '' : 's' }}
+                </p>
+            </div>
+
+        @if ($this->queue['topics']->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">
-                Every blog topic is fully translated and confirmed live.
+                {{ $search !== '' ? 'No topics match that search.' : 'No blog topics found yet.' }}
             </p>
         @else
             <div class="overflow-x-auto">
@@ -104,13 +116,12 @@
                         <tr>
                             <th class="p-2 text-start text-sm font-semibold">#</th>
                             <th class="p-2 text-start text-sm font-semibold">Topic (default language)</th>
-                            <th class="p-2 text-start text-sm font-semibold">Missing languages</th>
-                            <th class="p-2 text-start text-sm font-semibold">Needs site update</th>
+                            <th class="p-2 text-start text-sm font-semibold">Translation status</th>
                             <th class="p-2 text-start text-sm font-semibold">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($this->queue as $topic)
+                        @foreach ($this->queue['topics'] as $topic)
                             <tr wire:key="topic-{{ $topic['url']->id }}" class="border-t border-gray-100 dark:border-white/5 align-top">
                                 <td class="p-2 text-sm text-gray-500 dark:text-gray-400">
                                     {{ $loop->iteration }}
@@ -121,17 +132,39 @@
                                     </a>
                                 </td>
                                 <td class="p-2">
+                                    {{-- One badge per active language, colored/iconed by state - same visual
+                                         language as the tab pills in the topic details popup (see that view's
+                                         comment for why plain text-{color}-{shade} utilities aren't used here). --}}
                                     <div class="flex flex-wrap gap-1">
-                                        @foreach ($topic['missing'] as $language)
-                                            @if (in_array($language->code, $topic['pendingLangs'], true))
-                                                <x-filament::badge color="primary" size="xs" icon="heroicon-o-sparkles">
-                                                    {{ $language->code }}
-                                                </x-filament::badge>
-                                            @else
-                                                <x-filament::badge color="danger" size="xs">
-                                                    {{ $language->code }}
-                                                </x-filament::badge>
-                                            @endif
+                                        @foreach ($topic['languages'] as $language)
+                                            <span
+                                                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 dark:text-gray-300 dark:ring-white/10"
+                                                title="{{ $language['name'] }}: {{ match ($language['state']) {
+                                                    'default' => 'Default language',
+                                                    'pending' => 'Translating…',
+                                                    'missing' => 'Not translated',
+                                                    'needsUpdate' => 'Translated - needs a site update',
+                                                    'confirmed' => 'Confirmed live',
+                                                } }}"
+                                            >
+                                                {{ strtoupper($language['code']) }}
+                                                @switch($language['state'])
+                                                    @case('default')
+                                                        <x-filament::icon icon="heroicon-m-star" class="h-3 w-3" style="color: rgb(var(--warning-500))" />
+                                                        @break
+                                                    @case('pending')
+                                                        <x-filament::loading-indicator class="h-3 w-3" />
+                                                        @break
+                                                    @case('needsUpdate')
+                                                        <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
+                                                        @break
+                                                    @case('confirmed')
+                                                        <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" style="color: rgb(var(--success-600))" />
+                                                        @break
+                                                    @default
+                                                        <x-filament::icon icon="heroicon-m-x-circle" class="h-3 w-3 opacity-50" />
+                                                @endswitch
+                                            </span>
                                         @endforeach
                                     </div>
 
@@ -139,22 +172,6 @@
                                         <div class="bt-progress-track" style="margin-top: 6px;">
                                             <div class="bt-progress-bar"></div>
                                         </div>
-                                    @endif
-                                </td>
-                                <td class="p-2">
-                                    @if ($topic['needsUpdate']->isNotEmpty())
-                                        <div class="flex flex-wrap gap-1">
-                                            @foreach ($topic['needsUpdate'] as $language)
-                                                <x-filament::badge color="warning" size="xs" icon="heroicon-o-arrow-up-tray">
-                                                    {{ $language->code }}
-                                                </x-filament::badge>
-                                            @endforeach
-                                        </div>
-                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                                            Translated in this tool - copy it onto the live site, then click Recheck.
-                                        </p>
-                                    @else
-                                        <span class="text-xs text-gray-400 dark:text-gray-500">—</span>
                                     @endif
                                 </td>
                                 <td class="p-2">
@@ -202,6 +219,35 @@
                     </tbody>
                 </table>
             </div>
+
+            @if ($this->queue['lastPage'] > 1)
+                <div class="mt-3 flex items-center justify-between gap-3">
+                    <p class="text-xs text-gray-400 dark:text-gray-500">
+                        Page {{ $this->queue['page'] }} of {{ $this->queue['lastPage'] }}
+                    </p>
+                    <div class="flex items-center gap-2">
+                        <x-filament::button
+                            size="sm"
+                            color="gray"
+                            icon="heroicon-o-chevron-left"
+                            :disabled="$this->queue['page'] <= 1"
+                            wire:click="previousQueuePage"
+                        >
+                            Previous
+                        </x-filament::button>
+                        <x-filament::button
+                            size="sm"
+                            color="gray"
+                            icon="heroicon-o-chevron-right"
+                            icon-position="after"
+                            :disabled="$this->queue['page'] >= $this->queue['lastPage']"
+                            wire:click="nextQueuePage"
+                        >
+                            Next
+                        </x-filament::button>
+                    </div>
+                </div>
+            @endif
         @endif
     </x-filament::section>
     </div>

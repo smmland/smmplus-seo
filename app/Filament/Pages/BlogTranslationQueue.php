@@ -33,26 +33,68 @@ class BlogTranslationQueue extends Page implements HasActions
 
     protected static string $view = 'filament.pages.blog-translation-queue';
 
+    public string $search = '';
+
+    public int $queuePage = 1;
+
+    // Every blog topic is shown here (not just ones missing something) - the admin asked for a
+    // single browsable list they can search/paginate to find and re-translate any topic, not
+    // only ones currently flagged as needing attention.
+    private const QUEUE_PER_PAGE = 20;
+
+    public function updatedSearch(): void
+    {
+        $this->queuePage = 1;
+    }
+
+    public function previousQueuePage(): void
+    {
+        $this->queuePage = max(1, $this->queuePage - 1);
+    }
+
+    public function nextQueuePage(): void
+    {
+        $this->queuePage++;
+    }
+
+    /**
+     * @return array{topics: \Illuminate\Support\Collection, page: int, lastPage: int, total: int}
+     */
     #[Computed]
     public function queue()
     {
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
 
+        // All active languages including the default one - the unified status column shows every
+        // language's state for a topic, default included (as a distinct "source language" badge),
+        // rather than needing a separate column just for that.
         $activeLanguages = Language::query()
             ->where('is_active', true)
-            ->where('is_default', false)
+            ->orderByRaw('is_default desc')
             ->orderBy('sort_order')
-            ->get(['code', 'name']);
+            ->get(['code', 'name', 'is_default']);
 
-        $englishRows = Url::query()
+        $englishQuery = Url::query()
             ->where('pattern_type', 'BLOG')
             ->where('is_active', true)
-            ->where('lang', $defaultLang)
-            ->orderBy('source_url')
-            ->get();
+            ->where('lang', $defaultLang);
+
+        if ($this->search !== '') {
+            $englishQuery->where(function ($query) {
+                $query->where('slug', 'like', "%{$this->search}%")
+                    ->orWhere('article_title', 'like', "%{$this->search}%")
+                    ->orWhere('source_url', 'like', "%{$this->search}%");
+            });
+        }
+
+        $total = (clone $englishQuery)->count();
+        $lastPage = max(1, (int) ceil($total / self::QUEUE_PER_PAGE));
+        $page = max(1, min($this->queuePage, $lastPage));
+
+        $englishRows = $englishQuery->orderBy('source_url')->forPage($page, self::QUEUE_PER_PAGE)->get();
 
         if ($englishRows->isEmpty()) {
-            return collect();
+            return ['topics' => collect(), 'page' => $page, 'lastPage' => $lastPage, 'total' => $total];
         }
 
         $existingByGroup = Url::query()
@@ -70,31 +112,51 @@ class BlogTranslationQueue extends Page implements HasActions
                 ->groupBy('group_key')
             : collect();
 
-        return $englishRows
-            ->map(function (Url $englishRow) use ($existingByGroup, $activeLanguages, $pendingByGroup) {
-                $existingForGroup = $existingByGroup->get($englishRow->group_key, collect())->keyBy('lang');
+        $topics = $englishRows->map(function (Url $englishRow) use ($existingByGroup, $activeLanguages, $pendingByGroup) {
+            $existingForGroup = $existingByGroup->get($englishRow->group_key, collect())->keyBy('lang');
+            $pendingLangs = $pendingByGroup->get($englishRow->group_key, collect())->pluck('target_lang')->all();
 
-                $missing = $activeLanguages->filter(function (Language $language) use ($existingForGroup) {
-                    $row = $existingForGroup->get($language->code);
-
-                    return ! $row || $row->is_translated !== true;
-                });
-
-                $needsUpdate = $activeLanguages->filter(function (Language $language) use ($existingForGroup) {
-                    $row = $existingForGroup->get($language->code);
-
-                    return $row && $this->needsSiteUpdate($row);
-                });
+            $languages = $activeLanguages->map(function (Language $language) use ($existingForGroup, $pendingLangs) {
+                $row = $existingForGroup->get($language->code);
 
                 return [
-                    'url' => $englishRow,
-                    'missing' => $missing,
-                    'needsUpdate' => $needsUpdate,
-                    'pendingLangs' => $pendingByGroup->get($englishRow->group_key, collect())->pluck('target_lang')->all(),
+                    'code' => $language->code,
+                    'name' => $language->name,
+                    'state' => $this->languageState($language, $row, $pendingLangs),
                 ];
-            })
-            ->filter(fn (array $topic) => $topic['missing']->isNotEmpty() || $topic['needsUpdate']->isNotEmpty())
-            ->values();
+            });
+
+            return [
+                'url' => $englishRow,
+                'languages' => $languages,
+                'pendingLangs' => $pendingLangs,
+            ];
+        })->values();
+
+        return ['topics' => $topics, 'page' => $page, 'lastPage' => $lastPage, 'total' => $total];
+    }
+
+    /**
+     * One of: default (the source language), pending (queued/running), missing (no row, or
+     * exists but never translated), needsUpdate (translated but not confirmed live -
+     * needsSiteUpdate()), confirmed (translated and confirmed live). Mirrors the tab-icon states
+     * already used in the topic details popup, just computed once here for the list view too.
+     */
+    private function languageState(Language $language, ?Url $row, array $pendingLangs): string
+    {
+        if ($language->is_default) {
+            return 'default';
+        }
+
+        if (in_array($language->code, $pendingLangs, true)) {
+            return 'pending';
+        }
+
+        if (! $row || $row->is_translated !== true) {
+            return 'missing';
+        }
+
+        return $this->needsSiteUpdate($row) ? 'needsUpdate' : 'confirmed';
     }
 
     /**

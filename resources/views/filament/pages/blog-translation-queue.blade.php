@@ -78,10 +78,15 @@
                 </span>
             </div>
 
-            <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
+            {{-- h-2/h-full: never compiled into Filament's pre-built CSS bundle (same story as
+                 every other "plain Tailwind utility that happens not to be used anywhere else in
+                 that bundle" note elsewhere in this file) - discovered via computed-style
+                 inspection that this bar had silently rendered at 0px height all along, so height
+                 is set inline here instead of trusting the class. --}}
+            <div class="mt-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10" style="height: 8px">
                 <div
-                    class="h-full rounded-full bg-primary-500 transition-all duration-500"
-                    style="width: {{ $this->cronProgress['percent'] }}%"
+                    class="rounded-full bg-primary-500 transition-all duration-500"
+                    style="width: {{ $this->cronProgress['percent'] }}%; height: 8px"
                 ></div>
             </div>
 

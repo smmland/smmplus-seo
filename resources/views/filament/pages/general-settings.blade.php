@@ -92,8 +92,11 @@
                         <span class="truncate" x-text="fileName"></span>
                         <span class="shrink-0" x-text="formatBytes(fileSizeBytes * progress / 100) + ' / ' + formatBytes(fileSizeBytes) + ' (' + progress + '%)'"></span>
                     </div>
-                    <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
-                        <div class="h-full rounded-full bg-primary-500 transition-all duration-150" :style="`width: ${progress}%`"></div>
+                    {{-- h-2/h-full aren't in Filament's pre-built CSS bundle (never compiled -
+                         see the note on blog-translation-queue.blade.php's progress bar for the
+                         fuller story on this class of bug) - height is set inline instead. --}}
+                    <div class="w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10" style="height: 8px">
+                        <div class="rounded-full bg-primary-500 transition-all duration-150" :style="`width: ${progress}%; height: 8px`"></div>
                     </div>
                 </div>
 

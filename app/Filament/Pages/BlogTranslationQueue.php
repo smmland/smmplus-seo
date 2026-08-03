@@ -114,6 +114,15 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     private function needsSiteUpdate(Url $row): bool
     {
+        // An admin's own call always wins - added because comparing just the fetched <title>
+        // can false-positive as "confirmed live" on a soft-404 (a site returning HTTP 200 with
+        // some other title instead of a real 404 for a page that doesn't actually exist yet),
+        // which the automatic checks below can't fully rule out for every site. See
+        // toggleSiteUpdateOverride().
+        if ($row->site_update_override === true) {
+            return true;
+        }
+
         if ($row->is_translated !== true) {
             return false;
         }
@@ -123,6 +132,38 @@ class BlogTranslationQueue extends Page implements HasActions
         }
 
         return $row->content_extracted_at !== null && $row->content_extracted_at->gt($row->translation_checked_at);
+    }
+
+    // Flips the manual override for one language - set true if it wasn't already overridden
+    // (forcing "needs site update" regardless of what the automatic check concluded), or cleared
+    // if it was, handing the verdict back to the automatic check. A fresh AI translation also
+    // clears it (see queueTranslation()), so overriding never gets stuck hiding real progress.
+    public function toggleSiteUpdateOverride(string $groupKey, string $targetLangCode): void
+    {
+        if (! Schema::hasColumn('urls', 'site_update_override')) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return;
+        }
+
+        $row = Url::query()->where('group_key', $groupKey)->where('lang', $targetLangCode)->first();
+
+        if (! $row) {
+            return;
+        }
+
+        $row->site_update_override = ! $row->site_update_override;
+        $row->save();
+
+        unset($this->queue);
+
+        Notification::make()
+            ->title($row->site_update_override ? 'Marked as needing a site update' : 'Override cleared')
+            ->body($row->site_update_override
+                ? 'This language will show as needing an update regardless of what the automatic check found, until you clear this or retranslate it.'
+                : 'Handed back to the automatic live check.')
+            ->success()
+            ->send();
     }
 
     public function recheckTopic(string $groupKey, BlogTranslationDetectionService $detector): void
@@ -813,8 +854,10 @@ class BlogTranslationQueue extends Page implements HasActions
                 'exists' => (bool) $row,
                 'isTranslated' => $row?->is_translated === true,
                 'needsSiteUpdate' => $row && $this->needsSiteUpdate($row),
+                'siteUpdateOverride' => $row?->site_update_override === true,
                 'translationCheckedAt' => $row?->translation_checked_at,
                 'translationCheckNote' => $row?->translation_check_note,
+                'translationTitle' => $row?->translation_title,
                 'translationPending' => in_array($language->code, $pendingLangs, true),
                 'translationError' => $translationJobs->get($language->code)?->status === BlogTranslationJob::FAILED
                     ? $translationJobs->get($language->code)->message

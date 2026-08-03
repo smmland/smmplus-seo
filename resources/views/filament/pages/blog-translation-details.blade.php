@@ -302,26 +302,66 @@
                         </div>
                     </div>
 
-                    {{-- Colored via inline styles reading Filament's own --warning-* CSS custom
-                         properties (injected into <head> at runtime from the panel's color
-                         config), not bg-warning-50/text-warning-700-style utility classes - this
-                         admin panel serves Filament's pre-built CSS bundle, which was never
+                    {{-- Colored via inline styles reading Filament's own --warning-*/--success-*
+                         CSS custom properties (injected into <head> at runtime from the panel's
+                         color config), not bg-warning-50/text-warning-700-style utility classes -
+                         this admin panel serves Filament's pre-built CSS bundle, which was never
                          compiled with those specific shades since nothing else in it happens to
                          use them (same root cause as the progress bar's --primary-600 usage). --}}
                     @if (! $language['isDefault'] && $language['needsSiteUpdate'] && ! $language['translationPending'])
                         <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 text-sm" style="background-color: rgba(var(--warning-500), .1)">
                             <span style="color: rgb(var(--warning-700))">
-                                Translated in this tool, but not yet confirmed live on the site{{ $language['translationCheckedAt'] ? ' - last checked '.$language['translationCheckedAt']->diffForHumans() : ' - never checked' }}{{ $language['translationCheckNote'] ? ' ('.$language['translationCheckNote'].')' : '' }}. Copy the content onto the live site (see "Download translate export" above), then recheck.
+                                @if ($language['siteUpdateOverride'])
+                                    Manually flagged as needing a site update.
+                                @else
+                                    Translated in this tool, but not yet confirmed live on the site{{ $language['translationCheckedAt'] ? ' - last checked '.$language['translationCheckedAt']->diffForHumans() : ' - never checked' }}{{ $language['translationCheckNote'] ? ' ('.$language['translationCheckNote'].')' : '' }}.
+                                @endif
+                                Copy the content onto the live site (see "Download translate export" above), then recheck.
+                            </span>
+                            <div class="flex shrink-0 items-center gap-2">
+                                @if ($language['siteUpdateOverride'])
+                                    <x-filament::button
+                                        size="sm"
+                                        color="gray"
+                                        icon="heroicon-o-x-mark"
+                                        wire:click="toggleSiteUpdateOverride({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                        wire:loading.attr="disabled"
+                                    >
+                                        Clear override
+                                    </x-filament::button>
+                                @endif
+                                <x-filament::button
+                                    size="sm"
+                                    color="gray"
+                                    icon="heroicon-o-arrow-path"
+                                    wire:click="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                                    wire:loading.attr="disabled"
+                                    wire:target="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                                >
+                                    Recheck now
+                                </x-filament::button>
+                            </div>
+                        </div>
+                    @elseif (! $language['isDefault'] && $language['isTranslated'] && ! $language['translationPending'])
+                        {{-- The automatic check can false-positive as "confirmed live" on a
+                             soft-404 (a site returning HTTP 200 with some other title instead of
+                             a real 404 for a page that doesn't actually exist yet) - this stays
+                             visible for every confirmed language (not just flagged ones) so a
+                             wrong verdict can actually be spotted and corrected by hand. --}}
+                        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 text-sm" style="background-color: rgba(var(--success-500), .1)">
+                            <span style="color: rgb(var(--success-700))">
+                                Confirmed live{{ $language['translationCheckedAt'] ? ' - last checked '.$language['translationCheckedAt']->diffForHumans() : '' }}{{ $language['translationTitle'] ? '. Fetched title: "'.$language['translationTitle'].'"' : '' }}
                             </span>
                             <x-filament::button
                                 size="sm"
                                 color="gray"
-                                icon="heroicon-o-arrow-path"
-                                wire:click="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                                outlined
+                                icon="heroicon-o-flag"
+                                wire:click="toggleSiteUpdateOverride({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
                                 wire:loading.attr="disabled"
-                                wire:target="recheckTopic({{ Illuminate\Support\Js::from($groupKey) }})"
+                                wire:confirm="This looks confirmed live, but if that's wrong (e.g. the site returns a placeholder page instead of a real 404), you can flag it back to 'needs a site update' by hand. Continue?"
                             >
-                                Recheck now
+                                This looks wrong
                             </x-filament::button>
                         </div>
                     @endif

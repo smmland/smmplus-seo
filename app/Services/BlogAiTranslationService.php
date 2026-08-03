@@ -8,6 +8,7 @@ use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class BlogAiTranslationService
@@ -346,6 +347,16 @@ class BlogAiTranslationService
         // (BlogTranslationQueue::needsSiteUpdate()) instead of looking confirmed the moment
         // content is generated here - and as a side effect, makes it overdue for the next
         // detection cron run (BlogTranslationDetectionService::dueQuery() prioritizes null).
+
+        // A manual "needs update" override (BlogTranslationQueue::toggleSiteUpdateOverride())
+        // exists to correct a stale/wrong verdict for the content that was there before - fresh
+        // content from this translation supersedes whatever that was about, and the null
+        // translation_checked_at above already makes it show as needing a site update on its
+        // own, so there's nothing for the override to add here.
+        if (Schema::hasColumn('urls', 'site_update_override')) {
+            $row->site_update_override = null;
+        }
+
         $row->article_title = $parsed['title'] ?? null;
         $row->seo_title = $parsed['seo_title'] ?? null;
         $row->meta_description = $parsed['meta_description'] ?? null;

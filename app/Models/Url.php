@@ -13,6 +13,7 @@ class Url extends Model
         'source_lastmod', 'priority', 'changefreq', 'is_hidden', 'is_manual',
         'is_active', 'first_seen_at', 'last_seen_at',
         'translation_title', 'is_translated', 'translation_checked_at', 'translation_check_note', 'auto_hidden_for_translation',
+        'site_update_override',
         'content_extracted_at', 'content_extraction_path',
         'article_title', 'seo_title', 'meta_description', 'meta_keywords',
         'og_title', 'og_description', 'twitter_title', 'twitter_description',
@@ -32,6 +33,7 @@ class Url extends Model
             'is_translated' => 'boolean',
             'translation_checked_at' => 'datetime',
             'auto_hidden_for_translation' => 'boolean',
+            'site_update_override' => 'boolean',
             'content_extracted_at' => 'datetime',
             'edited_content_saved_at' => 'datetime',
         ];

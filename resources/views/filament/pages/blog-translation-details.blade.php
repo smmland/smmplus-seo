@@ -218,16 +218,33 @@
                                     Last attempt failed: {{ $language['translationError'] }}
                                 </p>
                             @endif
-                            <x-filament::button
-                                size="sm"
-                                color="gray"
-                                icon="heroicon-o-sparkles"
-                                wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                                wire:loading.attr="disabled"
-                                wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
-                            >
-                                {{ $language['translationError'] ? 'Retry translation' : 'Translate with AI' }}
-                            </x-filament::button>
+                            <div class="flex flex-wrap items-center justify-center gap-2">
+                                <x-filament::button
+                                    size="sm"
+                                    color="gray"
+                                    icon="heroicon-o-sparkles"
+                                    wire:click="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                    wire:loading.attr="disabled"
+                                    wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }}), recheckMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                >
+                                    {{ $language['translationError'] ? 'Retry translation' : 'Translate with AI' }}
+                                </x-filament::button>
+
+                                {{-- For content translated entirely outside this tool (e.g. edited directly
+                                     in the site's own CMS) - checks whether it's already live at the
+                                     expected address without going through AI translation at all. --}}
+                                <x-filament::button
+                                    size="sm"
+                                    color="gray"
+                                    outlined
+                                    icon="heroicon-o-arrow-path"
+                                    wire:click="recheckMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                    wire:loading.attr="disabled"
+                                    wire:target="translateLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }}), recheckMissingLanguage({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                >
+                                    Recheck
+                                </x-filament::button>
+                            </div>
                         @endif
                     @endif
                 </div>

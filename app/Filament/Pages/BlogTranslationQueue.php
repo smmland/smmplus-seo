@@ -252,6 +252,28 @@ class BlogTranslationQueue extends Page implements HasActions
     }
 
     /**
+     * The "missing" counterpart to recheckTopic()/the per-language "Recheck now" button - both
+     * of those need an existing Url row to update, but a language never translated in this tool
+     * has none. Lets the admin check anyway: if it's actually live (translated outside this
+     * tool entirely, e.g. edited directly in the site's own CMS), this creates the row so the
+     * panel picks it up as confirmed - see BlogTranslationDetectionService::checkMissingLanguage().
+     */
+    public function recheckMissingLanguage(string $groupKey, string $targetLangCode, BlogTranslationDetectionService $detector): void
+    {
+        $result = $detector->checkMissingLanguage($groupKey, $targetLangCode);
+
+        unset($this->queue);
+
+        $notification = Notification::make()
+            ->title($result['ok'] ? 'Found live' : 'Not translated yet')
+            ->body($result['message']);
+
+        $result['ok'] ? $notification->success() : $notification->warning();
+
+        $notification->send();
+    }
+
+    /**
      * Returns the fresh content (not just void + a notification) because this is called both
      * from a plain wire:click (the queue table row, which ignores the return value) and from the
      * visual/code editor's own JS via $wire.call() - the editor's Alpine state was already

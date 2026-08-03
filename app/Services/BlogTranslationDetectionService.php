@@ -27,7 +27,10 @@ class BlogTranslationDetectionService
         '403 forbidden', 'cloudflare', 'checking your browser', 'security check',
     ];
 
-    public function __construct(private readonly TranslationSettingsService $settings) {}
+    public function __construct(
+        private readonly TranslationSettingsService $settings,
+        private readonly UrlClassifierService $classifier,
+    ) {}
 
     /**
      * Re-fetches the live <title> for every non-default-language blog URL that's due for a
@@ -115,6 +118,67 @@ class BlogTranslationDetectionService
         }
 
         return $this->checkRow($row, $defaultTitle, $this->settings->isAutoHideEnabled());
+    }
+
+    /**
+     * For a language with no Url row at all yet - refreshOne()/refreshTopic() both need an
+     * existing row to update, but a language that's never been translated *in this tool* has
+     * none. Builds the same guessed URL pattern BlogAiTranslationService uses
+     * (https://host/{lang}/blog/{slug}), fetches it, and - only if its title looks genuinely
+     * different from the default language's - creates the row now, as if it had just been
+     * translated. This is for content translated entirely outside this tool (e.g. edited
+     * directly in the site's own CMS) that the admin knows is already live and just wants this
+     * panel to notice, without going through "Translate with AI" at all.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function checkMissingLanguage(string $groupKey, string $targetLangCode): array
+    {
+        $defaultLang = $this->defaultLang();
+
+        $defaultRow = Url::query()->where('group_key', $groupKey)->where('lang', $defaultLang)->first();
+
+        if (! $defaultRow) {
+            return ['ok' => false, 'message' => 'Could not find the default-language content for this topic.'];
+        }
+
+        [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
+
+        if ($defaultTitle === null) {
+            return ['ok' => false, 'message' => 'Could not fetch the default-language page to compare against right now - try again shortly.'];
+        }
+
+        $scheme = parse_url($defaultRow->source_url, PHP_URL_SCHEME) ?: 'https';
+        $host = parse_url($defaultRow->source_url, PHP_URL_HOST);
+        $candidateUrl = "{$scheme}://{$host}/{$targetLangCode}/blog/{$defaultRow->slug}";
+
+        [$title, $note] = $this->fetchTitle($candidateUrl);
+
+        if ($title === null) {
+            return ['ok' => false, 'message' => "Still not live at the expected address ({$note})."];
+        }
+
+        if ($this->normalize($title) === $this->normalize($defaultTitle)) {
+            return ['ok' => false, 'message' => "Found a page there, but its title matches the default language - doesn't look translated yet (title: \"{$title}\")."];
+        }
+
+        $classified = $this->classifier->classify($candidateUrl);
+
+        $row = Url::query()->firstOrNew(['group_key' => $groupKey, 'lang' => $targetLangCode]);
+        $row->source_url = $candidateUrl;
+        $row->path = $classified['path'];
+        $row->pattern_type = $defaultRow->pattern_type;
+        $row->slug = $defaultRow->slug;
+        $row->is_active = true;
+        $row->is_translated = true;
+        $row->translation_title = $title;
+        $row->translation_checked_at = now();
+        $row->translation_check_note = $note;
+        $row->first_seen_at = $row->first_seen_at ?? now();
+        $row->last_seen_at = now();
+        $row->save();
+
+        return ['ok' => true, 'message' => "Found it live - title: \"{$title}\"."];
     }
 
     /**

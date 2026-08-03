@@ -148,10 +148,13 @@
                     <thead>
                         <tr>
                             <th class="p-2 text-start text-sm font-semibold">
+                                @php
+                                    $selectableOnPage = collect($this->queue['topics'])->reject(fn (array $t) => ! empty($t['pendingLangs']))->pluck('url.group_key');
+                                @endphp
                                 <input
                                     type="checkbox"
                                     wire:click="toggleSelectAllOnPage"
-                                    @checked(collect($this->queue['topics'])->pluck('url.group_key')->diff($selectedTopics)->isEmpty())
+                                    @checked($selectableOnPage->isNotEmpty() && $selectableOnPage->diff($selectedTopics)->isEmpty())
                                     class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
                                 >
                             </th>
@@ -169,7 +172,12 @@
                                         type="checkbox"
                                         wire:model.live="selectedTopics"
                                         value="{{ $topic['url']->group_key }}"
-                                        class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
+                                        @disabled(! empty($topic['pendingLangs']))
+                                        title="{{ ! empty($topic['pendingLangs']) ? 'Already translating - nothing more to queue right now' : '' }}"
+                                        @class([
+                                            'rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5',
+                                            'opacity-50' => ! empty($topic['pendingLangs']),
+                                        ])
                                     >
                                 </td>
                                 <td class="p-2 text-sm text-gray-500 dark:text-gray-400">
@@ -179,6 +187,23 @@
                                     <a href="{{ $topic['url']->source_url }}" target="_blank" rel="noopener" class="text-primary-600 hover:underline dark:text-primary-400">
                                         {{ $topic['url']->slug }}
                                     </a>
+
+                                    {{-- Extracting the default-language content is a prerequisite for AI
+                                         translation (BlogAiTranslationService refuses to run without it), so
+                                         this is worth surfacing here rather than only inside the topic popup. --}}
+                                    <div class="mt-1">
+                                        @if ($topic['url']->content_extracted_at)
+                                            <span class="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+                                                <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" style="color: rgb(var(--success-600))" />
+                                                Content extracted {{ $topic['url']->content_extracted_at->diffForHumans() }}
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center gap-1 text-xs" style="color: rgb(var(--warning-600))">
+                                                <x-filament::icon icon="heroicon-m-exclamation-circle" class="h-3 w-3" />
+                                                Content not extracted yet
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="p-2">
                                     {{-- One badge per active language, colored/iconed by state - same visual
@@ -256,12 +281,6 @@
                                             />
                                         </div>
                                     </div>
-
-                                    @if ($topic['url']->content_extracted_at)
-                                        <p class="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
-                                            Last extracted {{ $topic['url']->content_extracted_at->diffForHumans() }}
-                                        </p>
-                                    @endif
                                 </td>
                             </tr>
                         @endforeach

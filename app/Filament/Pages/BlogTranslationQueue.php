@@ -83,10 +83,15 @@ class BlogTranslationQueue extends Page implements HasActions
 
     // Toggles every topic currently visible on this page (not the whole filtered result set -
     // selection is scoped to what's on screen, so it stays a predictable "what you see is what
-    // you'll queue" action rather than a silent "select everything matching the filter").
+    // you'll queue" action rather than a silent "select everything matching the filter"). Topics
+    // already mid-translation are skipped, matching their checkbox being disabled in the row -
+    // there's nothing more to queue for them right now.
     public function toggleSelectAllOnPage(): void
     {
-        $onPage = $this->queue['topics']->pluck('url.group_key')->all();
+        $onPage = $this->queue['topics']
+            ->reject(fn (array $topic) => ! empty($topic['pendingLangs']))
+            ->pluck('url.group_key')
+            ->all();
         $allSelected = empty(array_diff($onPage, $this->selectedTopics));
 
         $this->selectedTopics = $allSelected

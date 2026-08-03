@@ -32,15 +32,21 @@ class HiddenTranslationService
             ->where($this->looksTranslatedClause());
     }
 
-    // Matches Url::looksTranslated() as a query - is_translated OR real extracted content, not
-    // is_translated alone. A row from a site that was already multi-language before this admin
-    // ever used AI translation here (discovered by the normal sitemap sync, then just had
-    // "Extract content" run on it) never gets is_translated set at all, so restricting to that
-    // column alone would silently skip it from every list on this page, same bug as before.
+    // Matches Url::looksTranslated() as a query - is_translated=true, OR (never explicitly
+    // checked at all AND real content was extracted). A row from a site that was already
+    // multi-language before this admin ever used AI translation here (discovered by the normal
+    // sitemap sync, then just had "Extract content" run on it) never gets is_translated set at
+    // all, so restricting to that column alone would silently skip it from every list on this
+    // page. is_translated=false must NOT be overridden by leftover content_extraction_path
+    // though - a fresh Recheck correcting a soft-404 false positive back to false has to actually
+    // take, not keep reading as translated because of stale extracted content from before it.
     private function looksTranslatedClause(): \Closure
     {
         return function ($query) {
-            $query->where('is_translated', true)->orWhereNotNull('content_extraction_path');
+            $query->where('is_translated', true)
+                ->orWhere(function ($query) {
+                    $query->whereNull('is_translated')->whereNotNull('content_extraction_path');
+                });
         };
     }
 
@@ -125,15 +131,17 @@ class HiddenTranslationService
     // Matches "content_extraction_path is set, but is_translated was never explicitly set true" -
     // whereNull is needed alongside where(false): SQL's != true doesn't match NULL, and a never-
     // checked row's is_translated is NULL, not false.
+    // is_translated IS NULL only - never explicit false. A row a Recheck has already looked at
+    // and correctly decided isn't a real translation (e.g. BlogTranslationDetectionService's
+    // soft-404 probe catching a page that only looks different from English) must stay that way;
+    // "fixing" it here would silently undo that correction and put the false positive right back.
     private function unflaggedContentQuery(): Builder
     {
         return Url::query()
             ->where('pattern_type', 'BLOG')
             ->where('lang', '!=', $this->defaultLangCode())
             ->whereNotNull('content_extraction_path')
-            ->where(function ($query) {
-                $query->whereNull('is_translated')->orWhere('is_translated', false);
-            });
+            ->whereNull('is_translated');
     }
 
     public function unflaggedContentCount(): int

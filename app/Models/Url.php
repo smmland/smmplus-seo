@@ -44,8 +44,8 @@ class Url extends Model
      * True when this row clearly represents translated content - either explicitly flagged
      * (is_translated, set by BlogAiTranslationService after an AI translation, or by
      * BlogTranslationDetectionService after confirming one live) or, for a row nothing ever
-     * explicitly checked, because real content has been extracted from it
-     * (content_extraction_path). A non-default-language BLOG row only exists in the first place
+     * explicitly checked (is_translated still null), because real content has been extracted from
+     * it (content_extraction_path). A non-default-language BLOG row only exists in the first place
      * because SyncService discovered a real live page there (a site that was already
      * multi-language before this admin ever used AI translation) or this tool created it, so
      * extracted content on it is already strong evidence on its own - is_translated is never set
@@ -54,10 +54,20 @@ class Url extends Model
      * ever extracted (never AI-translated, never Recheck'd) would otherwise read as "missing"
      * forever despite its content being sitting right there - see BlogTranslationQueue's several
      * "missing language" filters, all of which go through this rather than the raw column.
+     *
+     * is_translated = false (not null) always wins over content_extraction_path, though - a row
+     * can have "content" extracted from a page that turned out to be the site's own soft-404
+     * (BlogTranslationDetectionService's probe check), and a fresh Recheck correcting is_translated
+     * to false for exactly that reason must actually take, not keep reading as translated forever
+     * because of stale extracted content from before the correction.
      */
     public function looksTranslated(): bool
     {
-        return $this->is_translated === true || filled($this->content_extraction_path);
+        if ($this->is_translated !== null) {
+            return $this->is_translated === true;
+        }
+
+        return filled($this->content_extraction_path);
     }
 
     /**

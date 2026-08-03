@@ -94,26 +94,43 @@
 
         <x-filament::section>
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div class="flex flex-wrap items-center gap-2">
-                    <input
-                        type="text"
-                        wire:model.live.debounce.400ms="search"
-                        placeholder="Search by slug, title, or URL…"
-                        class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
-                    >
-                    <select
-                        wire:model.live="statusFilter"
-                        class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
-                    >
-                        @foreach ($this::STATUS_FILTERS as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <p class="text-xs text-gray-400 dark:text-gray-500">
-                    {{ $this->queue['total'] }} topic{{ $this->queue['total'] === 1 ? '' : 's' }}
-                </p>
+                <input
+                    type="text"
+                    wire:model.live.debounce.400ms="search"
+                    placeholder="Search by slug, title, or URL…"
+                    class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                >
+                <select
+                    wire:model.live="statusFilter"
+                    class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                >
+                    @foreach ($this::STATUS_FILTERS as $value => $label)
+                        <option value="{{ $value }}">{{ $label }}</option>
+                    @endforeach
+                </select>
             </div>
+
+            @if (! empty($selectedTopics))
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                    <span class="text-sm text-gray-600 dark:text-gray-300">
+                        {{ count($selectedTopics) }} topic{{ count($selectedTopics) === 1 ? '' : 's' }} selected
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" wire:click="$set('selectedTopics', [])" class="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                            Clear
+                        </button>
+                        <x-filament::button
+                            size="sm"
+                            icon="heroicon-o-queue-list"
+                            wire:click="queueMissingForSelectedTopics"
+                            wire:loading.attr="disabled"
+                            wire:target="queueMissingForSelectedTopics"
+                        >
+                            Queue missing translations
+                        </x-filament::button>
+                    </div>
+                </div>
+            @endif
 
         @if ($this->queue['topics']->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -130,6 +147,14 @@
                 <table class="fi-ta-table w-full text-start">
                     <thead>
                         <tr>
+                            <th class="p-2 text-start text-sm font-semibold">
+                                <input
+                                    type="checkbox"
+                                    wire:click="toggleSelectAllOnPage"
+                                    @checked(collect($this->queue['topics'])->pluck('url.group_key')->diff($selectedTopics)->isEmpty())
+                                    class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
+                                >
+                            </th>
                             <th class="p-2 text-start text-sm font-semibold">#</th>
                             <th class="p-2 text-start text-sm font-semibold">Topic (default language)</th>
                             <th class="p-2 text-start text-sm font-semibold">Translation status</th>
@@ -139,6 +164,14 @@
                     <tbody>
                         @foreach ($this->queue['topics'] as $topic)
                             <tr wire:key="topic-{{ $topic['url']->id }}" class="border-t border-gray-100 dark:border-white/5 align-top">
+                                <td class="p-2">
+                                    <input
+                                        type="checkbox"
+                                        wire:model.live="selectedTopics"
+                                        value="{{ $topic['url']->group_key }}"
+                                        class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
+                                    >
+                                </td>
                                 <td class="p-2 text-sm text-gray-500 dark:text-gray-400">
                                     {{ $loop->iteration }}
                                 </td>
@@ -236,11 +269,15 @@
                 </table>
             </div>
 
-            @if ($this->queue['lastPage'] > 1)
-                <div class="mt-3 flex items-center justify-between gap-3">
-                    <p class="text-xs text-gray-400 dark:text-gray-500">
-                        Page {{ $this->queue['page'] }} of {{ $this->queue['lastPage'] }}
-                    </p>
+            <div class="mt-3 flex items-center justify-between gap-3">
+                <p class="text-xs text-gray-400 dark:text-gray-500">
+                    {{ $this->queue['total'] }} topic{{ $this->queue['total'] === 1 ? '' : 's' }}
+                    @if ($this->queue['lastPage'] > 1)
+                        · Page {{ $this->queue['page'] }} of {{ $this->queue['lastPage'] }}
+                    @endif
+                </p>
+
+                @if ($this->queue['lastPage'] > 1)
                     <div class="flex items-center gap-2">
                         <x-filament::button
                             size="sm"
@@ -262,8 +299,8 @@
                             Next
                         </x-filament::button>
                     </div>
-                </div>
-            @endif
+                @endif
+            </div>
         @endif
     </x-filament::section>
     </div>

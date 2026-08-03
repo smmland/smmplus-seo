@@ -41,6 +41,10 @@ class BlogTranslationQueue extends Page implements HasActions
 
     public int $queuePage = 1;
 
+    // group_keys, not row ids - a topic spans several Url rows (one per language) and the bulk
+    // action below operates per-topic, not per-row.
+    public array $selectedTopics = [];
+
     // Every blog topic is browsable here (not just ones missing something), filtered down by
     // statusFilter rather than hard-coded to "needs attention" - the admin asked for a single
     // list they can search/filter/paginate to find and re-translate any topic.
@@ -56,21 +60,128 @@ class BlogTranslationQueue extends Page implements HasActions
     public function updatedSearch(): void
     {
         $this->queuePage = 1;
+        $this->selectedTopics = [];
     }
 
     public function updatedStatusFilter(): void
     {
         $this->queuePage = 1;
+        $this->selectedTopics = [];
     }
 
     public function previousQueuePage(): void
     {
         $this->queuePage = max(1, $this->queuePage - 1);
+        $this->selectedTopics = [];
     }
 
     public function nextQueuePage(): void
     {
         $this->queuePage++;
+        $this->selectedTopics = [];
+    }
+
+    // Toggles every topic currently visible on this page (not the whole filtered result set -
+    // selection is scoped to what's on screen, so it stays a predictable "what you see is what
+    // you'll queue" action rather than a silent "select everything matching the filter").
+    public function toggleSelectAllOnPage(): void
+    {
+        $onPage = $this->queue['topics']->pluck('url.group_key')->all();
+        $allSelected = empty(array_diff($onPage, $this->selectedTopics));
+
+        $this->selectedTopics = $allSelected
+            ? array_values(array_diff($this->selectedTopics, $onPage))
+            : array_values(array_unique(array_merge($this->selectedTopics, $onPage)));
+    }
+
+    /**
+     * Queues every currently-missing language for every selected topic at once - the bulk
+     * counterpart to translateAllMissingLanguages() (single topic). Checked/queued once up front
+     * rather than per-topic so a database-update-needed or panel-update-in-progress notice
+     * appears once, not once per selected topic.
+     */
+    public function queueMissingForSelectedTopics(): void
+    {
+        if (! $this->translationTrackingAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return;
+        }
+
+        if ($this->notifyIfPanelUpdateInProgress()) {
+            return;
+        }
+
+        if (empty($this->selectedTopics)) {
+            Notification::make()->title('No topics selected')->warning()->send();
+
+            return;
+        }
+
+        $totalQueued = 0;
+        $topicsAffected = 0;
+
+        foreach ($this->selectedTopics as $groupKey) {
+            $sourceRow = $this->defaultLanguageRow($groupKey);
+
+            if (! $sourceRow) {
+                continue;
+            }
+
+            $existingByLang = Url::query()
+                ->where('group_key', $groupKey)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('lang');
+
+            $pendingLangs = BlogTranslationJob::query()
+                ->where('group_key', $groupKey)
+                ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
+                ->pluck('target_lang')
+                ->all();
+
+            $missingLanguages = Language::query()
+                ->where('is_active', true)
+                ->where('is_default', false)
+                ->get(['code'])
+                ->filter(function (Language $language) use ($existingByLang, $pendingLangs) {
+                    if (in_array($language->code, $pendingLangs, true)) {
+                        return false;
+                    }
+
+                    $row = $existingByLang->get($language->code);
+
+                    return ! $row || $row->is_translated !== true;
+                });
+
+            foreach ($missingLanguages as $language) {
+                $this->queueTranslation($groupKey, $language->code);
+            }
+
+            if ($missingLanguages->isNotEmpty()) {
+                $totalQueued += $missingLanguages->count();
+                $topicsAffected++;
+            }
+        }
+
+        $this->selectedTopics = [];
+        unset($this->queue);
+
+        if ($totalQueued === 0) {
+            Notification::make()
+                ->title('Nothing to queue')
+                ->body('None of the selected topics have a missing language right now.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title("Queued {$totalQueued} translation(s) across {$topicsAffected} topic(s)")
+            ->body('Translating in the background, up to a few at a time - progress shows on each topic\'s own tab in the details popup.')
+            ->success()
+            ->send();
     }
 
     /**
@@ -154,9 +265,15 @@ class BlogTranslationQueue extends Page implements HasActions
         $filtered = $allTopics->filter(function (array $topic) {
             $nonDefault = $topic['languages']->where('state', '!=', 'default');
 
+            // "pending" (currently translating) matches neither "missing" nor "needsUpdate" on
+            // its own - without this, the moment a missing language actually starts translating,
+            // the topic would vanish from every filter but "All topics" (it's no longer
+            // "missing", but it isn't done either) until the job finishes. Counting pending
+            // toward both keeps a topic visible the whole time it's actively being worked on;
+            // "confirmed" correctly still excludes it, since it isn't confirmed yet.
             return match ($this->statusFilter) {
-                'missing' => $nonDefault->contains(fn (array $l) => $l['state'] === 'missing'),
-                'needsUpdate' => $nonDefault->contains(fn (array $l) => $l['state'] === 'needsUpdate'),
+                'missing' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['missing', 'pending'], true)),
+                'needsUpdate' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['needsUpdate', 'pending'], true)),
                 'confirmed' => $nonDefault->isNotEmpty() && $nonDefault->every(fn (array $l) => $l['state'] === 'confirmed'),
                 default => true, // 'all'
             };

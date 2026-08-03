@@ -7,6 +7,7 @@ use App\Models\Language;
 use App\Models\Url;
 use App\Services\BlogContentExtractionService;
 use App\Services\BlogTranslationDetectionService;
+use App\Services\HiddenTranslationService;
 use App\Services\SettingsService;
 use App\Services\TranslationSettingsService;
 use Filament\Actions\Action;
@@ -333,41 +334,11 @@ class BlogTranslationQueue extends Page implements HasActions
         return $this->needsSiteUpdate($row) ? 'needsUpdate' : 'confirmed';
     }
 
-    /**
-     * True when a language is marked translated (Url::is_translated) but that's never actually
-     * been confirmed against the live site, or was confirmed before the content it's based on
-     * last changed - covering real gaps in is_translated on its own: BlogTranslationDetectionService's
-     * hourly recheck leaves is_translated untouched on a fetch failure (translation_checked_at
-     * stays at its old value) - which includes the common case of the guessed target URL simply
-     * not existing live yet (a 404), not just transient errors.
-     *
-     * translation_checked_at alone isn't quite enough to trust either: BlogAiTranslationService
-     * used to set it itself the instant a translation was generated (fixed, but topics
-     * translated before that fix still carry the stale value it left behind - there was never a
-     * migration to undo it retroactively). translation_title is the tell: a genuine live check
-     * (checkRow()) always sets it in the same write as translation_checked_at, so a row with the
-     * latter but not the former was never actually fetched and confirmed - old bug or not.
-     */
+    // Delegates to Url::needsSiteUpdate() - moved there so the standalone Hidden Translations
+    // list can compute the exact same verdict without duplicating this logic.
     private function needsSiteUpdate(Url $row): bool
     {
-        // An admin's own call always wins - added because comparing just the fetched <title>
-        // can false-positive as "confirmed live" on a soft-404 (a site returning HTTP 200 with
-        // some other title instead of a real 404 for a page that doesn't actually exist yet),
-        // which the automatic checks below can't fully rule out for every site. See
-        // toggleSiteUpdateOverride().
-        if ($row->site_update_override === true) {
-            return true;
-        }
-
-        if ($row->is_translated !== true) {
-            return false;
-        }
-
-        if ($row->translation_checked_at === null || $row->translation_title === null) {
-            return true;
-        }
-
-        return $row->content_extracted_at !== null && $row->content_extracted_at->gt($row->translation_checked_at);
+        return $row->needsSiteUpdate();
     }
 
     // Flips the manual override for one language - set true if it wasn't already overridden
@@ -407,19 +378,14 @@ class BlogTranslationQueue extends Page implements HasActions
      * across every blog topic - shown as a recovery banner at the top of the list so the answer
      * to "did those disappear or are they just hidden" is visible without hunting through
      * individual topics: nothing SyncService does ever calls delete(), it only ever flips this
-     * flag, so this count is always the complete, accurate list of what's recoverable.
+     * flag, so this count is always the complete, accurate list of what's recoverable. The full
+     * per-row breakdown (translated/checked times, status) lives on its own page - see
+     * HiddenTranslations.
      */
     #[Computed]
     public function hiddenTranslationsCount(): int
     {
-        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
-
-        return Url::query()
-            ->where('pattern_type', 'BLOG')
-            ->where('is_active', false)
-            ->where('is_translated', true)
-            ->where('lang', '!=', $defaultLangCode)
-            ->count();
+        return app(HiddenTranslationService::class)->count();
     }
 
     /**
@@ -429,32 +395,13 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function reactivateAllHiddenTranslations(): void
     {
-        $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
-
-        $query = Url::query()
-            ->where('pattern_type', 'BLOG')
-            ->where('is_active', false)
-            ->where('is_translated', true)
-            ->where('lang', '!=', $defaultLangCode);
-
-        $count = $query->count();
+        $count = app(HiddenTranslationService::class)->reactivateAll();
 
         if ($count === 0) {
             Notification::make()->title('Nothing to reactivate')->warning()->send();
 
             return;
         }
-
-        $updates = ['is_active' => true];
-
-        // Marks every recovered row as AI-guessed too (not just newly-created ones), so
-        // SyncService's pruning permanently leaves it alone from now on instead of hiding it
-        // again on some future sync - see the migration that added this column.
-        if (Schema::hasColumn('urls', 'is_ai_guessed')) {
-            $updates['is_ai_guessed'] = true;
-        }
-
-        $query->update($updates);
 
         unset($this->queue);
         unset($this->hiddenTranslationsCount);
@@ -481,13 +428,7 @@ class BlogTranslationQueue extends Page implements HasActions
             return;
         }
 
-        $row->is_active = true;
-
-        if (Schema::hasColumn('urls', 'is_ai_guessed')) {
-            $row->is_ai_guessed = true;
-        }
-
-        $row->save();
+        app(HiddenTranslationService::class)->reactivate($row);
 
         unset($this->queue);
         unset($this->hiddenTranslationsCount);

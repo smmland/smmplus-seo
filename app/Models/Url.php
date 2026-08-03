@@ -39,4 +39,45 @@ class Url extends Model
             'edited_content_saved_at' => 'datetime',
         ];
     }
+
+    /**
+     * True when this row is marked translated (is_translated) but that's never actually been
+     * confirmed against the live site, or was confirmed before the content it's based on last
+     * changed - covering real gaps in is_translated on its own: BlogTranslationDetectionService's
+     * hourly recheck leaves is_translated untouched on a fetch failure (translation_checked_at
+     * stays at its old value) - which includes the common case of the guessed target URL simply
+     * not existing live yet (a 404), not just transient errors.
+     *
+     * translation_checked_at alone isn't quite enough to trust either: BlogAiTranslationService
+     * used to set it itself the instant a translation was generated (fixed, but topics translated
+     * before that fix still carry the stale value it left behind - there was never a migration to
+     * undo it retroactively). translation_title is the tell: a genuine live check (checkRow())
+     * always sets it in the same write as translation_checked_at, so a row with the latter but
+     * not the former was never actually fetched and confirmed - old bug or not.
+     *
+     * Lives here (not just in BlogTranslationQueue) so both it and the standalone Hidden
+     * Translations list can compute the exact same verdict for a row without duplicating this
+     * logic.
+     */
+    public function needsSiteUpdate(): bool
+    {
+        // An admin's own call always wins - added because comparing just the fetched <title> can
+        // false-positive as "confirmed live" on a soft-404 (a site returning HTTP 200 with some
+        // other title instead of a real 404 for a page that doesn't actually exist yet), which
+        // the automatic checks below can't fully rule out for every site. See
+        // BlogTranslationQueue::toggleSiteUpdateOverride().
+        if ($this->site_update_override === true) {
+            return true;
+        }
+
+        if ($this->is_translated !== true) {
+            return false;
+        }
+
+        if ($this->translation_checked_at === null || $this->translation_title === null) {
+            return true;
+        }
+
+        return $this->content_extracted_at !== null && $this->content_extracted_at->gt($this->translation_checked_at);
+    }
 }

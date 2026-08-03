@@ -97,6 +97,8 @@ class AiSettingsService
           of the brand name is already standard in {{target_language}}.
         - Match the article's existing heading structure and paragraph breaks - don't merge,
           split, or reorder sections.
+        - Keep the translated Meta description to 300 characters or fewer - rephrase or trim it
+          if a direct translation would run longer, without cutting off mid-sentence.
 
         ## Article title
         {{title}}

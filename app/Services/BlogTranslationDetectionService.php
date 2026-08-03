@@ -33,6 +33,11 @@ class BlogTranslationDetectionService
         private readonly UrlClassifierService $classifier,
     ) {}
 
+    // Memoizes soft404Title() per host+lang for the lifetime of one request - a batch check
+    // touching many rows of the same language on the same site would otherwise probe once per
+    // row instead of once total.
+    private array $soft404TitleCache = [];
+
     /**
      * Re-fetches the live <title> for every non-default-language blog URL that's due for a
      * check, compares it against its topic's default-language (English) title, and - only for
@@ -163,6 +168,15 @@ class BlogTranslationDetectionService
             return ['ok' => false, 'message' => "Found a page there, but its title matches the default language - doesn't look translated yet (title: \"{$title}\")."];
         }
 
+        // Same soft-404 guard as checkRow() below - a title differing from the default language
+        // isn't proof of a real translation if the site returns this same page for any
+        // nonexistent URL under this language prefix.
+        $soft404Title = $this->soft404Title($scheme, $host, $targetLangCode);
+
+        if ($soft404Title !== null && $this->normalize($title) === $this->normalize($soft404Title)) {
+            return ['ok' => false, 'message' => "Found a page there, but it looks like this site's catch-all/not-found page for missing {$targetLangCode} pages, not a real translation (title: \"{$title}\")."];
+        }
+
         $classified = $this->classifier->classify($candidateUrl);
 
         $row = Url::query()->firstOrNew(['group_key' => $groupKey, 'lang' => $targetLangCode]);
@@ -291,11 +305,30 @@ class BlogTranslationDetectionService
         }
 
         $isTranslated = $this->normalize($title) !== $this->normalize($defaultTitle);
+        $translationCheckNote = $note;
+
+        // A title difference from the English page alone isn't proof of a real translation - some
+        // sites return HTTP 200 with a normal-looking catch-all/not-found page (in the target
+        // language, so of course its title differs from English) for *any* nonexistent URL under
+        // a language prefix, instead of a real 404. That would make this comparison say
+        // "translated" for literally every guessed URL of that language, confirmed or not. Only
+        // checked when the plain comparison above already says "translated" - skips the extra
+        // probe request entirely for the common, correctly-detected "not translated" case.
+        if ($isTranslated) {
+            $scheme = parse_url($row->source_url, PHP_URL_SCHEME) ?: 'https';
+            $host = parse_url($row->source_url, PHP_URL_HOST);
+            $soft404Title = $host ? $this->soft404Title($scheme, $host, $row->lang) : null;
+
+            if ($soft404Title !== null && $this->normalize($title) === $this->normalize($soft404Title)) {
+                $isTranslated = false;
+                $translationCheckNote = "Looks like this site's catch-all/not-found page for a missing {$row->lang} page, not a real translation (title: \"{$title}\")";
+            }
+        }
 
         $row->translation_title = $title;
         $row->is_translated = $isTranslated;
         $row->translation_checked_at = now();
-        $row->translation_check_note = $note;
+        $row->translation_check_note = $translationCheckNote;
 
         if (! $wasOverridden) {
             if ($isTranslated) {
@@ -375,5 +408,27 @@ class BlogTranslationDetectionService
     private function normalize(string $title): string
     {
         return mb_strtolower(trim(preg_replace('/\s+/', ' ', $title)));
+    }
+
+    /**
+     * Fetches the <title> of a URL that's essentially guaranteed not to be a real article
+     * (a made-up slug under the given language prefix), to learn what this site's soft-404 looks
+     * like, if it has one - a genuine HTTP 404 makes fetchTitle() return null here, same as for
+     * any other request, so this is a no-op for a site that behaves normally. Memoized per
+     * host+lang in $soft404TitleCache, so a batch run touching many rows of the same language only
+     * probes once.
+     */
+    private function soft404Title(string $scheme, string $host, string $lang): ?string
+    {
+        $key = "{$scheme}://{$host}|{$lang}";
+
+        if (! array_key_exists($key, $this->soft404TitleCache)) {
+            $probeSlug = 'smmplus-soft-404-probe-'.substr(md5($host.'|'.$lang), 0, 12);
+            $probeUrl = "{$scheme}://{$host}/{$lang}/blog/{$probeSlug}";
+            [$title] = $this->fetchTitle($probeUrl);
+            $this->soft404TitleCache[$key] = $title;
+        }
+
+        return $this->soft404TitleCache[$key];
     }
 }

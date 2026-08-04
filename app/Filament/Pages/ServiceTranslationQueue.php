@@ -556,6 +556,92 @@ class ServiceTranslationQueue extends Page implements HasActions
     }
 
     /**
+     * The bulk counterpart to the per-service export panel inside viewServiceAction()'s modal -
+     * same "pick languages, then download" shape, just for every currently-selected service at
+     * once. Reached from the bulk-selection bar's "Actions" dropdown.
+     */
+    public function downloadSelectionAction(): Action
+    {
+        return Action::make('downloadSelection')
+            ->label('Download selection')
+            ->icon('heroicon-o-arrow-down-tray')
+            ->modalHeading('Download translations for selected services')
+            ->modalWidth(MaxWidth::Medium)
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close')
+            ->modalContent(fn () => view('filament.pages.service-translation-bulk-export', [
+                'languages' => Language::query()
+                    ->where('is_active', true)
+                    ->where('is_default', false)
+                    ->orderBy('sort_order')
+                    ->get(['code', 'name']),
+                'selectedCount' => count($this->selectedServices),
+            ]));
+    }
+
+    /**
+     * Builds a zip for the selected services and chosen languages, one folder per service id
+     * (e.g. "5/fa.txt") so translations for different services never collide once extracted -
+     * each file holds just that language's description text, same as the per-service export.
+     */
+    public function downloadSelectedServicesExport(array $langCodes): mixed
+    {
+        if (empty($this->selectedServices)) {
+            Notification::make()->title('No services selected')->warning()->send();
+
+            return null;
+        }
+
+        $langCodes = array_values(array_unique(array_filter($langCodes)));
+
+        if (empty($langCodes)) {
+            Notification::make()->title('Select at least one language first')->warning()->send();
+
+            return null;
+        }
+
+        $rows = ServiceTranslation::query()
+            ->whereIn('service_key', $this->selectedServices)
+            ->whereIn('lang', $langCodes)
+            ->get();
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'service-translations-').'.zip';
+        $zip = new ZipArchive();
+        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+        $added = 0;
+
+        foreach ($rows as $row) {
+            if (blank($row->description)) {
+                continue;
+            }
+
+            $zip->addFromString("{$row->service_key}/{$row->lang}.txt", $row->description."\n");
+            $added++;
+        }
+
+        if ($added === 0) {
+            $zip->close();
+            @unlink($zipPath);
+
+            Notification::make()
+                ->title('Nothing to export')
+                ->body('None of the selected services have content for the chosen languages.')
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
+        $zip->close();
+
+        return response()->streamDownload(function () use ($zipPath) {
+            readfile($zipPath);
+            @unlink($zipPath);
+        }, 'service-translations-selection.zip', ['Content-Type' => 'application/zip']);
+    }
+
+    /**
      * @return array{languages: \Illuminate\Support\Collection, defaultLangCode: string, serviceKey: string}
      */
     private function serviceDetails(string $serviceKey): array

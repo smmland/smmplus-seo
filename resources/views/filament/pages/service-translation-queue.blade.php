@@ -152,15 +152,30 @@
                         <button type="button" wire:click="$set('selectedServices', [])" class="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                             Clear
                         </button>
-                        <x-filament::button
-                            size="sm"
-                            icon="heroicon-o-queue-list"
-                            wire:click="queueMissingForSelected"
-                            wire:loading.attr="disabled"
-                            wire:target="queueMissingForSelected"
-                        >
-                            Queue missing translations
-                        </x-filament::button>
+
+                        <x-filament::dropdown>
+                            <x-slot name="trigger">
+                                <x-filament::button size="sm" icon="heroicon-o-chevron-down" icon-position="after">
+                                    Actions
+                                </x-filament::button>
+                            </x-slot>
+
+                            <x-filament::dropdown.list>
+                                <x-filament::dropdown.list.item
+                                    icon="heroicon-o-arrow-down-tray"
+                                    wire:click="mountAction('downloadSelection')"
+                                >
+                                    Download selection
+                                </x-filament::dropdown.list.item>
+
+                                <x-filament::dropdown.list.item
+                                    icon="heroicon-o-queue-list"
+                                    wire:click="queueMissingForSelected"
+                                >
+                                    Queue missing translations
+                                </x-filament::dropdown.list.item>
+                            </x-filament::dropdown.list>
+                        </x-filament::dropdown>
                     </div>
                 </div>
             @endif

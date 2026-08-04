@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.12.1",
-    "notes": "Fixed a bug from the previous update: services translated before that update (or whenever the source description text changed slightly) could get wrongly demoted to \"Not translated\" (X) the next time the catalog was synced, with the stored translation silently overwritten. Fixed - existing translations are now recognized and preserved regardless of when they were made."
+    "version": "1.13.0",
+    "notes": "Added bulk translation download: select multiple services in the queue list, then Actions > Download selection to pick languages and get one zip with a folder per service id (e.g. 5/fa.txt), each file containing just that language's description."
 }

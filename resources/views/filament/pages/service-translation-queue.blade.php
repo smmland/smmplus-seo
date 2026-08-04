@@ -93,14 +93,26 @@
                     </p>
                 </div>
 
-                <x-filament::button
-                    icon="heroicon-o-arrow-path"
-                    wire:click="runSyncNow"
-                    wire:loading.attr="disabled"
-                    wire:target="runSyncNow"
-                >
-                    Sync now
-                </x-filament::button>
+                <div class="flex items-center gap-2">
+                    <x-filament::button
+                        color="gray"
+                        icon="heroicon-o-arrow-down-tray"
+                        wire:click="downloadTranslations"
+                        wire:loading.attr="disabled"
+                        wire:target="downloadTranslations"
+                    >
+                        Download translations
+                    </x-filament::button>
+
+                    <x-filament::button
+                        icon="heroicon-o-arrow-path"
+                        wire:click="runSyncNow"
+                        wire:loading.attr="disabled"
+                        wire:target="runSyncNow"
+                    >
+                        Sync now
+                    </x-filament::button>
+                </div>
             </div>
 
             @if ($lastSyncResult)
@@ -116,14 +128,14 @@
 
         <x-filament::section class="mt-4">
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div class="flex flex-wrap items-center gap-3">
-                    <input
-                        type="text"
-                        wire:model.live.debounce.400ms="search"
-                        placeholder="Search by title, category, or id…"
-                        class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
-                    >
+                <input
+                    type="text"
+                    wire:model.live.debounce.400ms="search"
+                    placeholder="Search by title, category, or id…"
+                    class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                >
 
+                <div class="flex flex-wrap items-center gap-3">
                     <label class="flex cursor-pointer items-center gap-2">
                         <span class="st-toggle-track">
                             <input type="checkbox" wire:model.live="hasDescriptionOnly">
@@ -131,16 +143,16 @@
                         </span>
                         <span class="text-sm text-gray-600 dark:text-gray-300">Has description only</span>
                     </label>
-                </div>
 
-                <select
-                    wire:model.live="statusFilter"
-                    class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
-                >
-                    @foreach ($this::STATUS_FILTERS as $value => $label)
-                        <option value="{{ $value }}">{{ $label }}</option>
-                    @endforeach
-                </select>
+                    <select
+                        wire:model.live="statusFilter"
+                        class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                    >
+                        @foreach ($this::STATUS_FILTERS as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
             </div>
 
             @if (! empty($selectedServices))

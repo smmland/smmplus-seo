@@ -15,6 +15,7 @@ use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Computed;
+use ZipArchive;
 
 /**
  * The services counterpart to BlogTranslationQueue - structurally simpler, since every service
@@ -297,6 +298,78 @@ class ServiceTranslationQueue extends Page implements HasActions
             ->body("Synced {$sync['total']} service(s) ({$sync['new']} new, {$sync['changed']} changed). Checked {$checked} across active languages, {$translated} confirmed translated.")
             ->success()
             ->send();
+    }
+
+    /**
+     * The services counterpart to BlogTranslationQueue::downloadSeoExport() - one zip, one text
+     * file per active non-default language, each listing every service in that language
+     * confirmed translated (looksTranslated()) so far: id, category, title (still the default
+     * language's - see AiSettingsService::SERVICE_TRANSLATION_PLACEHOLDERS, title isn't
+     * translated yet), and the translated description. Global rather than scoped to the current
+     * filter/selection - "download everything that's done" is the point once a translation run
+     * has finished, not a per-service export.
+     */
+    public function downloadTranslations(): mixed
+    {
+        if (! $this->catalogTableAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return null;
+        }
+
+        $defaultLang = $this->defaultLangCode();
+
+        $translatedRows = ServiceTranslation::query()
+            ->where('lang', '!=', $defaultLang)
+            ->where('is_translated', true)
+            ->orderBy('category_title')
+            ->orderBy('title')
+            ->get()
+            ->groupBy('lang');
+
+        if ($translatedRows->isEmpty()) {
+            Notification::make()
+                ->title('Nothing to download yet')
+                ->body('No service translations have been confirmed done yet.')
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'service-translations-').'.zip';
+        $zip = new ZipArchive();
+        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+        foreach ($translatedRows as $langCode => $rows) {
+            $blocks = $rows->map(function (ServiceTranslation $row) {
+                return implode("\n", [
+                    "[{$row->service_key}] {$row->title}",
+                    "Category: {$row->category_title}",
+                    '',
+                    'Description:',
+                    $row->description ?? '',
+                ]);
+            });
+
+            $zip->addFromString("{$langCode}.txt", $blocks->implode("\n\n---\n\n")."\n");
+        }
+
+        $zip->close();
+
+        $totalCount = $translatedRows->flatten()->count();
+        $langCount = $translatedRows->count();
+
+        Notification::make()
+            ->title('Download ready')
+            ->body("{$totalCount} translated service(s) across {$langCount} language(s).")
+            ->success()
+            ->send();
+
+        return response()->streamDownload(function () use ($zipPath) {
+            readfile($zipPath);
+            @unlink($zipPath);
+        }, 'service-translations-'.now()->format('Y-m-d').'.zip', ['Content-Type' => 'application/zip']);
     }
 
     /**

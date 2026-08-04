@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\AiCosts;
 use App\Filament\Pages\GeneralSettings;
 use App\Services\SettingsService;
 use Filament\Http\Middleware\Authenticate;
@@ -50,6 +51,14 @@ class AdminPanelProvider extends PanelProvider
                     ->label('Settings')
                     ->icon('heroicon-o-adjustments-horizontal')
                     ->url(fn () => GeneralSettings::getUrl()),
+                // Registered after Settings (Filament renders custom user menu items in the order
+                // they're added here, above the built-in Logout item) so this sits directly next
+                // to "Sign out" in the dropdown, as asked for - moved out of General Settings
+                // entirely rather than just linked from it.
+                MenuItem::make()
+                    ->label('AI Costs')
+                    ->icon('heroicon-o-currency-dollar')
+                    ->url(fn () => AiCosts::getUrl()),
             ])
             ->middleware([
                 EncryptCookies::class,

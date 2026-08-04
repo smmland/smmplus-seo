@@ -2,11 +2,12 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Pages\AiCosts;
 use App\Filament\Pages\GatewayStats;
-use App\Filament\Pages\GeneralSettings;
 use App\Filament\Pages\HiddenTranslations;
 use App\Models\BlogTranslationJob;
 use App\Models\GatewayRequestLog;
+use App\Models\ServiceTranslationJob;
 use App\Services\HiddenTranslationService;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -60,23 +61,37 @@ class DashboardStatsWidget extends StatsOverviewWidget
             ->url(HiddenTranslations::getUrl());
     }
 
-    // Guarded the same way GeneralSettings::getAiCostStats() is - the cost columns can lag behind
-    // this code until "Update database" is clicked.
+    // Combines both AI translation pipelines (blog articles and service descriptions - see
+    // AiCosts, which this links to) into one figure, each guarded the same way its own page is:
+    // the cost columns can lag behind this code until "Update database" is clicked.
     private function aiSpendStat(): Stat
     {
-        if (! Schema::hasTable('blog_translation_jobs') || ! Schema::hasColumn('blog_translation_jobs', 'estimated_cost_usd')) {
+        $blogAvailable = Schema::hasTable('blog_translation_jobs') && Schema::hasColumn('blog_translation_jobs', 'estimated_cost_usd');
+        $serviceAvailable = Schema::hasTable('service_translation_jobs') && Schema::hasColumn('service_translation_jobs', 'estimated_cost_usd');
+
+        if (! $blogAvailable && ! $serviceAvailable) {
             return Stat::make('AI translation spend', 'n/a')
                 ->description('Needs a database update')
                 ->color('gray');
         }
 
-        $totalCost = BlogTranslationJob::query()->whereNotNull('provider')->sum('estimated_cost_usd');
-        $totalJobs = BlogTranslationJob::query()->whereNotNull('provider')->count();
+        $totalCost = 0.0;
+        $totalJobs = 0;
 
-        return Stat::make('AI translation spend', '$'.number_format((float) $totalCost, 2))
+        if ($blogAvailable) {
+            $totalCost += (float) BlogTranslationJob::query()->whereNotNull('provider')->sum('estimated_cost_usd');
+            $totalJobs += BlogTranslationJob::query()->whereNotNull('provider')->count();
+        }
+
+        if ($serviceAvailable) {
+            $totalCost += (float) ServiceTranslationJob::query()->whereNotNull('provider')->sum('estimated_cost_usd');
+            $totalJobs += ServiceTranslationJob::query()->whereNotNull('provider')->count();
+        }
+
+        return Stat::make('AI translation spend', '$'.number_format($totalCost, 2))
             ->description("{$totalJobs} translation attempt(s) total")
             ->descriptionIcon('heroicon-m-sparkles')
             ->color('primary')
-            ->url(GeneralSettings::getUrl());
+            ->url(AiCosts::getUrl());
     }
 }

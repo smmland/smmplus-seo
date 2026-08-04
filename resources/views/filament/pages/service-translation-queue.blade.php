@@ -108,11 +108,15 @@
                 </div>
             @endif
 
-        @if ($this->queue['services']->isEmpty())
+        @if (! $this->databaseReady)
+            <div class="rounded-lg p-3 text-sm" style="background-color: rgba(var(--danger-500), .1); color: rgb(var(--danger-700))">
+                This feature needs a database update first - go to General Settings and click "Update database", then reload this page.
+            </div>
+        @elseif ($this->queue['services']->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">
                 @if ($search !== '')
                     No services match that search.
-                @elseif ($statusFilter !== 'all' && \App\Models\ServiceTranslation::query()->exists())
+                @elseif ($statusFilter !== 'all')
                     No services match "{{ $this::STATUS_FILTERS[$statusFilter] }}" - try switching the filter to "All services".
                 @else
                     No services found yet - click "Sync now" above to fetch the catalog for the first time.

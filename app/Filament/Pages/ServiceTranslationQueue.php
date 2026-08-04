@@ -92,12 +92,30 @@ class ServiceTranslationQueue extends Page implements HasActions
             : array_values(array_unique(array_merge($this->selectedServices, $onPage)));
     }
 
+    // Lets the view distinguish "database update needed" from "synced, but genuinely nothing
+    // found yet" without querying the model directly itself - a raw Eloquent call in the blade
+    // would hit the exact same missing-table crash this page's own queue() guards against.
+    #[Computed]
+    public function databaseReady(): bool
+    {
+        return $this->catalogTableAvailable();
+    }
+
     /**
      * @return array{services: \Illuminate\Support\Collection, page: int, lastPage: int, total: int}
      */
     #[Computed]
     public function queue()
     {
+        // Both service_translations and service_translation_jobs are brand-new tables - an admin
+        // without shell access has no way to create them except the "Update database" button
+        // (General Settings), so there's a real window after installing this feature, before
+        // they've clicked it, where the tables genuinely don't exist yet. Without this guard,
+        // just opening this page would hard-crash it instead of degrading to a clear message.
+        if (! $this->catalogTableAvailable()) {
+            return ['services' => collect(), 'page' => 1, 'lastPage' => 1, 'total' => 0];
+        }
+
         $defaultLang = $this->defaultLangCode();
 
         $activeLanguages = Language::query()
@@ -206,6 +224,12 @@ class ServiceTranslationQueue extends Page implements HasActions
      */
     public function runSyncNow(ServiceCatalogService $catalog): void
     {
+        if (! $this->catalogTableAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return;
+        }
+
         if ($this->notifyIfPanelUpdateInProgress()) {
             return;
         }
@@ -510,13 +534,22 @@ class ServiceTranslationQueue extends Page implements HasActions
     }
 
     // Same reasoning as BlogTranslationQueue's own translationTrackingAvailable() guard - an
-    // admin without shell access has no way to run this table's migration except the "Update
-    // database" button (General Settings).
+    // admin without shell access has no way to run these tables' migrations except the "Update
+    // database" button (General Settings). Requires both tables (not just the jobs one this was
+    // originally named for) so every existing call site - including queue() itself - is
+    // protected against the catalog table not existing yet either, rather than needing a second,
+    // separately-remembered guard sprinkled across every method that touches ServiceTranslation.
     private static ?bool $translationTrackingAvailable = null;
 
     private function translationTrackingAvailable(): bool
     {
-        return self::$translationTrackingAvailable ??= Schema::hasTable('service_translation_jobs');
+        return self::$translationTrackingAvailable ??= Schema::hasTable('service_translations')
+            && Schema::hasTable('service_translation_jobs');
+    }
+
+    private function catalogTableAvailable(): bool
+    {
+        return $this->translationTrackingAvailable();
     }
 
     private function notifyDatabaseUpdateNeeded(): void

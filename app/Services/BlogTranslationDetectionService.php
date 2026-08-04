@@ -28,6 +28,14 @@ class BlogTranslationDetectionService
         '403 forbidden', 'cloudflare', 'checking your browser', 'security check',
     ];
 
+    // Same class BlogContentExtractionService reads the visible article heading from. Some pages
+    // on this site keep the <title> tag (and og:title/twitter:title) in the default language even
+    // once the real, visible heading and body have genuinely been translated - an SEO-title field
+    // that was apparently never filled in for that article, not a real translation gap. Comparing
+    // this heading too, alongside the <title>, catches those pages that the title comparison alone
+    // would wrongly call "not translated".
+    private const ARTICLE_HEADING_CLASS = 'article-title';
+
     public function __construct(
         private readonly TranslationSettingsService $settings,
         private readonly UrlClassifierService $classifier,
@@ -77,7 +85,7 @@ class BlogTranslationDetectionService
                 continue;
             }
 
-            [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
+            [$defaultTitle, $defaultHeading] = $this->fetchTitle($defaultRow->source_url);
 
             if ($defaultTitle === null) {
                 $totals['errors'] += $rows->count();
@@ -86,7 +94,7 @@ class BlogTranslationDetectionService
             }
 
             foreach ($rows as $row) {
-                $this->mergeTotals($totals, $this->checkRow($row, $defaultTitle, $autoHideEnabled));
+                $this->mergeTotals($totals, $this->checkRow($row, $defaultTitle, $defaultHeading, $autoHideEnabled));
             }
         }
 
@@ -117,13 +125,13 @@ class BlogTranslationDetectionService
             return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 1];
         }
 
-        [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
+        [$defaultTitle, $defaultHeading] = $this->fetchTitle($defaultRow->source_url);
 
         if ($defaultTitle === null) {
             return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 1];
         }
 
-        return $this->checkRow($row, $defaultTitle, $this->settings->isAutoHideEnabled());
+        return $this->checkRow($row, $defaultTitle, $defaultHeading, $this->settings->isAutoHideEnabled());
     }
 
     /**
@@ -148,7 +156,7 @@ class BlogTranslationDetectionService
             return ['ok' => false, 'message' => 'Could not find the default-language content for this topic.'];
         }
 
-        [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
+        [$defaultTitle, $defaultHeading] = $this->fetchTitle($defaultRow->source_url);
 
         if ($defaultTitle === null) {
             return ['ok' => false, 'message' => 'Could not fetch the default-language page to compare against right now - try again shortly.'];
@@ -158,13 +166,21 @@ class BlogTranslationDetectionService
         $host = parse_url($defaultRow->source_url, PHP_URL_HOST);
         $candidateUrl = "{$scheme}://{$host}/{$targetLangCode}/blog/{$defaultRow->slug}";
 
-        [$title, $note] = $this->fetchTitle($candidateUrl);
+        [$title, $heading, $note] = $this->fetchTitle($candidateUrl);
 
         if ($title === null) {
             return ['ok' => false, 'message' => "Still not live at the expected address ({$note})."];
         }
 
-        if ($this->normalize($title) === $this->normalize($defaultTitle)) {
+        $titleMatchesDefault = $this->normalize($title) === $this->normalize($defaultTitle);
+        $headingMatchesDefault = ($heading !== null && $defaultHeading !== null)
+            ? $this->normalize($heading) === $this->normalize($defaultHeading)
+            : true;
+
+        // Some pages on this site keep the <title> tag in the default language even once the
+        // real heading and body are genuinely translated (see ARTICLE_HEADING_CLASS above) - only
+        // call it "not translated yet" when neither signal shows a difference.
+        if ($titleMatchesDefault && $headingMatchesDefault) {
             return ['ok' => false, 'message' => "Found a page there, but its title matches the default language - doesn't look translated yet (title: \"{$title}\")."];
         }
 
@@ -233,7 +249,7 @@ class BlogTranslationDetectionService
             return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => $rows->count()];
         }
 
-        [$defaultTitle] = $this->fetchTitle($defaultRow->source_url);
+        [$defaultTitle, $defaultHeading] = $this->fetchTitle($defaultRow->source_url);
 
         if ($defaultTitle === null) {
             return ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => $rows->count()];
@@ -243,7 +259,7 @@ class BlogTranslationDetectionService
         $totals = ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 0];
 
         foreach ($rows as $row) {
-            $this->mergeTotals($totals, $this->checkRow($row, $defaultTitle, $autoHideEnabled));
+            $this->mergeTotals($totals, $this->checkRow($row, $defaultTitle, $defaultHeading, $autoHideEnabled));
         }
 
         return $totals;
@@ -280,7 +296,7 @@ class BlogTranslationDetectionService
     /**
      * @return array{checked:int, hidden:int, unhidden:int, errors:int}
      */
-    private function checkRow(Url $row, string $defaultTitle, bool $autoHideEnabled): array
+    private function checkRow(Url $row, string $defaultTitle, ?string $defaultHeading, bool $autoHideEnabled): array
     {
         $totals = ['checked' => 0, 'hidden' => 0, 'unhidden' => 0, 'errors' => 0];
 
@@ -293,7 +309,7 @@ class BlogTranslationDetectionService
             $row->auto_hidden_for_translation = false;
         }
 
-        [$title, $note] = $this->fetchTitle($row->source_url);
+        [$title, $heading, $note] = $this->fetchTitle($row->source_url);
         $totals['checked']++;
 
         if ($title === null) {
@@ -304,7 +320,20 @@ class BlogTranslationDetectionService
             return $totals;
         }
 
-        $isTranslated = $this->normalize($title) !== $this->normalize($defaultTitle);
+        $titleDiffers = $this->normalize($title) !== $this->normalize($defaultTitle);
+
+        // Some pages on this site keep the <title> tag (and og:title/twitter:title) in the
+        // default language even once the real, visible heading and body have genuinely been
+        // translated - an SEO-title field apparently never filled in for that specific article,
+        // not a real translation gap. Comparing the visible "article-title" heading too catches
+        // those pages the title comparison alone would wrongly call "not translated". Only
+        // trusted when both pages actually have a heading to compare - a missing heading on
+        // either side (fetch hiccup, or a soft-404/catch-all page with no real article markup)
+        // just falls back to the title-only signal instead of forcing a false "differs".
+        $headingDiffers = ($heading !== null && $defaultHeading !== null)
+            && $this->normalize($heading) !== $this->normalize($defaultHeading);
+
+        $isTranslated = $titleDiffers || $headingDiffers;
         $translationCheckNote = $note;
 
         // A title difference from the English page alone isn't proof of a real translation - some
@@ -357,10 +386,13 @@ class BlogTranslationDetectionService
     }
 
     /**
-     * @return array{0: ?string, 1: ?string} [title, diagnostic note]. Title is null whenever we
-     * couldn't get a trustworthy title to compare - a real request failure, or a response that
-     * looks like a bot-check page rather than the actual article - so the caller treats it as an
-     * error instead of feeding bad data into the translated/untranslated comparison.
+     * @return array{0: ?string, 1: ?string, 2: ?string} [title, article heading, diagnostic
+     * note]. Title is null whenever we couldn't get a trustworthy title to compare - a real
+     * request failure, or a response that looks like a bot-check page rather than the actual
+     * article - so the caller treats it as an error instead of feeding bad data into the
+     * translated/untranslated comparison. Heading is separately null whenever the page has no
+     * "article-title" element (soft-404/catch-all pages, or a fetch error) - callers fall back
+     * to the title-only comparison in that case.
      */
     private function fetchTitle(string $url): array
     {
@@ -370,11 +402,11 @@ class BlogTranslationDetectionService
             // Broad catch deliberately: a single unreachable/erroring URL (dead link, blocked
             // host, timeout, malformed response, ...) should count as one error, not abort the
             // whole batch it's part of.
-            return [null, 'Fetch error: '.$e->getMessage()];
+            return [null, null, 'Fetch error: '.$e->getMessage()];
         }
 
         if (! $response->successful()) {
-            return [null, 'HTTP '.$response->status()];
+            return [null, null, 'HTTP '.$response->status()];
         }
 
         $doc = new \DOMDocument();
@@ -385,24 +417,46 @@ class BlogTranslationDetectionService
         $titleNodes = $doc->getElementsByTagName('title');
 
         if ($titleNodes->length === 0) {
-            return [null, 'HTTP '.$response->status().', no <title> in response'];
+            return [null, null, 'HTTP '.$response->status().', no <title> in response'];
         }
 
         $title = trim($titleNodes->item(0)->textContent);
 
         if ($title === '') {
-            return [null, 'HTTP '.$response->status().', empty <title>'];
+            return [null, null, 'HTTP '.$response->status().', empty <title>'];
         }
 
         $normalized = $this->normalize($title);
 
         foreach (self::CHALLENGE_TITLE_MARKERS as $marker) {
             if (str_contains($normalized, $marker)) {
-                return [null, "Looks like a bot-check page (title: \"{$title}\")"];
+                return [null, null, "Looks like a bot-check page (title: \"{$title}\")"];
             }
         }
 
-        return [$title, 'HTTP '.$response->status().': "'.$title.'"'];
+        $heading = $this->extractArticleHeading($doc);
+
+        return [$title, $heading, 'HTTP '.$response->status().': "'.$title.'"'];
+    }
+
+    /**
+     * Same "article-title" class BlogContentExtractionService reads the real article heading
+     * from - see the ARTICLE_HEADING_CLASS comment above for why this exists. Null just means the
+     * page doesn't have one (soft-404/catch-all pages don't), not that anything went wrong.
+     */
+    private function extractArticleHeading(\DOMDocument $doc): ?string
+    {
+        $xpath = new \DOMXPath($doc);
+        $query = '//*[contains(concat(\' \', normalize-space(@class), \' \'), \' '.self::ARTICLE_HEADING_CLASS.' \')]';
+        $nodes = $xpath->query($query);
+
+        if (! $nodes || $nodes->length === 0) {
+            return null;
+        }
+
+        $heading = trim(preg_replace('/\s+/', ' ', $nodes->item(0)->textContent));
+
+        return $heading !== '' ? $heading : null;
     }
 
     private function normalize(string $title): string

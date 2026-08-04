@@ -12,6 +12,8 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Livewire\Attributes\Computed;
@@ -40,6 +42,8 @@ class TranslationSettings extends Page implements HasForms
         $this->form->fill([
             'autoHideEnabled' => $settings->isAutoHideEnabled(),
             'recheckIntervalHours' => $settings->getRecheckIntervalHours(),
+            'autoExtractEnabled' => $settings->isAutoExtractNewBlogsEnabled(),
+            'autoTranslateEnabled' => $settings->isAutoTranslateNewBlogsEnabled(),
             'blogTranslationPrompt' => $aiSettings->getBlogTranslationPrompt(),
         ]);
     }
@@ -58,6 +62,25 @@ class TranslationSettings extends Page implements HasForms
                     ->minValue(1)
                     ->required()
                     ->helperText('How often each blog URL gets re-checked. Runs hourly in the background but only actually re-checks a URL once this many hours have passed since its last check.'),
+
+                Section::make('New blog topics')
+                    ->description('When the sitemap sync discovers a new blog topic in the default language, automatically prepare it instead of waiting for a manual click.')
+                    ->schema([
+                        Toggle::make('autoExtractEnabled')
+                            ->label('Automatically extract content for new blog topics')
+                            ->helperText('Runs the same content extraction as the "Extract content" button on the Blog Translation queue.')
+                            ->live()
+                            ->afterStateUpdated(function (bool $state, Set $set) {
+                                if (! $state) {
+                                    $set('autoTranslateEnabled', false);
+                                }
+                            }),
+
+                        Toggle::make('autoTranslateEnabled')
+                            ->label('Automatically queue AI translation for new blog topics')
+                            ->helperText('Requires auto-extract above - a topic is only queued for translation once its content has actually been extracted.')
+                            ->disabled(fn (Get $get) => ! $get('autoExtractEnabled')),
+                    ]),
 
                 Section::make('Blog translation prompt')
                     ->description('Sent to the AI when translating blog content. {{tokens}} are replaced with the real title/content/meta before sending - see the list below the field. The AI provider and API key are configured on General Settings.')
@@ -79,6 +102,11 @@ class TranslationSettings extends Page implements HasForms
         $settings->setSettings(
             (bool) $data['autoHideEnabled'],
             (int) $data['recheckIntervalHours'],
+        );
+
+        $settings->setAutoProcessSettings(
+            (bool) $data['autoExtractEnabled'],
+            (bool) $data['autoTranslateEnabled'],
         );
 
         $aiSettings->setBlogTranslationPrompt($data['blogTranslationPrompt']);

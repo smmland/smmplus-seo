@@ -46,3 +46,13 @@ Schedule::command('translation:process-queue')
     ->everyMinute()
     ->withoutOverlapping(20)
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Extracts content (and queues AI translation, if also enabled) for newly discovered
+// default-language blog topics - both gated on Translation Settings: "New blog topics", off by
+// default. A no-op query when auto-extract is off, so this can just always be scheduled rather
+// than conditionally registered. Skipped mid panel-update for the same reason
+// translation:process-queue is: the update overwrites this app's own files.
+Schedule::command('blog:auto-process-new')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

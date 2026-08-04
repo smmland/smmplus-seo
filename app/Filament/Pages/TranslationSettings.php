@@ -46,6 +46,7 @@ class TranslationSettings extends Page implements HasForms
             'autoExtractEnabled' => $settings->isAutoExtractNewBlogsEnabled(),
             'autoTranslateEnabled' => $settings->isAutoTranslateNewBlogsEnabled(),
             'blogTranslationPrompt' => $aiSettings->getBlogTranslationPrompt(),
+            'serviceTranslationPrompt' => $aiSettings->getServiceTranslationPrompt(),
         ]);
     }
 
@@ -98,6 +99,16 @@ class TranslationSettings extends Page implements HasForms
                             ->rows(16)
                             ->extraInputAttributes(['class' => 'font-mono text-xs']),
                     ]),
+
+                Section::make('Service translation prompt')
+                    ->description('Sent to the AI when translating a service\'s description on the Service Translation page. {{tokens}} are replaced with the real service name/category/description before sending - see the list below the field. Uses the same AI provider and API key as blog translation.')
+                    ->schema([
+                        Textarea::make('serviceTranslationPrompt')
+                            ->label('Prompt')
+                            ->required()
+                            ->rows(12)
+                            ->extraInputAttributes(['class' => 'font-mono text-xs']),
+                    ]),
             ])
             ->statePath('data');
     }
@@ -117,6 +128,7 @@ class TranslationSettings extends Page implements HasForms
         );
 
         $aiSettings->setBlogTranslationPrompt($data['blogTranslationPrompt']);
+        $aiSettings->setServiceTranslationPrompt($data['serviceTranslationPrompt']);
 
         Notification::make()
             ->title('Settings saved')
@@ -129,6 +141,20 @@ class TranslationSettings extends Page implements HasForms
         $this->form->fill([
             ...$this->form->getState(),
             'blogTranslationPrompt' => $aiSettings->defaultBlogTranslationPrompt(),
+        ]);
+
+        Notification::make()
+            ->title('Prompt reset to default')
+            ->body('Not saved yet - click Save to keep it.')
+            ->success()
+            ->send();
+    }
+
+    public function resetServicePromptToDefault(AiSettingsService $aiSettings): void
+    {
+        $this->form->fill([
+            ...$this->form->getState(),
+            'serviceTranslationPrompt' => $aiSettings->defaultServiceTranslationPrompt(),
         ]);
 
         Notification::make()

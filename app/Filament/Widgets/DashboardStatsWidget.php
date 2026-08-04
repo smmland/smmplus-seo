@@ -31,7 +31,12 @@ class DashboardStatsWidget extends StatsOverviewWidget
 
     // New blog topics discovered by the sitemap sync in the last 24h - the trigger for this is
     // always SyncSitemapCommand adding a fresh default-language BLOG row, so "new since
-    // first_seen_at" is exactly "new since it first appeared in the source sitemap".
+    // first_seen_at" is exactly "new since it first appeared in the source sitemap". The
+    // description also surfaces the two things that determine whether a topic actually counts as
+    // "done" beyond just having a translation queued: how many translations exist but still need
+    // to be confirmed live on the actual site (notUploadedCount), and how many are mid-flight at
+    // the AI provider right now (inProgressCount) - both span every blog topic, not just today's
+    // new ones, since that's the real backlog an admin cares about from this card.
     private function newBlogTopicsStat(): Stat
     {
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
@@ -42,11 +47,58 @@ class DashboardStatsWidget extends StatsOverviewWidget
             ->where('first_seen_at', '>=', now()->subDay())
             ->count();
 
+        $notUploadedCount = $this->notUploadedTranslationsCount($defaultLang);
+        $inProgressCount = $this->inProgressTranslationsCount();
+
+        $description = $count > 0 ? 'Discovered by the sitemap sync - ready to translate' : 'Nothing new since yesterday';
+        $description .= " · {$notUploadedCount} translated but not uploaded yet";
+        $description .= " · {$inProgressCount} translating now";
+
         return Stat::make('New blog topics (24h)', (string) $count)
-            ->description($count > 0 ? 'Discovered by the sitemap sync - ready to translate' : 'Nothing new since yesterday')
+            ->description($description)
             ->descriptionIcon($count > 0 ? 'heroicon-m-document-plus' : 'heroicon-m-check-circle')
             ->color($count > 0 ? 'primary' : 'gray')
             ->url(BlogTranslationQueue::getUrl());
+    }
+
+    // Mirrors Url::needsSiteUpdate() as a query (gated on looksTranslated() first, same as
+    // HiddenTranslationService's own looksTranslatedClause()) - a translation this tool has
+    // already produced (AI translation, or a live check that confirmed one) but that hasn't since
+    // been confirmed live on the actual site, whether because it's simply never been checked yet
+    // or because the content was re-extracted after the last check. site_update_override lets an
+    // admin force this regardless of what the automatic checks think.
+    private function notUploadedTranslationsCount(string $defaultLang): int
+    {
+        return Url::query()
+            ->where('pattern_type', 'BLOG')
+            ->where('lang', '!=', $defaultLang)
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->where('is_translated', true)
+                    ->orWhere(function ($query) {
+                        $query->whereNull('is_translated')->whereNotNull('content_extraction_path');
+                    });
+            })
+            ->where(function ($query) {
+                $query->where('site_update_override', true)
+                    ->orWhereNull('translation_checked_at')
+                    ->orWhereNull('translation_title')
+                    ->orWhereColumn('content_extracted_at', '>', 'translation_checked_at');
+            })
+            ->count();
+    }
+
+    // Queued or actively running blog_translation_jobs rows - see
+    // ProcessBlogTranslationQueueCommand, the scheduled command that drains these.
+    private function inProgressTranslationsCount(): int
+    {
+        if (! Schema::hasTable('blog_translation_jobs')) {
+            return 0;
+        }
+
+        return BlogTranslationJob::query()
+            ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
+            ->count();
     }
 
     // Success vs everything-else (blocked IPs, rate limits, invalid requests, upstream errors -

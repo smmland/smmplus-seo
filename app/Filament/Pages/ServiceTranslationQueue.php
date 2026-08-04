@@ -39,6 +39,11 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     public string $statusFilter = 'missing';
 
+    // Some services genuinely have no description on the site itself (a category header row
+    // that slipped through, or a service the source page just never filled in) - there's nothing
+    // to translate for those, so this lets them be filtered out of the list entirely.
+    public bool $hasDescriptionOnly = false;
+
     public int $queuePage = 1;
 
     // service_key values, not row ids - a service spans several service_translations rows (one
@@ -62,6 +67,12 @@ class ServiceTranslationQueue extends Page implements HasActions
     }
 
     public function updatedStatusFilter(): void
+    {
+        $this->queuePage = 1;
+        $this->selectedServices = [];
+    }
+
+    public function updatedHasDescriptionOnly(): void
     {
         $this->queuePage = 1;
         $this->selectedServices = [];
@@ -132,6 +143,10 @@ class ServiceTranslationQueue extends Page implements HasActions
                     ->orWhere('category_title', 'like', "%{$this->search}%")
                     ->orWhere('service_key', 'like', "%{$this->search}%");
             });
+        }
+
+        if ($this->hasDescriptionOnly) {
+            $defaultQuery->whereNotNull('description')->where('description', '!=', '');
         }
 
         $defaultRows = $defaultQuery

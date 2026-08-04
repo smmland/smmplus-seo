@@ -35,6 +35,52 @@
                 transform: none;
             }
         }
+
+        /* Same reasoning as the progress bar above - a plain checkbox styled by hand into a
+           switch, rather than reusing Filament's own Toggle field component (that one is built
+           to run inside a Filament Form's field-evaluation context - $getOffColor(), a bound
+           $field, etc. - and isn't meant to be dropped in standalone against a plain
+           wire:model). */
+        .st-toggle-track {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+        .st-toggle-track input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .st-toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background-color: #d1d5db;
+            transition: background-color .15s ease;
+            border-radius: 9999px;
+        }
+        .dark .st-toggle-slider {
+            background-color: rgba(255, 255, 255, .15);
+        }
+        .st-toggle-slider::before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            top: 2px;
+            background-color: white;
+            transition: transform .15s ease;
+            border-radius: 9999px;
+        }
+        .st-toggle-track input:checked + .st-toggle-slider {
+            background-color: rgb(var(--primary-600));
+        }
+        .st-toggle-track input:checked + .st-toggle-slider::before {
+            transform: translateX(14px);
+        }
     </style>
 
     <div>
@@ -70,12 +116,23 @@
 
         <x-filament::section class="mt-4">
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <input
-                    type="text"
-                    wire:model.live.debounce.400ms="search"
-                    placeholder="Search by title, category, or id…"
-                    class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
-                >
+                <div class="flex flex-wrap items-center gap-3">
+                    <input
+                        type="text"
+                        wire:model.live.debounce.400ms="search"
+                        placeholder="Search by title, category, or id…"
+                        class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                    >
+
+                    <label class="flex cursor-pointer items-center gap-2">
+                        <span class="st-toggle-track">
+                            <input type="checkbox" wire:model.live="hasDescriptionOnly">
+                            <span class="st-toggle-slider"></span>
+                        </span>
+                        <span class="text-sm text-gray-600 dark:text-gray-300">Has description only</span>
+                    </label>
+                </div>
+
                 <select
                     wire:model.live="statusFilter"
                     class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"

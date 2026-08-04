@@ -52,10 +52,6 @@ class TranslationSettings extends Page implements HasForms
     {
         return $form
             ->schema([
-                Toggle::make('autoHideEnabled')
-                    ->label('Automatically hide untranslated blog pages')
-                    ->helperText('When a non-default-language blog page\'s title still matches the default language, hide it from the sitemap until it\'s translated.'),
-
                 TextInput::make('recheckIntervalHours')
                     ->label('Recheck cycle (hours)')
                     ->numeric()
@@ -80,6 +76,16 @@ class TranslationSettings extends Page implements HasForms
                             ->label('Automatically queue AI translation for new blog topics')
                             ->helperText('Requires auto-extract above - a topic is only queued for translation once its content has actually been extracted.')
                             ->disabled(fn (Get $get) => ! $get('autoExtractEnabled')),
+                    ]),
+
+                Section::make('Advanced tools')
+                    ->description('Rarely needed - collapsed by default.')
+                    ->collapsible()
+                    ->collapsed()
+                    ->schema([
+                        Toggle::make('autoHideEnabled')
+                            ->label('Automatically hide untranslated blog pages')
+                            ->helperText('When a non-default-language blog page\'s title still matches the default language, hide it from the sitemap until it\'s translated.'),
                     ]),
 
                 Section::make('Blog translation prompt')

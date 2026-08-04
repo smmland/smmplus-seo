@@ -56,3 +56,16 @@ Schedule::command('blog:auto-process-new')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Re-syncs the services catalog (all services live on one shared /services page per language,
+// unlike blog's one-URL-per-article) and auto-queues missing translations, twice a day - the
+// admin only asked for a ~12 hour cadence here, nowhere near blog's hourly recheck.
+Schedule::command('services:refresh-catalog')->twiceDaily(3, 15)->withoutOverlapping();
+
+// Same reasoning as translation:process-queue: no persistent worker on this host, so this rides
+// the once-a-minute schedule:run tick, draining whatever's queued up to the configured
+// concurrency. Skipped mid panel-update for the same reason.
+Schedule::command('services:process-queue')
+    ->everyMinute()
+    ->withoutOverlapping(20)
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

@@ -1,0 +1,267 @@
+<x-filament-panels::page>
+    {{-- Same hand-written progress-bar CSS as blog-translation-queue.blade.php - this panel
+         serves Filament's pre-built CSS bundle, which doesn't scan this app's own blade files,
+         so even plain geometry utilities (h-1, w-24, left-0) can silently be missing from it. --}}
+    <style>
+        .st-progress-track {
+            position: relative;
+            height: 4px;
+            width: 80px;
+            overflow: hidden;
+            border-radius: 9999px;
+            background-color: #e5e7eb;
+        }
+        .dark .st-progress-track {
+            background-color: rgba(255, 255, 255, .1);
+        }
+        .st-progress-bar {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 28px;
+            border-radius: 9999px;
+            background-color: rgb(var(--primary-600));
+            animation: st-progress-sweep 1.1s ease-in-out infinite;
+        }
+        @keyframes st-progress-sweep {
+            0% { transform: translateX(-28px); }
+            100% { transform: translateX(80px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .st-progress-bar {
+                animation: none;
+                width: 100%;
+                transform: none;
+            }
+        }
+    </style>
+
+    <div>
+        <x-filament::section>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">Services catalog</p>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Every service lives on one shared listing page per language (unlike blog posts) - checked automatically every 12 hours, or run it now below.
+                    </p>
+                </div>
+
+                <x-filament::button
+                    icon="heroicon-o-arrow-path"
+                    wire:click="runSyncNow"
+                    wire:loading.attr="disabled"
+                    wire:target="runSyncNow"
+                >
+                    Sync now
+                </x-filament::button>
+            </div>
+
+            @if ($lastSyncResult)
+                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                    Last run: synced {{ $lastSyncResult['total'] }} service(s) ({{ $lastSyncResult['new'] }} new, {{ $lastSyncResult['changed'] }} changed) ·
+                    checked {{ $lastSyncResult['checked'] }}, {{ $lastSyncResult['translated'] }} confirmed translated
+                    @if ($lastSyncResult['errors'] > 0)
+                        · {{ $lastSyncResult['errors'] }} language fetch error(s)
+                    @endif
+                </p>
+            @endif
+        </x-filament::section>
+
+        <x-filament::section class="mt-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <input
+                    type="text"
+                    wire:model.live.debounce.400ms="search"
+                    placeholder="Search by title, category, or id…"
+                    class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                >
+                <select
+                    wire:model.live="statusFilter"
+                    class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                >
+                    @foreach ($this::STATUS_FILTERS as $value => $label)
+                        <option value="{{ $value }}">{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            @if (! empty($selectedServices))
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                    <span class="text-sm text-gray-600 dark:text-gray-300">
+                        {{ count($selectedServices) }} service{{ count($selectedServices) === 1 ? '' : 's' }} selected
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" wire:click="$set('selectedServices', [])" class="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                            Clear
+                        </button>
+                        <x-filament::button
+                            size="sm"
+                            icon="heroicon-o-queue-list"
+                            wire:click="queueMissingForSelected"
+                            wire:loading.attr="disabled"
+                            wire:target="queueMissingForSelected"
+                        >
+                            Queue missing translations
+                        </x-filament::button>
+                    </div>
+                </div>
+            @endif
+
+        @if ($this->queue['services']->isEmpty())
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                @if ($search !== '')
+                    No services match that search.
+                @elseif ($statusFilter !== 'all' && \App\Models\ServiceTranslation::query()->exists())
+                    No services match "{{ $this::STATUS_FILTERS[$statusFilter] }}" - try switching the filter to "All services".
+                @else
+                    No services found yet - click "Sync now" above to fetch the catalog for the first time.
+                @endif
+            </p>
+        @else
+            <div class="overflow-x-auto">
+                <table class="fi-ta-table w-full text-start">
+                    <thead>
+                        <tr>
+                            <th class="p-2 text-start text-sm font-semibold">
+                                @php
+                                    $selectableOnPage = collect($this->queue['services'])->reject(fn (array $s) => ! empty($s['pendingLangs']))->pluck('row.service_key');
+                                @endphp
+                                <input
+                                    type="checkbox"
+                                    wire:click="toggleSelectAllOnPage"
+                                    @checked($selectableOnPage->isNotEmpty() && $selectableOnPage->diff($selectedServices)->isEmpty())
+                                    class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
+                                >
+                            </th>
+                            <th class="p-2 text-start text-sm font-semibold">#</th>
+                            <th class="p-2 text-start text-sm font-semibold">Service (default language)</th>
+                            <th class="p-2 text-start text-sm font-semibold">Translation status</th>
+                            <th class="p-2 text-start text-sm font-semibold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($this->queue['services'] as $service)
+                            <tr wire:key="service-{{ $service['row']->service_key }}" class="border-t border-gray-100 dark:border-white/5 align-top">
+                                <td class="p-2">
+                                    <input
+                                        type="checkbox"
+                                        wire:model.live="selectedServices"
+                                        value="{{ $service['row']->service_key }}"
+                                        @disabled(! empty($service['pendingLangs']))
+                                        title="{{ ! empty($service['pendingLangs']) ? 'Already translating - nothing more to queue right now' : '' }}"
+                                        @class([
+                                            'rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5',
+                                            'opacity-50' => ! empty($service['pendingLangs']),
+                                        ])
+                                    >
+                                </td>
+                                <td class="p-2 text-sm text-gray-500 dark:text-gray-400">
+                                    {{ $loop->iteration }}
+                                </td>
+                                <td class="p-2">
+                                    <span class="font-medium text-gray-950 dark:text-white">{{ $service['row']->title ?? '(untitled)' }}</span>
+                                    <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                        {{ $service['row']->category_title ?? 'Uncategorized' }} · id {{ $service['row']->service_key }}
+                                    </div>
+                                </td>
+                                <td class="p-2">
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach ($service['languages'] as $language)
+                                            <span
+                                                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 dark:text-gray-300 dark:ring-white/10"
+                                                title="{{ $language['name'] }}: {{ match ($language['state']) {
+                                                    'default' => 'Default language',
+                                                    'pending' => 'Translating…',
+                                                    'missing' => 'Not translated',
+                                                    'translated' => 'Confirmed translated (live check)',
+                                                } }}"
+                                            >
+                                                {{ strtoupper($language['code']) }}
+                                                @switch($language['state'])
+                                                    @case('default')
+                                                        <x-filament::icon icon="heroicon-m-star" class="h-3 w-3" style="color: rgb(var(--warning-500))" />
+                                                        @break
+                                                    @case('pending')
+                                                        <x-filament::loading-indicator class="h-3 w-3" />
+                                                        @break
+                                                    @case('translated')
+                                                        <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" style="color: rgb(var(--success-600))" />
+                                                        @break
+                                                    @default
+                                                        <x-filament::icon icon="heroicon-m-x-circle" class="h-3 w-3 opacity-50" />
+                                                @endswitch
+                                            </span>
+                                        @endforeach
+                                    </div>
+
+                                    @if (! empty($service['pendingLangs']))
+                                        <div class="st-progress-track" style="margin-top: 6px;">
+                                            <div class="st-progress-bar"></div>
+                                        </div>
+                                    @endif
+                                </td>
+                                <td class="p-2">
+                                    <div class="flex items-center gap-2">
+                                        <x-filament::button
+                                            size="sm"
+                                            icon="heroicon-o-information-circle"
+                                            wire:click="mountAction('viewService', {{ Illuminate\Support\Js::from(['serviceKey' => $service['row']->service_key, 'title' => $service['row']->title ?? $service['row']->service_key]) }})"
+                                        >
+                                            Details
+                                        </x-filament::button>
+
+                                        <x-filament::icon-button
+                                            icon="heroicon-o-language"
+                                            color="gray"
+                                            size="sm"
+                                            label="Translate missing"
+                                            tooltip="Queue every missing language"
+                                            wire:click="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
+                                            wire:loading.attr="disabled"
+                                            wire:target="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
+                                        />
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-3 flex items-center justify-between gap-3">
+                <p class="text-xs text-gray-400 dark:text-gray-500">
+                    {{ $this->queue['total'] }} service{{ $this->queue['total'] === 1 ? '' : 's' }}
+                    @if ($this->queue['lastPage'] > 1)
+                        · Page {{ $this->queue['page'] }} of {{ $this->queue['lastPage'] }}
+                    @endif
+                </p>
+
+                @if ($this->queue['lastPage'] > 1)
+                    <div class="flex items-center gap-2">
+                        <x-filament::button
+                            size="sm"
+                            color="gray"
+                            icon="heroicon-o-chevron-left"
+                            :disabled="$this->queue['page'] <= 1"
+                            wire:click="previousQueuePage"
+                        >
+                            Previous
+                        </x-filament::button>
+                        <x-filament::button
+                            size="sm"
+                            color="gray"
+                            icon="heroicon-o-chevron-right"
+                            icon-position="after"
+                            :disabled="$this->queue['page'] >= $this->queue['lastPage']"
+                            wire:click="nextQueuePage"
+                        >
+                            Next
+                        </x-filament::button>
+                    </div>
+                @endif
+            </div>
+        @endif
+        </x-filament::section>
+    </div>
+</x-filament-panels::page>

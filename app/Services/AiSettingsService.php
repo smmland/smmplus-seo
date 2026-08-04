@@ -51,10 +51,20 @@ class AiSettingsService
         '{{target_language}}' => 'The language being translated into',
     ];
 
+    // Deliberately just the description - title and category are extracted for later use but
+    // aren't translated yet (see ServiceCatalogService), so there's nothing else to substitute.
+    public const SERVICE_TRANSLATION_PLACEHOLDERS = [
+        '{{service_title}}' => 'The service\'s name (not translated - for context only)',
+        '{{category_title}}' => 'The service\'s category name (not translated - for context only)',
+        '{{description}}' => 'The service description HTML to translate',
+        '{{target_language}}' => 'The language being translated into',
+    ];
+
     private const KEY_PROVIDER = 'ai_provider';
     private const KEY_API_KEY_PREFIX = 'ai_api_key_';
     private const KEY_MODEL_PREFIX = 'ai_model_';
     private const KEY_BLOG_TRANSLATION_PROMPT = 'ai_prompt_blog_translation';
+    private const KEY_SERVICE_TRANSLATION_PROMPT = 'ai_prompt_service_translation';
     private const KEY_MAX_CONCURRENT_TRANSLATIONS = 'ai_max_concurrent_translations';
 
     private const DEFAULT_PROVIDER = 'claude';
@@ -114,6 +124,37 @@ class AiSettingsService
         Open Graph description: {{og_description}}
         Twitter title: {{twitter_title}}
         Twitter description: {{twitter_description}}
+        PROMPT;
+
+    // Only the description is translated for now (see SERVICE_TRANSLATION_PLACEHOLDERS above) -
+    // title/category are passed along purely as context so the AI understands what the service
+    // actually does, matching the constraint ServiceAiTranslationService's response contract
+    // enforces (a single "description" field, nothing else).
+    private const DEFAULT_SERVICE_TRANSLATION_PROMPT = <<<'PROMPT'
+        Translate the service description below from its original language into
+        {{target_language}} - and only {{target_language}}. Do not translate into any other
+        language, and do not leave any sentence, word, or fragment untranslated in the original
+        language.
+
+        Translate like a native, professional {{target_language}}-speaking copywriter would
+        rewrite this for a {{target_language}}-speaking audience - not a literal, word-for-word
+        translation. Keep the same meaning and level of detail, but let phrasing read naturally
+        in {{target_language}}.
+
+        Rules:
+        - Preserve the HTML exactly: only <br> line breaks are expected, keep them as-is.
+        - Never translate HTML tag names or attributes.
+        - Keep numbers, prices, and brand/product names unchanged unless a localized form is
+          already standard in {{target_language}}.
+
+        ## Service name (context only, do not include in your output)
+        {{service_title}}
+
+        ## Category (context only, do not include in your output)
+        {{category_title}}
+
+        ## Description to translate (HTML)
+        {{description}}
         PROMPT;
 
     public function getProvider(): string
@@ -195,6 +236,21 @@ class AiSettingsService
     public function defaultBlogTranslationPrompt(): string
     {
         return self::DEFAULT_BLOG_TRANSLATION_PROMPT;
+    }
+
+    public function getServiceTranslationPrompt(): string
+    {
+        return $this->get(self::KEY_SERVICE_TRANSLATION_PROMPT) ?? self::DEFAULT_SERVICE_TRANSLATION_PROMPT;
+    }
+
+    public function setServiceTranslationPrompt(string $prompt): void
+    {
+        $this->set(self::KEY_SERVICE_TRANSLATION_PROMPT, $prompt);
+    }
+
+    public function defaultServiceTranslationPrompt(): string
+    {
+        return self::DEFAULT_SERVICE_TRANSLATION_PROMPT;
     }
 
     /**

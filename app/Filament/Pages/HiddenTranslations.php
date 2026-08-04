@@ -38,6 +38,14 @@ class HiddenTranslations extends Page
 
     protected static string $view = 'filament.pages.hidden-translations';
 
+    // Reached from Translation Settings' "Advanced tools" section instead of the sidebar - a
+    // recovery tool for a handful of edge cases, not something that needs its own permanent spot
+    // in the main nav that every admin sees on every page load.
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public string $search = '';
 
     public int $page = 1;

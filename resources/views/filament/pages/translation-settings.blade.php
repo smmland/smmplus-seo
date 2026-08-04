@@ -26,6 +26,25 @@
         </div>
     </form>
 
+    <x-filament::section
+        heading="Hidden Translations"
+        description="Recovers translations that aren't showing up in the normal list - hidden by a sitemap sync, orphaned from a renamed/removed topic, or a file on disk with no database record. Rarely needed - collapsed by default."
+        collapsible
+        collapsed
+    >
+        <p class="text-sm {{ $this->hiddenTranslationsCount > 0 ? 'text-warning-600 dark:text-warning-400' : 'text-success-600 dark:text-success-400' }}">
+            @if ($this->hiddenTranslationsCount > 0)
+                {{ $this->hiddenTranslationsCount }} translation{{ $this->hiddenTranslationsCount === 1 ? '' : 's' }} currently need{{ $this->hiddenTranslationsCount === 1 ? 's' : '' }} attention.
+            @else
+                Nothing currently needs attention.
+            @endif
+        </p>
+
+        <x-filament::button tag="a" href="{{ \App\Filament\Pages\HiddenTranslations::getUrl() }}" color="gray" class="mt-4">
+            Open Hidden Translations
+        </x-filament::button>
+    </x-filament::section>
+
     <x-filament::section heading="Manual check">
         <p class="text-sm text-gray-500 dark:text-gray-400">
             Runs the detector immediately for up to 40 of the most overdue blog URLs, instead of waiting for the hourly background check.

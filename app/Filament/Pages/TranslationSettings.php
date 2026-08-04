@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Services\AiSettingsService;
 use App\Services\BlogTranslationDetectionService;
+use App\Services\HiddenTranslationService;
 use App\Services\TranslationSettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -157,5 +158,16 @@ class TranslationSettings extends Page implements HasForms
     public function pendingCount(): int
     {
         return app(BlogTranslationDetectionService::class)->pendingCount();
+    }
+
+    // Moved out of the sidebar (HiddenTranslations::shouldRegisterNavigation() is false) - this
+    // count is what makes the link below worth clicking instead of just a static "recovery tools"
+    // link nobody ever opens.
+    #[Computed]
+    public function hiddenTranslationsCount(): int
+    {
+        $hidden = app(HiddenTranslationService::class);
+
+        return $hidden->count() + $hidden->orphanedCount();
     }
 }

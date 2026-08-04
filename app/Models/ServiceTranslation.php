@@ -10,6 +10,8 @@ class ServiceTranslation extends Model
         'service_key', 'lang', 'category_id', 'category_title', 'title',
         'description', 'description_text', 'source_description_hash',
         'is_translated', 'translated_at', 'live_confirmed_at', 'checked_at', 'check_note',
+        'is_title_translated', 'title_translated_at', 'title_live_confirmed_at', 'title_check_note',
+        'source_title_hash',
         'first_seen_at', 'last_seen_at',
     ];
 
@@ -20,6 +22,9 @@ class ServiceTranslation extends Model
             'translated_at' => 'datetime',
             'live_confirmed_at' => 'datetime',
             'checked_at' => 'datetime',
+            'is_title_translated' => 'boolean',
+            'title_translated_at' => 'datetime',
+            'title_live_confirmed_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
         ];
@@ -51,5 +56,28 @@ class ServiceTranslation extends Model
         }
 
         return $this->live_confirmed_at === null || $this->live_confirmed_at->lt($this->translated_at);
+    }
+
+    /**
+     * The title counterpart to looksTranslated() - kept as its own separate flag rather than
+     * reusing is_translated, since a service's title and description are translated
+     * independently of each other.
+     */
+    public function titleLooksTranslated(): bool
+    {
+        return $this->is_title_translated === true;
+    }
+
+    /**
+     * The title counterpart to needsSiteUpdate(), same is-it-uploaded-yet comparison against
+     * title_translated_at/title_live_confirmed_at instead of translated_at/live_confirmed_at.
+     */
+    public function titleNeedsSiteUpdate(): bool
+    {
+        if (! $this->titleLooksTranslated() || $this->title_translated_at === null) {
+            return false;
+        }
+
+        return $this->title_live_confirmed_at === null || $this->title_live_confirmed_at->lt($this->title_translated_at);
     }
 }

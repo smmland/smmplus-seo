@@ -1,6 +1,6 @@
 <div x-data="{ langSelected: {{ Illuminate\Support\Js::from($languages->mapWithKeys(fn ($l) => [$l['code'] => true])->all()) }} }">
     <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-        {{ $selectedCount }} service{{ $selectedCount === 1 ? '' : 's' }} selected. The zip groups files into one folder per service id (e.g. <code class="rounded bg-gray-100 px-1 dark:bg-white/10">5/fa.txt</code>), each containing just that language's description text.
+        {{ $selectedCount }} service{{ $selectedCount === 1 ? '' : 's' }} selected. The zip groups files into one folder per service id (e.g. <code class="rounded bg-gray-100 px-1 dark:bg-white/10">{{ $fileExample }}</code>), each containing just that language's {{ $fieldLabel }} text.
     </p>
 
     <div class="space-y-2">
@@ -21,7 +21,7 @@
         <x-filament::button
             size="sm"
             icon="heroicon-o-arrow-down-tray"
-            @click="$wire.downloadSelectedServicesExport(Object.keys(langSelected).filter(code => langSelected[code]))"
+            @click="$wire.{{ $wireMethod }}(Object.keys(langSelected).filter(code => langSelected[code]))"
         >
             Download zip
         </x-filament::button>

@@ -165,14 +165,28 @@
                                     icon="heroicon-o-arrow-down-tray"
                                     wire:click="mountAction('downloadSelection')"
                                 >
-                                    Download selection
+                                    Download descriptions
                                 </x-filament::dropdown.list.item>
 
                                 <x-filament::dropdown.list.item
                                     icon="heroicon-o-queue-list"
                                     wire:click="queueMissingForSelected"
                                 >
-                                    Queue missing translations
+                                    Queue missing descriptions
+                                </x-filament::dropdown.list.item>
+
+                                <x-filament::dropdown.list.item
+                                    icon="heroicon-o-arrow-down-tray"
+                                    wire:click="mountAction('downloadSelectionTitles')"
+                                >
+                                    Download titles
+                                </x-filament::dropdown.list.item>
+
+                                <x-filament::dropdown.list.item
+                                    icon="heroicon-o-queue-list"
+                                    wire:click="queueMissingTitlesForSelected"
+                                >
+                                    Queue missing titles
                                 </x-filament::dropdown.list.item>
                             </x-filament::dropdown.list>
                         </x-filament::dropdown>
@@ -242,49 +256,27 @@
                                     </div>
                                 </td>
                                 <td class="p-2">
+                                    <p class="mb-1 text-xs font-medium text-gray-400 dark:text-gray-500">Description</p>
                                     <div class="flex flex-wrap gap-1">
                                         @foreach ($service['languages'] as $language)
-                                            <span
-                                                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 dark:text-gray-300 dark:ring-white/10"
-                                                title="{{ $language['name'] }}: {{ match ($language['state']) {
-                                                    'default' => 'Default language',
-                                                    'pending' => 'Translating…',
-                                                    'error' => 'Last translation attempt failed',
-                                                    'missing' => 'Not translated',
-                                                    'needsUpdate' => 'Translated - not uploaded to the site yet',
-                                                    'confirmed' => 'Uploaded - confirmed live on the site',
-                                                } }}"
-                                            >
-                                                {{ strtoupper($language['code']) }}
-                                                @switch($language['state'])
-                                                    @case('default')
-                                                        <x-filament::icon icon="heroicon-m-star" class="h-3 w-3" style="color: rgb(var(--warning-500))" />
-                                                        @break
-                                                    @case('pending')
-                                                        <x-filament::loading-indicator class="h-3 w-3" />
-                                                        @break
-                                                    @case('error')
-                                                        <x-filament::icon icon="heroicon-m-exclamation-triangle" class="h-3 w-3" style="color: rgb(var(--danger-600))" />
-                                                        @break
-                                                    @case('needsUpdate')
-                                                        <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
-                                                        @break
-                                                    @case('confirmed')
-                                                        {{-- Two ticks side by side (like a messaging app's "delivered" mark) - distinct at a
-                                                             glance from the single-tick "needsUpdate" state right above it. --}}
-                                                        <span class="inline-flex" style="color: rgb(var(--success-600))">
-                                                            <x-filament::icon icon="heroicon-m-check" class="h-3 w-3" />
-                                                            <x-filament::icon icon="heroicon-m-check" class="h-3 w-3" style="margin-left: -6px" />
-                                                        </span>
-                                                        @break
-                                                    @default
-                                                        <x-filament::icon icon="heroicon-m-x-circle" class="h-3 w-3 opacity-50" />
-                                                @endswitch
-                                            </span>
+                                            @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'state'])
                                         @endforeach
                                     </div>
 
                                     @if (! empty($service['pendingLangs']))
+                                        <div class="st-progress-track" style="margin-top: 6px;">
+                                            <div class="st-progress-bar"></div>
+                                        </div>
+                                    @endif
+
+                                    <p class="mb-1 mt-3 text-xs font-medium text-gray-400 dark:text-gray-500">Title</p>
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach ($service['languages'] as $language)
+                                            @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'titleState'])
+                                        @endforeach
+                                    </div>
+
+                                    @if (! empty($service['pendingTitleLangs']))
                                         <div class="st-progress-track" style="margin-top: 6px;">
                                             <div class="st-progress-bar"></div>
                                         </div>
@@ -304,11 +296,22 @@
                                             icon="heroicon-o-language"
                                             color="gray"
                                             size="sm"
-                                            label="Translate missing"
-                                            tooltip="Queue every missing language"
+                                            label="Translate missing descriptions"
+                                            tooltip="Queue every missing description"
                                             wire:click="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
                                             wire:loading.attr="disabled"
                                             wire:target="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
+                                        />
+
+                                        <x-filament::icon-button
+                                            icon="heroicon-o-tag"
+                                            color="gray"
+                                            size="sm"
+                                            label="Translate missing titles"
+                                            tooltip="Queue every missing title"
+                                            wire:click="translateAllMissingTitlesForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
+                                            wire:loading.attr="disabled"
+                                            wire:target="translateAllMissingTitlesForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
                                         />
                                     </div>
                                 </td>

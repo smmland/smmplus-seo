@@ -23,6 +23,13 @@ use ZipArchive;
  * there's no per-row "extract content" step and no separate "confirmed live on the real site" vs
  * "translated by us" distinction: ServiceCatalogService::refreshLanguage() IS the live check,
  * comparing each language's actual page directly.
+ *
+ * Description and title are tracked, translated, and downloaded as two fully independent
+ * pipelines throughout this page - see ServiceTranslationJob::FIELD_DESCRIPTION/FIELD_TITLE and
+ * ServiceTranslation's separate is_translated/is_title_translated columns. Every action here
+ * comes in a matching pair (translateLanguage()/translateTitle(),
+ * downloadServiceExport()/downloadServiceTitleExport(), ...) rather than one action taking a
+ * "which field" parameter, so each stays simple and neither can be mixed up with the other.
  */
 class ServiceTranslationQueue extends Page implements HasActions
 {
@@ -55,6 +62,9 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     private const QUEUE_PER_PAGE = 20;
 
+    // Filters description status only - title has its own badges/actions throughout this page,
+    // but not a second copy of this dropdown (the list is already filtered down to what needs
+    // attention on the description side, which is what most workflows here start from).
     public const STATUS_FILTERS = [
         'missing' => 'Has a missing language',
         'needsUpdate' => 'Needs to be uploaded to the site',
@@ -176,16 +186,23 @@ class ServiceTranslationQueue extends Page implements HasActions
         $allServices = $defaultRows->map(function (ServiceTranslation $defaultRow) use ($existingByKey, $activeLanguages, $jobsByKey) {
             $existingForKey = $existingByKey->get($defaultRow->service_key, collect())->keyBy('lang');
             $jobsForKey = $jobsByKey->get($defaultRow->service_key, collect());
-            $pendingLangs = $jobsForKey->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)->pluck('target_lang')->all();
-            $failedLangs = $jobsForKey->where('status', ServiceTranslationJob::FAILED)->pluck('target_lang')->all();
 
-            $languages = $activeLanguages->map(function (Language $language) use ($existingForKey, $pendingLangs, $failedLangs) {
+            $descJobs = $jobsForKey->where('field', ServiceTranslationJob::FIELD_DESCRIPTION);
+            $titleJobs = $jobsForKey->where('field', ServiceTranslationJob::FIELD_TITLE);
+
+            $pendingLangs = $descJobs->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)->pluck('target_lang')->all();
+            $failedLangs = $descJobs->where('status', ServiceTranslationJob::FAILED)->pluck('target_lang')->all();
+            $pendingTitleLangs = $titleJobs->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)->pluck('target_lang')->all();
+            $failedTitleLangs = $titleJobs->where('status', ServiceTranslationJob::FAILED)->pluck('target_lang')->all();
+
+            $languages = $activeLanguages->map(function (Language $language) use ($existingForKey, $pendingLangs, $failedLangs, $pendingTitleLangs, $failedTitleLangs) {
                 $row = $existingForKey->get($language->code);
 
                 return [
                     'code' => $language->code,
                     'name' => $language->name,
-                    'state' => $this->languageState($language, $row, $pendingLangs, $failedLangs),
+                    'state' => $this->descriptionLanguageState($language, $row, $pendingLangs, $failedLangs),
+                    'titleState' => $this->titleLanguageState($language, $row, $pendingTitleLangs, $failedTitleLangs),
                     'description' => $row?->description,
                 ];
             });
@@ -194,6 +211,7 @@ class ServiceTranslationQueue extends Page implements HasActions
                 'row' => $defaultRow,
                 'languages' => $languages,
                 'pendingLangs' => $pendingLangs,
+                'pendingTitleLangs' => $pendingTitleLangs,
             ];
         });
 
@@ -224,7 +242,7 @@ class ServiceTranslationQueue extends Page implements HasActions
      * needsUpdate (translated - by AI or independently - but not yet confirmed live on the real
      * site, see ServiceTranslation::needsSiteUpdate()), confirmed (translated and confirmed live).
      */
-    private function languageState(Language $language, ?ServiceTranslation $row, array $pendingLangs, array $failedLangs = []): string
+    private function descriptionLanguageState(Language $language, ?ServiceTranslation $row, array $pendingLangs, array $failedLangs = []): string
     {
         if ($language->is_default) {
             return 'default';
@@ -249,6 +267,31 @@ class ServiceTranslationQueue extends Page implements HasActions
         }
 
         return $row->needsSiteUpdate() ? 'needsUpdate' : 'confirmed';
+    }
+
+    // The title counterpart to descriptionLanguageState() - identical shape, reading
+    // titleLooksTranslated()/titleNeedsSiteUpdate() instead.
+    private function titleLanguageState(Language $language, ?ServiceTranslation $row, array $pendingLangs, array $failedLangs = []): string
+    {
+        if ($language->is_default) {
+            return 'default';
+        }
+
+        if (in_array($language->code, $pendingLangs, true)) {
+            return 'pending';
+        }
+
+        $looksTranslated = $row && $row->titleLooksTranslated();
+
+        if (! $looksTranslated && in_array($language->code, $failedLangs, true)) {
+            return 'error';
+        }
+
+        if (! $looksTranslated) {
+            return 'missing';
+        }
+
+        return $row->titleNeedsSiteUpdate() ? 'needsUpdate' : 'confirmed';
     }
 
     /**
@@ -325,66 +368,42 @@ class ServiceTranslationQueue extends Page implements HasActions
      */
     public function downloadServiceExport(string $serviceKey, array $langCodes): mixed
     {
-        $langCodes = array_values(array_unique(array_filter($langCodes)));
+        return $this->buildServiceZip(
+            [$serviceKey => $langCodes],
+            fn (ServiceTranslation $row) => $row->description,
+            "service-export-{$serviceKey}.zip",
+        );
+    }
 
-        if (empty($langCodes)) {
-            Notification::make()
-                ->title('Select at least one language first')
-                ->warning()
-                ->send();
-
-            return null;
-        }
-
-        $rows = ServiceTranslation::query()
-            ->where('service_key', $serviceKey)
-            ->whereIn('lang', $langCodes)
-            ->get()
-            ->keyBy('lang');
-
-        $zipPath = tempnam(sys_get_temp_dir(), 'service-export-').'.zip';
-        $zip = new ZipArchive();
-        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-
-        $added = 0;
-
-        foreach ($langCodes as $code) {
-            $row = $rows->get($code);
-
-            if (! $row || blank($row->description)) {
-                continue;
-            }
-
-            $zip->addFromString("{$code}.txt", $row->description."\n");
-
-            $added++;
-        }
-
-        if ($added === 0) {
-            $zip->close();
-            @unlink($zipPath);
-
-            Notification::make()
-                ->title('Nothing to export')
-                ->body('None of the selected languages have any content for this service.')
-                ->warning()
-                ->send();
-
-            return null;
-        }
-
-        $zip->close();
-
-        return response()->streamDownload(function () use ($zipPath) {
-            readfile($zipPath);
-            @unlink($zipPath);
-        }, "service-export-{$serviceKey}.zip", ['Content-Type' => 'application/zip']);
+    // The title counterpart to downloadServiceExport() - separate download entirely, never
+    // combined into the same file or zip as the description export.
+    public function downloadServiceTitleExport(string $serviceKey, array $langCodes): mixed
+    {
+        return $this->buildServiceZip(
+            [$serviceKey => $langCodes],
+            fn (ServiceTranslation $row) => $row->title,
+            "service-title-export-{$serviceKey}.zip",
+        );
     }
 
     /**
      * @return array{ok: bool, message: string}
      */
     public function translateLanguage(string $serviceKey, string $targetLangCode): array
+    {
+        return $this->queueSingle($serviceKey, $targetLangCode, ServiceTranslationJob::FIELD_DESCRIPTION);
+    }
+
+    // The title counterpart to translateLanguage().
+    public function translateTitle(string $serviceKey, string $targetLangCode): array
+    {
+        return $this->queueSingle($serviceKey, $targetLangCode, ServiceTranslationJob::FIELD_TITLE);
+    }
+
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    private function queueSingle(string $serviceKey, string $targetLangCode, string $field): array
     {
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
@@ -396,7 +415,7 @@ class ServiceTranslationQueue extends Page implements HasActions
             return ['ok' => false, 'message' => 'Panel update in progress.'];
         }
 
-        if ($this->hasPendingTranslation($serviceKey, $targetLangCode)) {
+        if ($this->hasPendingJob($serviceKey, $targetLangCode, $field)) {
             Notification::make()
                 ->title('Already translating')
                 ->body('This language is already queued or in progress for this service.')
@@ -406,7 +425,7 @@ class ServiceTranslationQueue extends Page implements HasActions
             return ['ok' => true, 'message' => 'Already queued.'];
         }
 
-        $this->queueTranslation($serviceKey, $targetLangCode);
+        $this->queueTranslation($serviceKey, $targetLangCode, $field);
 
         unset($this->queue);
 
@@ -424,6 +443,17 @@ class ServiceTranslationQueue extends Page implements HasActions
      */
     public function translateAllMissingForService(string $serviceKey): void
     {
+        $this->queueAllMissingForService($serviceKey, ServiceTranslationJob::FIELD_DESCRIPTION);
+    }
+
+    // The title counterpart to translateAllMissingForService().
+    public function translateAllMissingTitlesForService(string $serviceKey): void
+    {
+        $this->queueAllMissingForService($serviceKey, ServiceTranslationJob::FIELD_TITLE);
+    }
+
+    private function queueAllMissingForService(string $serviceKey, string $field): void
+    {
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -434,7 +464,7 @@ class ServiceTranslationQueue extends Page implements HasActions
             return;
         }
 
-        $missingLanguages = $this->missingLanguagesFor($serviceKey);
+        $missingLanguages = $this->missingLanguagesFor($serviceKey, $field);
 
         if ($missingLanguages->isEmpty()) {
             Notification::make()->title('Nothing left to translate')->success()->send();
@@ -443,7 +473,7 @@ class ServiceTranslationQueue extends Page implements HasActions
         }
 
         foreach ($missingLanguages as $langCode) {
-            $this->queueTranslation($serviceKey, $langCode);
+            $this->queueTranslation($serviceKey, $langCode, $field);
         }
 
         unset($this->queue);
@@ -458,6 +488,17 @@ class ServiceTranslationQueue extends Page implements HasActions
      * Bulk counterpart - queues every missing language for every selected service.
      */
     public function queueMissingForSelected(): void
+    {
+        $this->queueMissingForSelectedField(ServiceTranslationJob::FIELD_DESCRIPTION);
+    }
+
+    // The title counterpart to queueMissingForSelected().
+    public function queueMissingTitlesForSelected(): void
+    {
+        $this->queueMissingForSelectedField(ServiceTranslationJob::FIELD_TITLE);
+    }
+
+    private function queueMissingForSelectedField(string $field): void
     {
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
@@ -479,10 +520,10 @@ class ServiceTranslationQueue extends Page implements HasActions
         $servicesAffected = 0;
 
         foreach ($this->selectedServices as $serviceKey) {
-            $missingLanguages = $this->missingLanguagesFor($serviceKey);
+            $missingLanguages = $this->missingLanguagesFor($serviceKey, $field);
 
             foreach ($missingLanguages as $langCode) {
-                $this->queueTranslation($serviceKey, $langCode);
+                $this->queueTranslation($serviceKey, $langCode, $field);
             }
 
             if ($missingLanguages->isNotEmpty()) {
@@ -513,28 +554,31 @@ class ServiceTranslationQueue extends Page implements HasActions
     /**
      * @return \Illuminate\Support\Collection<int, string>
      */
-    private function missingLanguagesFor(string $serviceKey): \Illuminate\Support\Collection
+    private function missingLanguagesFor(string $serviceKey, string $field): \Illuminate\Support\Collection
     {
         $existingByLang = ServiceTranslation::query()->where('service_key', $serviceKey)->get()->keyBy('lang');
 
         $pendingLangs = ServiceTranslationJob::query()
             ->where('service_key', $serviceKey)
+            ->where('field', $field)
             ->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)
             ->pluck('target_lang')
             ->all();
+
+        $isTitle = $field === ServiceTranslationJob::FIELD_TITLE;
 
         return Language::query()
             ->where('is_active', true)
             ->where('is_default', false)
             ->pluck('code')
-            ->filter(function (string $code) use ($existingByLang, $pendingLangs) {
+            ->filter(function (string $code) use ($existingByLang, $pendingLangs, $isTitle) {
                 if (in_array($code, $pendingLangs, true)) {
                     return false;
                 }
 
                 $row = $existingByLang->get($code);
 
-                return ! $row || ! $row->looksTranslated();
+                return ! $row || ! ($isTitle ? $row->titleLooksTranslated() : $row->looksTranslated());
             })
             ->values();
     }
@@ -563,20 +607,48 @@ class ServiceTranslationQueue extends Page implements HasActions
     public function downloadSelectionAction(): Action
     {
         return Action::make('downloadSelection')
-            ->label('Download selection')
+            ->label('Download descriptions')
             ->icon('heroicon-o-arrow-down-tray')
-            ->modalHeading('Download translations for selected services')
+            ->modalHeading('Download descriptions for selected services')
             ->modalWidth(MaxWidth::Medium)
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close')
             ->modalContent(fn () => view('filament.pages.service-translation-bulk-export', [
-                'languages' => Language::query()
-                    ->where('is_active', true)
-                    ->where('is_default', false)
-                    ->orderBy('sort_order')
-                    ->get(['code', 'name']),
+                'languages' => $this->activeNonDefaultLanguages(),
                 'selectedCount' => count($this->selectedServices),
+                'wireMethod' => 'downloadSelectedServicesExport',
+                'fileExample' => '5/fa.txt',
+                'fieldLabel' => 'description',
             ]));
+    }
+
+    // The title counterpart to downloadSelectionAction() - separate modal/action entirely, never
+    // combined with the description one.
+    public function downloadSelectionTitlesAction(): Action
+    {
+        return Action::make('downloadSelectionTitles')
+            ->label('Download titles')
+            ->icon('heroicon-o-arrow-down-tray')
+            ->modalHeading('Download titles for selected services')
+            ->modalWidth(MaxWidth::Medium)
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close')
+            ->modalContent(fn () => view('filament.pages.service-translation-bulk-export', [
+                'languages' => $this->activeNonDefaultLanguages(),
+                'selectedCount' => count($this->selectedServices),
+                'wireMethod' => 'downloadSelectedServicesTitlesExport',
+                'fileExample' => '5/fa.txt',
+                'fieldLabel' => 'title',
+            ]));
+    }
+
+    private function activeNonDefaultLanguages(): \Illuminate\Support\Collection
+    {
+        return Language::query()
+            ->where('is_active', true)
+            ->where('is_default', false)
+            ->orderBy('sort_order')
+            ->get(['code', 'name']);
     }
 
     /**
@@ -592,31 +664,74 @@ class ServiceTranslationQueue extends Page implements HasActions
             return null;
         }
 
-        $langCodes = array_values(array_unique(array_filter($langCodes)));
+        $byService = collect($this->selectedServices)->mapWithKeys(fn ($key) => [$key => $langCodes])->all();
 
-        if (empty($langCodes)) {
+        return $this->buildServiceZip($byService, fn (ServiceTranslation $row) => $row->description, 'service-translations-selection.zip');
+    }
+
+    // The title counterpart to downloadSelectedServicesExport() - separate zip entirely.
+    public function downloadSelectedServicesTitlesExport(array $langCodes): mixed
+    {
+        if (empty($this->selectedServices)) {
+            Notification::make()->title('No services selected')->warning()->send();
+
+            return null;
+        }
+
+        $byService = collect($this->selectedServices)->mapWithKeys(fn ($key) => [$key => $langCodes])->all();
+
+        return $this->buildServiceZip($byService, fn (ServiceTranslation $row) => $row->title, 'service-titles-selection.zip');
+    }
+
+    /**
+     * Shared zip-building logic behind all four download actions above - which text field to
+     * read off each row (description or title) is the only thing that varies between them,
+     * passed in as $valueResolver so the description and title paths can never accidentally
+     * cross-contaminate one export with the other's content.
+     *
+     * @param  array<string, list<string>>  $langCodesByService
+     */
+    private function buildServiceZip(array $langCodesByService, \Closure $valueResolver, string $downloadName): mixed
+    {
+        $langCodesByService = collect($langCodesByService)
+            ->map(fn ($codes) => array_values(array_unique(array_filter($codes))))
+            ->filter(fn ($codes) => ! empty($codes));
+
+        if ($langCodesByService->isEmpty()) {
             Notification::make()->title('Select at least one language first')->warning()->send();
 
             return null;
         }
 
+        $allLangCodes = $langCodesByService->flatten()->unique()->values()->all();
+
         $rows = ServiceTranslation::query()
-            ->whereIn('service_key', $this->selectedServices)
-            ->whereIn('lang', $langCodes)
+            ->whereIn('service_key', $langCodesByService->keys())
+            ->whereIn('lang', $allLangCodes)
             ->get();
 
-        $zipPath = tempnam(sys_get_temp_dir(), 'service-translations-').'.zip';
+        $zipPath = tempnam(sys_get_temp_dir(), 'service-export-').'.zip';
         $zip = new ZipArchive();
         $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
         $added = 0;
+        $singleService = $langCodesByService->count() === 1;
 
         foreach ($rows as $row) {
-            if (blank($row->description)) {
+            $wantedLangs = $langCodesByService->get($row->service_key, []);
+
+            if (! in_array($row->lang, $wantedLangs, true)) {
                 continue;
             }
 
-            $zip->addFromString("{$row->service_key}/{$row->lang}.txt", $row->description."\n");
+            $value = $valueResolver($row);
+
+            if (blank($value)) {
+                continue;
+            }
+
+            $filename = $singleService ? "{$row->lang}.txt" : "{$row->service_key}/{$row->lang}.txt";
+            $zip->addFromString($filename, $value."\n");
             $added++;
         }
 
@@ -626,7 +741,7 @@ class ServiceTranslationQueue extends Page implements HasActions
 
             Notification::make()
                 ->title('Nothing to export')
-                ->body('None of the selected services have content for the chosen languages.')
+                ->body('None of the selected service(s) have content for the chosen languages.')
                 ->warning()
                 ->send();
 
@@ -638,7 +753,7 @@ class ServiceTranslationQueue extends Page implements HasActions
         return response()->streamDownload(function () use ($zipPath) {
             readfile($zipPath);
             @unlink($zipPath);
-        }, 'service-translations-selection.zip', ['Content-Type' => 'application/zip']);
+        }, $downloadName, ['Content-Type' => 'application/zip']);
     }
 
     /**
@@ -657,15 +772,16 @@ class ServiceTranslationQueue extends Page implements HasActions
             ->get(['code', 'name', 'is_default']);
 
         $jobs = $this->translationTrackingAvailable()
-            ? ServiceTranslationJob::query()->where('service_key', $serviceKey)->get()->keyBy('target_lang')
+            ? ServiceTranslationJob::query()->where('service_key', $serviceKey)->get()->groupBy('field')
             : collect();
 
-        $pendingLangs = $jobs
-            ->filter(fn (ServiceTranslationJob $job) => in_array($job->status, ServiceTranslationJob::PENDING_STATUSES, true))
-            ->keys()
-            ->all();
+        $descJobs = $jobs->get(ServiceTranslationJob::FIELD_DESCRIPTION, collect())->keyBy('target_lang');
+        $titleJobs = $jobs->get(ServiceTranslationJob::FIELD_TITLE, collect())->keyBy('target_lang');
 
-        $languages = $languageDefs->map(function (Language $language) use ($rows, $pendingLangs, $jobs) {
+        $pendingLangs = $descJobs->filter(fn (ServiceTranslationJob $job) => in_array($job->status, ServiceTranslationJob::PENDING_STATUSES, true))->keys()->all();
+        $pendingTitleLangs = $titleJobs->filter(fn (ServiceTranslationJob $job) => in_array($job->status, ServiceTranslationJob::PENDING_STATUSES, true))->keys()->all();
+
+        $languages = $languageDefs->map(function (Language $language) use ($rows, $pendingLangs, $pendingTitleLangs, $descJobs, $titleJobs) {
             /** @var ?ServiceTranslation $row */
             $row = $rows->get($language->code);
 
@@ -681,8 +797,16 @@ class ServiceTranslationQueue extends Page implements HasActions
                 'checkedAt' => $row?->checked_at,
                 'checkNote' => $row?->check_note,
                 'pending' => in_array($language->code, $pendingLangs, true),
-                'error' => $jobs->get($language->code)?->status === ServiceTranslationJob::FAILED
-                    ? $jobs->get($language->code)->message
+                'error' => $descJobs->get($language->code)?->status === ServiceTranslationJob::FAILED
+                    ? $descJobs->get($language->code)->message
+                    : null,
+                'titleIsTranslated' => $row !== null && $row->titleLooksTranslated(),
+                'titleNeedsSiteUpdate' => $row !== null && $row->titleNeedsSiteUpdate(),
+                'titleCheckedAt' => $row?->checked_at,
+                'titleCheckNote' => $row?->title_check_note,
+                'titlePending' => in_array($language->code, $pendingTitleLangs, true),
+                'titleError' => $titleJobs->get($language->code)?->status === ServiceTranslationJob::FAILED
+                    ? $titleJobs->get($language->code)->message
                     : null,
             ];
         })->values();
@@ -700,19 +824,20 @@ class ServiceTranslationQueue extends Page implements HasActions
         return Language::query()->where('is_default', true)->value('code') ?? 'en';
     }
 
-    private function queueTranslation(string $serviceKey, string $targetLangCode): void
+    private function queueTranslation(string $serviceKey, string $targetLangCode, string $field): void
     {
         ServiceTranslationJob::query()->updateOrCreate(
-            ['service_key' => $serviceKey, 'target_lang' => $targetLangCode],
+            ['service_key' => $serviceKey, 'target_lang' => $targetLangCode, 'field' => $field],
             ['status' => ServiceTranslationJob::QUEUED, 'message' => null],
         );
     }
 
-    private function hasPendingTranslation(string $serviceKey, string $targetLangCode): bool
+    private function hasPendingJob(string $serviceKey, string $targetLangCode, string $field): bool
     {
         return ServiceTranslationJob::query()
             ->where('service_key', $serviceKey)
             ->where('target_lang', $targetLangCode)
+            ->where('field', $field)
             ->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)
             ->exists();
     }
@@ -728,7 +853,8 @@ class ServiceTranslationQueue extends Page implements HasActions
     private function translationTrackingAvailable(): bool
     {
         return self::$translationTrackingAvailable ??= Schema::hasTable('service_translations')
-            && Schema::hasTable('service_translation_jobs');
+            && Schema::hasTable('service_translation_jobs')
+            && Schema::hasColumn('service_translation_jobs', 'field');
     }
 
     private function catalogTableAvailable(): bool

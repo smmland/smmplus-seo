@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.13.0",
-    "notes": "Added bulk translation download: select multiple services in the queue list, then Actions > Download selection to pick languages and get one zip with a folder per service id (e.g. 5/fa.txt), each file containing just that language's description."
+    "version": "1.14.0",
+    "notes": "Added full title translation for services, kept completely separate from description translation throughout: its own AI prompt (Translation Settings), its own queued/running/done/failed jobs, its own missing/needs-upload/uploaded/error status badges (a new \"Title\" row in the queue list and its own section in each service's details popup), its own \"Translate with AI\" buttons, and its own downloads (per-service and bulk, via new \"Download titles\"/\"Queue missing titles\" options in the selection Actions menu) - never mixed into the same file, zip, or status as the description."
 }

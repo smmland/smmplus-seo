@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Language;
 use App\Models\ServiceTranslation;
+use App\Models\ServiceTranslationJob;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
@@ -11,9 +12,7 @@ use Illuminate\Support\Facades\Http;
 
 class ServiceAiTranslationService
 {
-    // Only "description" - unlike blog articles, title/category translation isn't needed yet
-    // (see AiSettingsService::SERVICE_TRANSLATION_PLACEHOLDERS), so the contract stays minimal.
-    private const RESPONSE_CONTRACT = <<<'TEXT'
+    private const RESPONSE_CONTRACT_DESCRIPTION = <<<'TEXT'
         You are translating one e-commerce service's description for a website. Follow the
         instructions below, then respond with ONLY a single JSON object - no markdown code
         fences, no commentary before or after it - with exactly this key:
@@ -23,14 +22,26 @@ class ServiceAiTranslationService
         Never translate HTML tag names or attributes.
         TEXT;
 
-    // A short description translates fast - no need for blog's 600s ceiling, but this still
-    // rides the same scheduled-command execution model (no persistent worker), so a generous
-    // margin over a normal response time is kept rather than trimming it aggressively.
+    // Title translation is a separate, much smaller contract - see
+    // AiSettingsService::SERVICE_TITLE_TRANSLATION_PLACEHOLDERS for why this is its own prompt
+    // rather than folded into the description one.
+    private const RESPONSE_CONTRACT_TITLE = <<<'TEXT'
+        You are translating one e-commerce service's title/name for a website. Follow the
+        instructions below, then respond with ONLY a single JSON object - no markdown code
+        fences, no commentary before or after it - with exactly this key:
+        {
+          "title": "the translated title as plain text - short, like a product name, not a full sentence"
+        }
+        TEXT;
+
+    // A short description/title translates fast - no need for blog's 600s ceiling, but this
+    // still rides the same scheduled-command execution model (no persistent worker), so a
+    // generous margin over a normal response time is kept rather than trimming it aggressively.
     private const REQUEST_TIMEOUT_SECONDS = 120;
 
     public function __construct(private readonly AiSettingsService $aiSettings) {}
 
-    private function buildPrompt(ServiceTranslation $sourceRow, string $targetLanguage): string
+    private function buildDescriptionPrompt(ServiceTranslation $sourceRow, string $targetLanguage): string
     {
         $replacements = [
             '{{service_title}}' => $sourceRow->title ?? '',
@@ -41,13 +52,29 @@ class ServiceAiTranslationService
 
         $userPrompt = strtr($this->aiSettings->getServiceTranslationPrompt(), $replacements);
 
-        return self::RESPONSE_CONTRACT."\n\n".$userPrompt;
+        return self::RESPONSE_CONTRACT_DESCRIPTION."\n\n".$userPrompt;
+    }
+
+    private function buildTitlePrompt(ServiceTranslation $sourceRow, string $targetLanguage): string
+    {
+        $replacements = [
+            '{{service_title}}' => $sourceRow->title ?? '',
+            '{{category_title}}' => $sourceRow->category_title ?? '',
+            '{{target_language}}' => $targetLanguage,
+        ];
+
+        $userPrompt = strtr($this->aiSettings->getServiceTitleTranslationPrompt(), $replacements);
+
+        return self::RESPONSE_CONTRACT_TITLE."\n\n".$userPrompt;
     }
 
     /**
      * Same Http::pool concurrency approach as BlogAiTranslationService::translateManyConcurrently
      * - N real requests in flight together within a single PHP process, since this host has no
-     * persistent worker process to run several of in parallel.
+     * persistent worker process to run several of in parallel. Handles both description and
+     * title jobs in the same batch (branching per-job on $job->field) since they share the same
+     * queue/provider/concurrency setting, even though each field's prompt, response contract,
+     * and saved columns are entirely separate.
      *
      * @param  Collection<int, \App\Models\ServiceTranslationJob>  $jobs
      * @return array<int, array{ok: bool, message: string, provider?: string, model?: string, input_tokens?: int, output_tokens?: int, estimated_cost_usd?: ?float}> keyed by ServiceTranslationJob id
@@ -69,19 +96,21 @@ class ServiceAiTranslationService
         $prepared = [];
 
         foreach ($jobs as $job) {
+            $isTitle = $job->field === ServiceTranslationJob::FIELD_TITLE;
+
             $sourceRow = ServiceTranslation::query()
                 ->where('service_key', $job->service_key)
                 ->where('lang', $defaultLangCode)
                 ->first();
 
             if (! $sourceRow) {
-                $prepared[$job->id] = ['error' => 'Could not find the default-language description for this service.'];
+                $prepared[$job->id] = ['error' => 'Could not find the default-language '.($isTitle ? 'title' : 'description').' for this service.'];
 
                 continue;
             }
 
-            if (blank($sourceRow->description)) {
-                $prepared[$job->id] = ['error' => 'This service has no description to translate.'];
+            if ($isTitle ? blank($sourceRow->title) : blank($sourceRow->description)) {
+                $prepared[$job->id] = ['error' => 'This service has no '.($isTitle ? 'title' : 'description').' to translate.'];
 
                 continue;
             }
@@ -89,10 +118,13 @@ class ServiceAiTranslationService
             $targetLanguage = Language::query()->where('code', $job->target_lang)->value('name') ?? $job->target_lang;
 
             $prepared[$job->id] = [
+                'field' => $job->field,
                 'sourceRow' => $sourceRow,
                 'targetLangCode' => $job->target_lang,
                 'targetLanguage' => $targetLanguage,
-                'prompt' => $this->buildPrompt($sourceRow, $targetLanguage),
+                'prompt' => $isTitle
+                    ? $this->buildTitlePrompt($sourceRow, $targetLanguage)
+                    : $this->buildDescriptionPrompt($sourceRow, $targetLanguage),
             ];
         }
 
@@ -109,6 +141,7 @@ class ServiceAiTranslationService
 
             foreach ($toSend as $jobId => $p) {
                 $response = $responses[(string) $jobId] ?? null;
+                $isTitle = $p['field'] === ServiceTranslationJob::FIELD_TITLE;
 
                 $extracted = $response instanceof Response
                     ? ($provider === 'claude' ? $this->extractClaudeText($response) : $this->extractChatgptText($response))
@@ -131,15 +164,21 @@ class ServiceAiTranslationService
                 }
 
                 $parsed = $this->parseJsonResponse($extracted['text']);
+                $key = $isTitle ? 'title' : 'description';
 
-                if (! $parsed || ! isset($parsed['description']) || trim((string) $parsed['description']) === '') {
+                if (! $parsed || ! isset($parsed[$key]) || trim((string) $parsed[$key]) === '') {
                     $results[$jobId] = ['ok' => false, 'message' => 'The AI\'s reply could not be parsed as the expected JSON - try again, or check the prompt in Translation Settings.', ...$usage];
 
                     continue;
                 }
 
-                $this->saveTranslation($p['sourceRow'], $p['targetLangCode'], $parsed['description']);
-                $results[$jobId] = ['ok' => true, 'message' => "Translated into {$p['targetLanguage']} and saved.", ...$usage];
+                if ($isTitle) {
+                    $this->saveTitleTranslation($p['sourceRow'], $p['targetLangCode'], $parsed['title']);
+                } else {
+                    $this->saveDescriptionTranslation($p['sourceRow'], $p['targetLangCode'], $parsed['description']);
+                }
+
+                $results[$jobId] = ['ok' => true, 'message' => ($isTitle ? 'Title translated' : 'Translated').' into '.$p['targetLanguage'].' and saved.', ...$usage];
             }
         }
 
@@ -273,7 +312,7 @@ class ServiceAiTranslationService
         return is_array($decoded) ? $decoded : null;
     }
 
-    private function saveTranslation(ServiceTranslation $sourceRow, string $targetLangCode, string $translatedDescription): void
+    private function saveDescriptionTranslation(ServiceTranslation $sourceRow, string $targetLangCode, string $translatedDescription): void
     {
         $row = ServiceTranslation::query()->firstOrNew([
             'service_key' => $sourceRow->service_key,
@@ -284,9 +323,9 @@ class ServiceAiTranslationService
 
         $row->category_id = $sourceRow->category_id;
         $row->category_title = $sourceRow->category_title;
-        // Title isn't translated yet (see AiSettingsService::SERVICE_TRANSLATION_PLACEHOLDERS) -
-        // carries the default-language title over as a readable placeholder rather than leaving
-        // it blank, since the queue page needs something to label the row with.
+        // Only touched if this row has no title of its own at all yet - a title translation job
+        // (saveTitleTranslation() below) may already have set a real one, which this must never
+        // clobber with the default-language placeholder.
         $row->title = $row->title ?: $sourceRow->title;
         $row->description = $translatedDescription;
         $row->description_text = trim(preg_replace('/\s+/', ' ', strip_tags($translatedDescription)));
@@ -297,6 +336,32 @@ class ServiceAiTranslationService
         // from "confirmed live" until the next refresh actually verifies it against the site.
         $row->translated_at = now();
         $row->check_note = 'Translated by AI - not yet confirmed live on the site.';
+
+        if ($isNew) {
+            $row->first_seen_at = now();
+        }
+        $row->last_seen_at = now();
+
+        $row->save();
+    }
+
+    private function saveTitleTranslation(ServiceTranslation $sourceRow, string $targetLangCode, string $translatedTitle): void
+    {
+        $row = ServiceTranslation::query()->firstOrNew([
+            'service_key' => $sourceRow->service_key,
+            'lang' => $targetLangCode,
+        ]);
+
+        $isNew = ! $row->exists;
+
+        $row->category_id = $sourceRow->category_id;
+        $row->category_title = $sourceRow->category_title;
+        $row->title = trim(preg_replace('/\s+/', ' ', $translatedTitle));
+        $row->is_title_translated = true;
+        // Same reasoning as translated_at on the description side - kept fully separate so
+        // titleNeedsSiteUpdate() can track this independently of the description's own state.
+        $row->title_translated_at = now();
+        $row->title_check_note = 'Translated by AI - not yet confirmed live on the site.';
 
         if ($isNew) {
             $row->first_seen_at = now();

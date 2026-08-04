@@ -51,12 +51,22 @@ class AiSettingsService
         '{{target_language}}' => 'The language being translated into',
     ];
 
-    // Deliberately just the description - title and category are extracted for later use but
-    // aren't translated yet (see ServiceCatalogService), so there's nothing else to substitute.
+    // The description prompt's own placeholders - category is passed along purely as context so
+    // the AI understands what the service actually does.
     public const SERVICE_TRANSLATION_PLACEHOLDERS = [
-        '{{service_title}}' => 'The service\'s name (not translated - for context only)',
+        '{{service_title}}' => 'The service\'s name (not translated by this prompt - for context only)',
         '{{category_title}}' => 'The service\'s category name (not translated - for context only)',
         '{{description}}' => 'The service description HTML to translate',
+        '{{target_language}}' => 'The language being translated into',
+    ];
+
+    // The title translation is its own separate prompt/response contract (see
+    // ServiceAiTranslationService) - kept apart from the description prompt above rather than
+    // combined into one call, since title and description are translated, tracked, and
+    // downloaded fully independently of each other.
+    public const SERVICE_TITLE_TRANSLATION_PLACEHOLDERS = [
+        '{{service_title}}' => 'The service\'s current title to translate',
+        '{{category_title}}' => 'The service\'s category name (not translated - for context only)',
         '{{target_language}}' => 'The language being translated into',
     ];
 
@@ -65,6 +75,7 @@ class AiSettingsService
     private const KEY_MODEL_PREFIX = 'ai_model_';
     private const KEY_BLOG_TRANSLATION_PROMPT = 'ai_prompt_blog_translation';
     private const KEY_SERVICE_TRANSLATION_PROMPT = 'ai_prompt_service_translation';
+    private const KEY_SERVICE_TITLE_TRANSLATION_PROMPT = 'ai_prompt_service_title_translation';
     private const KEY_MAX_CONCURRENT_TRANSLATIONS = 'ai_max_concurrent_translations';
 
     private const DEFAULT_PROVIDER = 'claude';
@@ -126,10 +137,10 @@ class AiSettingsService
         Twitter description: {{twitter_description}}
         PROMPT;
 
-    // Only the description is translated for now (see SERVICE_TRANSLATION_PLACEHOLDERS above) -
-    // title/category are passed along purely as context so the AI understands what the service
+    // Title/category are passed along purely as context so the AI understands what the service
     // actually does, matching the constraint ServiceAiTranslationService's response contract
-    // enforces (a single "description" field, nothing else).
+    // enforces (a single "description" field, nothing else) - the title itself is translated by
+    // its own separate prompt below.
     private const DEFAULT_SERVICE_TRANSLATION_PROMPT = <<<'PROMPT'
         Translate the service description below from its original language into
         {{target_language}} - and only {{target_language}}. Do not translate into any other
@@ -155,6 +166,30 @@ class AiSettingsService
 
         ## Description to translate (HTML)
         {{description}}
+        PROMPT;
+
+    // A short, single-line translation - deliberately its own prompt/contract (see
+    // SERVICE_TITLE_TRANSLATION_PLACEHOLDERS above) rather than folded into the description
+    // prompt, so a title can be (re)translated, checked, and downloaded without touching the
+    // description at all.
+    private const DEFAULT_SERVICE_TITLE_TRANSLATION_PROMPT = <<<'PROMPT'
+        Translate the service title below from its original language into {{target_language}} -
+        and only {{target_language}}. Do not translate into any other language.
+
+        Translate like a native speaker would name this service for a {{target_language}}-speaking
+        audience - not a literal, word-for-word translation. Keep it short, the same way a
+        product/service name reads, not a full sentence.
+
+        Rules:
+        - Plain text only - no HTML, no quotation marks around the result.
+        - Keep numbers and brand/product names unchanged unless a localized form is already
+          standard in {{target_language}}.
+
+        ## Category (context only, do not include in your output)
+        {{category_title}}
+
+        ## Title to translate
+        {{service_title}}
         PROMPT;
 
     public function getProvider(): string
@@ -251,6 +286,21 @@ class AiSettingsService
     public function defaultServiceTranslationPrompt(): string
     {
         return self::DEFAULT_SERVICE_TRANSLATION_PROMPT;
+    }
+
+    public function getServiceTitleTranslationPrompt(): string
+    {
+        return $this->get(self::KEY_SERVICE_TITLE_TRANSLATION_PROMPT) ?? self::DEFAULT_SERVICE_TITLE_TRANSLATION_PROMPT;
+    }
+
+    public function setServiceTitleTranslationPrompt(string $prompt): void
+    {
+        $this->set(self::KEY_SERVICE_TITLE_TRANSLATION_PROMPT, $prompt);
+    }
+
+    public function defaultServiceTitleTranslationPrompt(): string
+    {
+        return self::DEFAULT_SERVICE_TITLE_TRANSLATION_PROMPT;
     }
 
     /**

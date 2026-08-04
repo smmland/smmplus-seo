@@ -51,9 +51,12 @@ class RefreshServiceCatalogCommand extends Command
             }
         }
 
-        $queued = Schema::hasTable('service_translation_jobs')
-            ? $this->queueMissingTranslations($defaultLang, $activeLanguages)
-            : 0;
+        $queued = 0;
+
+        if (Schema::hasTable('service_translation_jobs')) {
+            $queued += $this->queueMissing($defaultLang, $activeLanguages, ServiceTranslationJob::FIELD_DESCRIPTION);
+            $queued += $this->queueMissing($defaultLang, $activeLanguages, ServiceTranslationJob::FIELD_TITLE);
+        }
 
         $this->info("Synced {$sync['total']} service(s) ({$sync['new']} new, {$sync['changed']} changed). Checked {$totalChecked}, translated {$totalTranslated}, queued {$queued}.");
 
@@ -63,10 +66,15 @@ class RefreshServiceCatalogCommand extends Command
     /**
      * Same "missing = no row yet, or exists but not looksTranslated(), and not already queued"
      * shape AutoProcessNewBlogsCommand uses for blog topics - queues every (service, language)
-     * pair that's neither confirmed translated nor already mid-flight.
+     * pair that's neither confirmed translated nor already mid-flight, for one field
+     * (description or title) at a time. Description and title are queued as fully independent
+     * jobs (see the service_translation_jobs.field column) - a service missing both gets two
+     * separate jobs, and each is retried/tracked on its own.
      */
-    private function queueMissingTranslations(string $defaultLang, \Illuminate\Support\Collection $activeLanguages): int
+    private function queueMissing(string $defaultLang, \Illuminate\Support\Collection $activeLanguages, string $field): int
     {
+        $isTitle = $field === ServiceTranslationJob::FIELD_TITLE;
+
         $serviceKeys = ServiceTranslation::query()->where('lang', $defaultLang)->pluck('service_key');
 
         if ($serviceKeys->isEmpty() || $activeLanguages->isEmpty()) {
@@ -81,6 +89,7 @@ class RefreshServiceCatalogCommand extends Command
 
         $pending = ServiceTranslationJob::query()
             ->whereIn('service_key', $serviceKeys)
+            ->where('field', $field)
             ->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)
             ->get()
             ->keyBy(fn (ServiceTranslationJob $job) => $job->service_key.'|'.$job->target_lang);
@@ -97,12 +106,12 @@ class RefreshServiceCatalogCommand extends Command
 
                 $row = $existing->get($key);
 
-                if ($row && $row->looksTranslated()) {
+                if ($row && ($isTitle ? $row->titleLooksTranslated() : $row->looksTranslated())) {
                     continue;
                 }
 
                 ServiceTranslationJob::query()->updateOrCreate(
-                    ['service_key' => $serviceKey, 'target_lang' => $langCode],
+                    ['service_key' => $serviceKey, 'target_lang' => $langCode, 'field' => $field],
                     ['status' => ServiceTranslationJob::QUEUED, 'message' => null],
                 );
 

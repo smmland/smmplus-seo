@@ -136,6 +136,7 @@ class ServiceCatalogService
 
         foreach ($parsed['services'] as $service) {
             $hash = $service['descriptionText'] !== null ? md5($service['descriptionText']) : null;
+            $titleHash = $service['title'] !== null ? md5($service['title']) : null;
 
             $row = ServiceTranslation::query()->firstOrNew([
                 'service_key' => $service['serviceId'],
@@ -144,6 +145,7 @@ class ServiceCatalogService
 
             $isNew = ! $row->exists;
             $descriptionChanged = $row->exists && $hash !== null && $row->source_description_hash !== $hash;
+            $titleChanged = $row->exists && $titleHash !== null && $row->source_title_hash !== $titleHash;
 
             $row->category_id = $service['categoryId'];
             $row->category_title = $parsed['categories'][$service['categoryId']] ?? $row->category_title;
@@ -151,6 +153,7 @@ class ServiceCatalogService
             $row->description = $service['descriptionHtml'];
             $row->description_text = $service['descriptionText'];
             $row->source_description_hash = $hash;
+            $row->source_title_hash = $titleHash;
             $row->checked_at = now();
             $row->first_seen_at = $row->first_seen_at ?? now();
             $row->last_seen_at = now();
@@ -158,13 +161,25 @@ class ServiceCatalogService
 
             if ($isNew) {
                 $new++;
-            } elseif ($descriptionChanged) {
-                $changed++;
+            } else {
+                if ($descriptionChanged) {
+                    $changed++;
 
-                ServiceTranslation::query()
-                    ->where('service_key', $service['serviceId'])
-                    ->where('lang', '!=', $defaultLang)
-                    ->update(['is_translated' => null]);
+                    ServiceTranslation::query()
+                        ->where('service_key', $service['serviceId'])
+                        ->where('lang', '!=', $defaultLang)
+                        ->update(['is_translated' => null]);
+                }
+
+                // Independent of the description reset above - a title-only edit on the source
+                // site shouldn't force every language's description to be re-checked, and vice
+                // versa.
+                if ($titleChanged) {
+                    ServiceTranslation::query()
+                        ->where('service_key', $service['serviceId'])
+                        ->where('lang', '!=', $defaultLang)
+                        ->update(['is_title_translated' => null]);
+                }
             }
         }
 
@@ -217,6 +232,10 @@ class ServiceCatalogService
                 && $default->description_text !== null
                 && $this->normalize($service['descriptionText']) !== $this->normalize($default->description_text);
 
+            $titleLiveDiffersFromDefault = $service['title'] !== null
+                && $default->title !== null
+                && $this->normalize($service['title']) !== $this->normalize($default->title);
+
             $row = ServiceTranslation::query()->firstOrNew([
                 'service_key' => $service['serviceId'],
                 'lang' => $langCode,
@@ -234,14 +253,20 @@ class ServiceCatalogService
                 && $default->description_text !== null
                 && $this->normalize($row->description_text) !== $this->normalize($default->description_text);
 
+            // Same idea, independent of the description one above - the title and description
+            // of a row can each be in a different state (title uploaded already, description
+            // still waiting, or vice versa).
+            $hasOwnTitleTranslation = $row->exists
+                && filled($row->title)
+                && $default->title !== null
+                && $this->normalize($row->title) !== $this->normalize($default->title);
+
+            $category_id = $service['categoryId'] ?? $default->category_id;
+            $category_title = $default->category_title;
+
             if ($liveDiffersFromDefault) {
-                // The live site now shows genuinely different text - confirmed live, whether it's
-                // our AI translation now uploaded, or one made independently outside this tool.
-                // Either way the live content is what's actually real, so it wins here even over
-                // our own stored translation (which, if this was ours, should read the same).
-                $row->category_id = $service['categoryId'] ?? $default->category_id;
-                $row->category_title = $default->category_title;
-                $row->title = $service['title'];
+                $row->category_id = $category_id;
+                $row->category_title = $category_title;
                 $row->description = $service['descriptionHtml'];
                 $row->description_text = $service['descriptionText'];
                 $row->is_translated = true;
@@ -257,13 +282,29 @@ class ServiceCatalogService
                 $row->is_translated = true;
                 $row->check_note = 'Translated here, but the live site still shows the default-language description.';
             } else {
-                $row->category_id = $service['categoryId'] ?? $default->category_id;
-                $row->category_title = $default->category_title;
-                $row->title = $service['title'];
+                $row->category_id = $category_id;
+                $row->category_title = $category_title;
                 $row->description = $service['descriptionHtml'];
                 $row->description_text = $service['descriptionText'];
                 $row->is_translated = false;
                 $row->check_note = 'Description matches the default language - not translated yet.';
+            }
+
+            // Same three-way branch as the description one above, applied to the title
+            // independently - see AiSettingsService::SERVICE_TITLE_TRANSLATION_PLACEHOLDERS for
+            // the AI side of this.
+            if ($titleLiveDiffersFromDefault) {
+                $row->title = $service['title'];
+                $row->is_title_translated = true;
+                $row->title_live_confirmed_at = now();
+                $row->title_check_note = 'Confirmed live - title differs from the default language.';
+            } elseif ($hasOwnTitleTranslation) {
+                $row->is_title_translated = true;
+                $row->title_check_note = 'Translated here, but the live site still shows the default-language title.';
+            } else {
+                $row->title = $service['title'];
+                $row->is_title_translated = false;
+                $row->title_check_note = 'Title matches the default language - not translated yet.';
             }
 
             $row->checked_at = now();

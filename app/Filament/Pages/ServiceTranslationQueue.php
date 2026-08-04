@@ -333,17 +333,11 @@ class ServiceTranslationQueue extends Page implements HasActions
         foreach ($langCodes as $code) {
             $row = $rows->get($code);
 
-            if (! $row) {
+            if (! $row || blank($row->description)) {
                 continue;
             }
 
-            $zip->addFromString("{$code}.txt", implode("\n", [
-                "Title: {$row->title}",
-                "Category: {$row->category_title}",
-                '',
-                'Description:',
-                $row->description ?? '',
-            ])."\n");
+            $zip->addFromString("{$code}.txt", $row->description."\n");
 
             $added++;
         }

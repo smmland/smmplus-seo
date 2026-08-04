@@ -17,7 +17,7 @@
 
         <div x-show="exportOpen" x-cloak class="mt-3 space-y-3">
             <p class="text-xs text-gray-500 dark:text-gray-400">
-                Pick which languages to include, then download a zip with one text file per language ({{ '{lang}.txt' }}) listing this service's title, category, and description.
+                Pick which languages to include, then download a zip with one text file per language ({{ '{lang}.txt' }}) containing just that language's description.
             </p>
 
             <table class="w-full text-start text-xs">

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.11.0",
-    "notes": "Moved \"Panel updates\" out of General Settings into its own \"Update\" page, next to Settings/AI Costs/Sign out in the account menu - now also shows what changed in the currently-installed version (this note)."
+    "version": "1.11.1",
+    "notes": "Service translation exports (the download panel inside each service's Details popup) now contain only the description text itself, with no \"Title:\"/\"Category:\" labels around it."
 }

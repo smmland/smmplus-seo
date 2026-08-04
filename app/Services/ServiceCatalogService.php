@@ -222,10 +222,17 @@ class ServiceCatalogService
                 'lang' => $langCode,
             ]);
 
-            // Whether we already have our own AI translation sitting on this row, waiting to be
-            // uploaded - checked before any field is touched below, since translated_at is one
-            // of the fields this decides how to handle.
-            $hasOwnTranslation = $row->exists && $row->translated_at !== null;
+            // Whether we already have real translated content stashed on this row, worth
+            // protecting from being wiped out just because the live site hasn't picked it up
+            // yet - based on comparing the actual stored text against the current default,
+            // not a timestamp column. A timestamp-based check would wrongly treat any row
+            // translated before that column existed (or reset to null by
+            // syncDefaultCatalog()'s "source changed, please re-check" signal below) as having
+            // nothing worth keeping, silently discarding a real translation.
+            $hasOwnTranslation = $row->exists
+                && filled($row->description_text)
+                && $default->description_text !== null
+                && $this->normalize($row->description_text) !== $this->normalize($default->description_text);
 
             if ($liveDiffersFromDefault) {
                 // The live site now shows genuinely different text - confirmed live, whether it's
@@ -241,10 +248,13 @@ class ServiceCatalogService
                 $row->live_confirmed_at = now();
                 $row->check_note = 'Confirmed live - description differs from the default language.';
             } elseif ($hasOwnTranslation) {
-                // We have an AI translation saved, but the live site still shows the default
-                // text - keep our translation intact rather than overwriting it with what's
-                // still just the default content, and leave live_confirmed_at alone so
-                // needsSiteUpdate() keeps flagging it as not uploaded yet.
+                // We have a translation saved, but the live site still shows the default text -
+                // keep it intact rather than overwriting it with what's still just the default
+                // content, and leave live_confirmed_at alone so needsSiteUpdate() keeps flagging
+                // it as not uploaded yet. is_translated is set explicitly (not just left as
+                // whatever it already was) since syncDefaultCatalog() may have reset it to null
+                // to force this re-check in the first place.
+                $row->is_translated = true;
                 $row->check_note = 'Translated here, but the live site still shows the default-language description.';
             } else {
                 $row->category_id = $service['categoryId'] ?? $default->category_id;

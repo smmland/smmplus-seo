@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.12.0",
-    "notes": "Service Translation now shows four distinct statuses per language: not translated, needs upload (translated but not yet confirmed live on the site), uploaded (double-check mark, confirmed live), and error (the last translation attempt failed) - both in the queue list badges and each service's details popup."
+    "version": "1.12.1",
+    "notes": "Fixed a bug from the previous update: services translated before that update (or whenever the source description text changed slightly) could get wrongly demoted to \"Not translated\" (X) the next time the catalog was synced, with the stored translation silently overwritten. Fixed - existing translations are now recognized and preserved regardless of when they were made."
 }

@@ -301,75 +301,72 @@ class ServiceTranslationQueue extends Page implements HasActions
     }
 
     /**
-     * The services counterpart to BlogTranslationQueue::downloadSeoExport() - one zip, one text
-     * file per active non-default language, each listing every service in that language
-     * confirmed translated (looksTranslated()) so far: id, category, title (still the default
-     * language's - see AiSettingsService::SERVICE_TRANSLATION_PLACEHOLDERS, title isn't
-     * translated yet), and the translated description. Global rather than scoped to the current
-     * filter/selection - "download everything that's done" is the point once a translation run
-     * has finished, not a per-service export.
+     * The services counterpart to BlogTranslationQueue::downloadSeoExport() - same shape (a zip,
+     * one text file per selected language, picked via checkboxes in the same collapsible panel
+     * inside the details popup), just scoped to one service instead of one blog topic.
      */
-    public function downloadTranslations(): mixed
+    public function downloadServiceExport(string $serviceKey, array $langCodes): mixed
     {
-        if (! $this->catalogTableAvailable()) {
-            $this->notifyDatabaseUpdateNeeded();
+        $langCodes = array_values(array_unique(array_filter($langCodes)));
 
-            return null;
-        }
-
-        $defaultLang = $this->defaultLangCode();
-
-        $translatedRows = ServiceTranslation::query()
-            ->where('lang', '!=', $defaultLang)
-            ->where('is_translated', true)
-            ->orderBy('category_title')
-            ->orderBy('title')
-            ->get()
-            ->groupBy('lang');
-
-        if ($translatedRows->isEmpty()) {
+        if (empty($langCodes)) {
             Notification::make()
-                ->title('Nothing to download yet')
-                ->body('No service translations have been confirmed done yet.')
+                ->title('Select at least one language first')
                 ->warning()
                 ->send();
 
             return null;
         }
 
-        $zipPath = tempnam(sys_get_temp_dir(), 'service-translations-').'.zip';
+        $rows = ServiceTranslation::query()
+            ->where('service_key', $serviceKey)
+            ->whereIn('lang', $langCodes)
+            ->get()
+            ->keyBy('lang');
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'service-export-').'.zip';
         $zip = new ZipArchive();
         $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
-        foreach ($translatedRows as $langCode => $rows) {
-            $blocks = $rows->map(function (ServiceTranslation $row) {
-                return implode("\n", [
-                    "[{$row->service_key}] {$row->title}",
-                    "Category: {$row->category_title}",
-                    '',
-                    'Description:',
-                    $row->description ?? '',
-                ]);
-            });
+        $added = 0;
 
-            $zip->addFromString("{$langCode}.txt", $blocks->implode("\n\n---\n\n")."\n");
+        foreach ($langCodes as $code) {
+            $row = $rows->get($code);
+
+            if (! $row) {
+                continue;
+            }
+
+            $zip->addFromString("{$code}.txt", implode("\n", [
+                "Title: {$row->title}",
+                "Category: {$row->category_title}",
+                '',
+                'Description:',
+                $row->description ?? '',
+            ])."\n");
+
+            $added++;
+        }
+
+        if ($added === 0) {
+            $zip->close();
+            @unlink($zipPath);
+
+            Notification::make()
+                ->title('Nothing to export')
+                ->body('None of the selected languages have any content for this service.')
+                ->warning()
+                ->send();
+
+            return null;
         }
 
         $zip->close();
 
-        $totalCount = $translatedRows->flatten()->count();
-        $langCount = $translatedRows->count();
-
-        Notification::make()
-            ->title('Download ready')
-            ->body("{$totalCount} translated service(s) across {$langCount} language(s).")
-            ->success()
-            ->send();
-
         return response()->streamDownload(function () use ($zipPath) {
             readfile($zipPath);
             @unlink($zipPath);
-        }, 'service-translations-'.now()->format('Y-m-d').'.zip', ['Content-Type' => 'application/zip']);
+        }, "service-export-{$serviceKey}.zip", ['Content-Type' => 'application/zip']);
     }
 
     /**

@@ -93,26 +93,14 @@
                     </p>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <x-filament::button
-                        color="gray"
-                        icon="heroicon-o-arrow-down-tray"
-                        wire:click="downloadTranslations"
-                        wire:loading.attr="disabled"
-                        wire:target="downloadTranslations"
-                    >
-                        Download translations
-                    </x-filament::button>
-
-                    <x-filament::button
-                        icon="heroicon-o-arrow-path"
-                        wire:click="runSyncNow"
-                        wire:loading.attr="disabled"
-                        wire:target="runSyncNow"
-                    >
-                        Sync now
-                    </x-filament::button>
-                </div>
+                <x-filament::button
+                    icon="heroicon-o-arrow-path"
+                    wire:click="runSyncNow"
+                    wire:loading.attr="disabled"
+                    wire:target="runSyncNow"
+                >
+                    Sync now
+                </x-filament::button>
             </div>
 
             @if ($lastSyncResult)

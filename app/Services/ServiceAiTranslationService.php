@@ -291,8 +291,12 @@ class ServiceAiTranslationService
         $row->description = $translatedDescription;
         $row->description_text = trim(preg_replace('/\s+/', ' ', strip_tags($translatedDescription)));
         $row->is_translated = true;
-        $row->checked_at = now();
-        $row->check_note = 'Translated by AI.';
+        // Not checked_at - that's reserved for ServiceCatalogService::refreshLanguage()'s live
+        // page checks. translated_at marks when we saved this, separately from live_confirmed_at
+        // (untouched here), so needsSiteUpdate() can tell "translated, not uploaded yet" apart
+        // from "confirmed live" until the next refresh actually verifies it against the site.
+        $row->translated_at = now();
+        $row->check_note = 'Translated by AI - not yet confirmed live on the site.';
 
         if ($isNew) {
             $row->first_seen_at = now();

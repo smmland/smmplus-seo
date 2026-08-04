@@ -57,7 +57,8 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     public const STATUS_FILTERS = [
         'missing' => 'Has a missing language',
-        'translated' => 'Fully translated',
+        'needsUpdate' => 'Needs to be uploaded to the site',
+        'confirmed' => 'Fully uploaded',
         'all' => 'All services',
     ];
 
@@ -164,25 +165,27 @@ class ServiceTranslationQueue extends Page implements HasActions
             ->get()
             ->groupBy('service_key');
 
-        $pendingByKey = $this->translationTrackingAvailable()
+        $jobsByKey = $this->translationTrackingAvailable()
             ? ServiceTranslationJob::query()
                 ->whereIn('service_key', $defaultRows->pluck('service_key'))
-                ->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)
+                ->whereIn('status', [...ServiceTranslationJob::PENDING_STATUSES, ServiceTranslationJob::FAILED])
                 ->get()
                 ->groupBy('service_key')
             : collect();
 
-        $allServices = $defaultRows->map(function (ServiceTranslation $defaultRow) use ($existingByKey, $activeLanguages, $pendingByKey) {
+        $allServices = $defaultRows->map(function (ServiceTranslation $defaultRow) use ($existingByKey, $activeLanguages, $jobsByKey) {
             $existingForKey = $existingByKey->get($defaultRow->service_key, collect())->keyBy('lang');
-            $pendingLangs = $pendingByKey->get($defaultRow->service_key, collect())->pluck('target_lang')->all();
+            $jobsForKey = $jobsByKey->get($defaultRow->service_key, collect());
+            $pendingLangs = $jobsForKey->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)->pluck('target_lang')->all();
+            $failedLangs = $jobsForKey->where('status', ServiceTranslationJob::FAILED)->pluck('target_lang')->all();
 
-            $languages = $activeLanguages->map(function (Language $language) use ($existingForKey, $pendingLangs) {
+            $languages = $activeLanguages->map(function (Language $language) use ($existingForKey, $pendingLangs, $failedLangs) {
                 $row = $existingForKey->get($language->code);
 
                 return [
                     'code' => $language->code,
                     'name' => $language->name,
-                    'state' => $this->languageState($language, $row, $pendingLangs),
+                    'state' => $this->languageState($language, $row, $pendingLangs, $failedLangs),
                     'description' => $row?->description,
                 ];
             });
@@ -198,8 +201,9 @@ class ServiceTranslationQueue extends Page implements HasActions
             $nonDefault = $service['languages']->where('state', '!=', 'default');
 
             return match ($this->statusFilter) {
-                'missing' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['missing', 'pending'], true)),
-                'translated' => $nonDefault->isNotEmpty() && $nonDefault->every(fn (array $l) => $l['state'] === 'translated'),
+                'missing' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['missing', 'pending', 'error'], true)),
+                'needsUpdate' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['needsUpdate', 'pending'], true)),
+                'confirmed' => $nonDefault->isNotEmpty() && $nonDefault->every(fn (array $l) => $l['state'] === 'confirmed'),
                 default => true, // 'all'
             };
         })->values();
@@ -214,13 +218,13 @@ class ServiceTranslationQueue extends Page implements HasActions
     }
 
     /**
-     * One of: default (the source language), pending (queued/running), missing (no row, or never
-     * checked, or checked and found not translated), translated (checked live and confirmed to
-     * genuinely differ from the default language). No separate "needs site update" state here -
-     * unlike a blog URL, refreshLanguage() reads the real live page directly every time, so
-     * "translated" already means confirmed live.
+     * One of: default (the source language), pending (queued/running), error (the last
+     * translation attempt failed and nothing successful exists yet - see the "error" priority
+     * note below), missing (no row, or never checked, or checked and found not translated),
+     * needsUpdate (translated - by AI or independently - but not yet confirmed live on the real
+     * site, see ServiceTranslation::needsSiteUpdate()), confirmed (translated and confirmed live).
      */
-    private function languageState(Language $language, ?ServiceTranslation $row, array $pendingLangs): string
+    private function languageState(Language $language, ?ServiceTranslation $row, array $pendingLangs, array $failedLangs = []): string
     {
         if ($language->is_default) {
             return 'default';
@@ -230,7 +234,21 @@ class ServiceTranslationQueue extends Page implements HasActions
             return 'pending';
         }
 
-        return ($row && $row->looksTranslated()) ? 'translated' : 'missing';
+        $looksTranslated = $row && $row->looksTranslated();
+
+        // Only surfaces as its own state while there's nothing successful to fall back to - a
+        // failed *re*-translate attempt on a language that's already confirmed live (or waiting
+        // to be uploaded) doesn't erase that real state, it's still visible per-language in the
+        // details popup (serviceDetails()'s 'error' field) without demoting the badge here.
+        if (! $looksTranslated && in_array($language->code, $failedLangs, true)) {
+            return 'error';
+        }
+
+        if (! $looksTranslated) {
+            return 'missing';
+        }
+
+        return $row->needsSiteUpdate() ? 'needsUpdate' : 'confirmed';
     }
 
     /**
@@ -571,6 +589,7 @@ class ServiceTranslationQueue extends Page implements HasActions
                 'isDefault' => $language->is_default,
                 'exists' => (bool) $row,
                 'isTranslated' => $row !== null && $row->looksTranslated(),
+                'needsSiteUpdate' => $row !== null && $row->needsSiteUpdate(),
                 'title' => $row?->title,
                 'description' => $row?->description,
                 'checkedAt' => $row?->checked_at,

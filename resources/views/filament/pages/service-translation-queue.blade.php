@@ -234,8 +234,10 @@
                                                 title="{{ $language['name'] }}: {{ match ($language['state']) {
                                                     'default' => 'Default language',
                                                     'pending' => 'Translating…',
+                                                    'error' => 'Last translation attempt failed',
                                                     'missing' => 'Not translated',
-                                                    'translated' => 'Confirmed translated (live check)',
+                                                    'needsUpdate' => 'Translated - not uploaded to the site yet',
+                                                    'confirmed' => 'Uploaded - confirmed live on the site',
                                                 } }}"
                                             >
                                                 {{ strtoupper($language['code']) }}
@@ -246,8 +248,19 @@
                                                     @case('pending')
                                                         <x-filament::loading-indicator class="h-3 w-3" />
                                                         @break
-                                                    @case('translated')
-                                                        <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" style="color: rgb(var(--success-600))" />
+                                                    @case('error')
+                                                        <x-filament::icon icon="heroicon-m-exclamation-triangle" class="h-3 w-3" style="color: rgb(var(--danger-600))" />
+                                                        @break
+                                                    @case('needsUpdate')
+                                                        <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
+                                                        @break
+                                                    @case('confirmed')
+                                                        {{-- Two ticks side by side (like a messaging app's "delivered" mark) - distinct at a
+                                                             glance from the single-tick "needsUpdate" state right above it. --}}
+                                                        <span class="inline-flex" style="color: rgb(var(--success-600))">
+                                                            <x-filament::icon icon="heroicon-m-check" class="h-3 w-3" />
+                                                            <x-filament::icon icon="heroicon-m-check" class="h-3 w-3" style="margin-left: -6px" />
+                                                        </span>
                                                         @break
                                                     @default
                                                         <x-filament::icon icon="heroicon-m-x-circle" class="h-3 w-3 opacity-50" />

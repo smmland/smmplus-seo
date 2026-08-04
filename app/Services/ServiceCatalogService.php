@@ -213,7 +213,7 @@ class ServiceCatalogService
                 continue;
             }
 
-            $isTranslated = $service['descriptionText'] !== null
+            $liveDiffersFromDefault = $service['descriptionText'] !== null
                 && $default->description_text !== null
                 && $this->normalize($service['descriptionText']) !== $this->normalize($default->description_text);
 
@@ -222,23 +222,48 @@ class ServiceCatalogService
                 'lang' => $langCode,
             ]);
 
-            $row->category_id = $service['categoryId'] ?? $default->category_id;
-            $row->category_title = $default->category_title;
-            $row->title = $service['title'];
-            $row->description = $service['descriptionHtml'];
-            $row->description_text = $service['descriptionText'];
-            $row->is_translated = $isTranslated;
+            // Whether we already have our own AI translation sitting on this row, waiting to be
+            // uploaded - checked before any field is touched below, since translated_at is one
+            // of the fields this decides how to handle.
+            $hasOwnTranslation = $row->exists && $row->translated_at !== null;
+
+            if ($liveDiffersFromDefault) {
+                // The live site now shows genuinely different text - confirmed live, whether it's
+                // our AI translation now uploaded, or one made independently outside this tool.
+                // Either way the live content is what's actually real, so it wins here even over
+                // our own stored translation (which, if this was ours, should read the same).
+                $row->category_id = $service['categoryId'] ?? $default->category_id;
+                $row->category_title = $default->category_title;
+                $row->title = $service['title'];
+                $row->description = $service['descriptionHtml'];
+                $row->description_text = $service['descriptionText'];
+                $row->is_translated = true;
+                $row->live_confirmed_at = now();
+                $row->check_note = 'Confirmed live - description differs from the default language.';
+            } elseif ($hasOwnTranslation) {
+                // We have an AI translation saved, but the live site still shows the default
+                // text - keep our translation intact rather than overwriting it with what's
+                // still just the default content, and leave live_confirmed_at alone so
+                // needsSiteUpdate() keeps flagging it as not uploaded yet.
+                $row->check_note = 'Translated here, but the live site still shows the default-language description.';
+            } else {
+                $row->category_id = $service['categoryId'] ?? $default->category_id;
+                $row->category_title = $default->category_title;
+                $row->title = $service['title'];
+                $row->description = $service['descriptionHtml'];
+                $row->description_text = $service['descriptionText'];
+                $row->is_translated = false;
+                $row->check_note = 'Description matches the default language - not translated yet.';
+            }
+
             $row->checked_at = now();
-            $row->check_note = $isTranslated
-                ? 'Description differs from the default language - looks translated.'
-                : 'Description matches the default language - not translated yet.';
             $row->first_seen_at = $row->first_seen_at ?? now();
             $row->last_seen_at = now();
             $row->save();
 
             $checked++;
 
-            if ($isTranslated) {
+            if ($row->is_translated) {
                 $translated++;
             }
         }

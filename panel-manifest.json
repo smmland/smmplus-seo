@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.11.1",
-    "notes": "Service translation exports (the download panel inside each service's Details popup) now contain only the description text itself, with no \"Title:\"/\"Category:\" labels around it."
+    "version": "1.12.0",
+    "notes": "Service Translation now shows four distinct statuses per language: not translated, needs upload (translated but not yet confirmed live on the site), uploaded (double-check mark, confirmed live), and error (the last translation attempt failed) - both in the queue list badges and each service's details popup."
 }

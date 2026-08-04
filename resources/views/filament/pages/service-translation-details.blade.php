@@ -49,8 +49,12 @@
                             <td class="p-1.5">
                                 @if (! $language['exists'])
                                     <x-filament::badge color="gray" size="xs">No content</x-filament::badge>
+                                @elseif ($language['isTranslated'] && ! $language['needsSiteUpdate'])
+                                    <x-filament::badge color="success" size="xs">Uploaded</x-filament::badge>
                                 @elseif ($language['isTranslated'])
-                                    <x-filament::badge color="success" size="xs">Translated</x-filament::badge>
+                                    <x-filament::badge color="warning" size="xs">Needs upload</x-filament::badge>
+                                @elseif ($language['error'])
+                                    <x-filament::badge color="danger" size="xs">Error</x-filament::badge>
                                 @else
                                     <x-filament::badge color="warning" size="xs">Not translated yet</x-filament::badge>
                                 @endif
@@ -96,10 +100,23 @@
                                 <x-filament::loading-indicator class="h-3 w-3" />
                                 Translating…
                             </span>
-                        @elseif ($language['isTranslated'])
+                        @elseif ($language['isTranslated'] && ! $language['needsSiteUpdate'])
                             <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium" style="background-color: rgba(var(--success-500), .1); color: rgb(var(--success-700))">
-                                <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" />
-                                Translated
+                                <span class="inline-flex">
+                                    <x-filament::icon icon="heroicon-m-check" class="h-3 w-3" />
+                                    <x-filament::icon icon="heroicon-m-check" class="h-3 w-3" style="margin-left: -6px" />
+                                </span>
+                                Uploaded
+                            </span>
+                        @elseif ($language['isTranslated'])
+                            <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium" style="background-color: rgba(var(--warning-500), .1); color: rgb(var(--warning-700))">
+                                <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3 w-3" />
+                                Needs upload
+                            </span>
+                        @elseif ($language['error'])
+                            <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium" style="background-color: rgba(var(--danger-500), .1); color: rgb(var(--danger-700))">
+                                <x-filament::icon icon="heroicon-m-exclamation-triangle" class="h-3 w-3" />
+                                Error
                             </span>
                         @else
                             <span class="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500 dark:bg-white/10 dark:text-gray-400">

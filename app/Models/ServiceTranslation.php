@@ -9,7 +9,7 @@ class ServiceTranslation extends Model
     protected $fillable = [
         'service_key', 'lang', 'category_id', 'category_title', 'title',
         'description', 'description_text', 'source_description_hash',
-        'is_translated', 'checked_at', 'check_note',
+        'is_translated', 'translated_at', 'live_confirmed_at', 'checked_at', 'check_note',
         'first_seen_at', 'last_seen_at',
     ];
 
@@ -17,6 +17,8 @@ class ServiceTranslation extends Model
     {
         return [
             'is_translated' => 'boolean',
+            'translated_at' => 'datetime',
+            'live_confirmed_at' => 'datetime',
             'checked_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
@@ -32,5 +34,22 @@ class ServiceTranslation extends Model
     public function looksTranslated(): bool
     {
         return $this->is_translated === true;
+    }
+
+    /**
+     * Mirrors Url::needsSiteUpdate(): true once translated but not yet confirmed live on the
+     * real site - translated_at is only set when ServiceAiTranslationService saves a translation
+     * here, live_confirmed_at only when ServiceCatalogService::refreshLanguage() finds the live
+     * page's description actually differs from the default language's. A row translated
+     * independently on the site itself (never went through this tool's AI) has no translated_at
+     * at all, so it's never "needs update" - there's nothing of ours waiting to be uploaded.
+     */
+    public function needsSiteUpdate(): bool
+    {
+        if (! $this->looksTranslated() || $this->translated_at === null) {
+            return false;
+        }
+
+        return $this->live_confirmed_at === null || $this->live_confirmed_at->lt($this->translated_at);
     }
 }

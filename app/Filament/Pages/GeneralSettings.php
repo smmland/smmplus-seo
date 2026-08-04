@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Services\AiSettingsService;
-use App\Services\PanelUpdateService;
 use App\Services\SettingsService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -14,15 +13,12 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Livewire\WithFileUploads;
 
 class GeneralSettings extends Page implements HasForms
 {
     use InteractsWithForms;
-    use WithFileUploads;
 
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
 
@@ -135,67 +131,6 @@ class GeneralSettings extends Page implements HasForms
             'heartbeat' => $heartbeat,
             'active' => $heartbeat !== null && $heartbeat->gt(now()->subMinutes(self::CRON_STALE_AFTER_MINUTES)),
         ];
-    }
-
-    // Every update this panel ships that changes the database needs `php artisan migrate` run
-    // once after deploying it - normally a one-line SSH command, but this host's admin has no
-    // terminal access at all, only FTP/cPanel file upload. This button is the only way those
-    // updates can ever actually take effect: upload the new files, then click this instead of
-    // needing shell access. Safe to click any time, including with nothing pending - already-
-    // applied migrations are tracked and skipped automatically.
-    public function pendingMigrationsCount(): int
-    {
-        $migrator = app('migrator');
-        $files = $migrator->getMigrationFiles(database_path('migrations'));
-        $ran = $migrator->getRepository()->getRan();
-
-        return count(array_diff(array_keys($files), $ran));
-    }
-
-    public function runMigrations(): void
-    {
-        Artisan::call('migrate', ['--force' => true]);
-        $output = trim(Artisan::output());
-
-        Notification::make()
-            ->title('Database updated')
-            ->body($output !== '' ? $output : 'Nothing to update - already up to date.')
-            ->success()
-            ->send();
-    }
-
-    // Zip is whatever `git archive` produces - the same file sent for every update. Livewire
-    // handles the actual upload (to a temp disk) via $updateZip; this just hands the saved
-    // temp file to PanelUpdateService once "Install update" is clicked, rather than acting on
-    // every keystroke/selection change the way a live-validated form field would.
-    public $updateZip = null;
-
-    // Read straight from this app's own files each render, not cached anywhere - always
-    // reflects whatever was actually installed last, including right after installUpdate() below
-    // swaps the files in.
-    public function panelVersion(): ?string
-    {
-        return app(PanelUpdateService::class)->currentVersion();
-    }
-
-    public function installUpdate(PanelUpdateService $updater): void
-    {
-        $this->validate([
-            'updateZip' => 'required|file|mimes:zip|max:51200',
-        ]);
-
-        $result = $updater->install($this->updateZip);
-
-        $notification = Notification::make()
-            ->title($result['ok'] ? 'Panel updated' : 'Update failed')
-            ->body($result['ok']
-                ? $result['message'].' If this update included a database change, click "Update database" below too.'
-                : $result['message']);
-
-        $result['ok'] ? $notification->success() : $notification->danger();
-        $notification->send();
-
-        $this->updateZip = null;
     }
 
     public function aiForm(Form $form): Form

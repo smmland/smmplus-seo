@@ -50,6 +50,19 @@ class PanelUpdateService
      */
     public function currentVersion(): ?string
     {
+        return $this->currentManifestField('version');
+    }
+
+    // Free-text notes describing what the currently-installed version changed - optional
+    // ('notes' isn't required in panel-manifest.json, so an update built before this field
+    // existed just has none), shown on the Update page underneath the version badge.
+    public function currentNotes(): ?string
+    {
+        return $this->currentManifestField('notes');
+    }
+
+    private function currentManifestField(string $field): ?string
+    {
         $path = base_path(self::APP_MANIFEST_FILENAME);
 
         if (! File::exists($path)) {
@@ -58,7 +71,7 @@ class PanelUpdateService
 
         $manifest = json_decode(File::get($path), true);
 
-        return is_array($manifest) ? ($manifest['version'] ?? null) : null;
+        return is_array($manifest) ? ($manifest[$field] ?? null) : null;
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\AiCosts;
 use App\Filament\Pages\GeneralSettings;
+use App\Filament\Pages\PanelUpdate;
 use App\Services\SettingsService;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -59,6 +60,10 @@ class AdminPanelProvider extends PanelProvider
                     ->label('AI Costs')
                     ->icon('heroicon-o-currency-dollar')
                     ->url(fn () => AiCosts::getUrl()),
+                MenuItem::make()
+                    ->label('Update')
+                    ->icon('heroicon-o-arrow-up-tray')
+                    ->url(fn () => PanelUpdate::getUrl()),
             ])
             ->middleware([
                 EncryptCookies::class,

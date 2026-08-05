@@ -8,6 +8,7 @@ use App\Filament\Pages\HiddenTranslations;
 use App\Models\BlogTranslationJob;
 use App\Models\GatewayRequestLog;
 use App\Models\ServiceTranslationJob;
+use App\Models\TelegramPost;
 use App\Services\HiddenTranslationService;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -61,15 +62,17 @@ class DashboardStatsWidget extends StatsOverviewWidget
             ->url(HiddenTranslations::getUrl());
     }
 
-    // Combines both AI translation pipelines (blog articles and service descriptions - see
-    // AiCosts, which this links to) into one figure, each guarded the same way its own page is:
-    // the cost columns can lag behind this code until "Update database" is clicked.
+    // Combines every AI pipeline this panel runs (blog articles, service descriptions, and
+    // Telegram post text + image generation - see AiCosts, which this links to and which already
+    // covers all three) into one figure, each guarded the same way its own page is: the cost
+    // columns can lag behind this code until "Update database" is clicked.
     private function aiSpendStat(): Stat
     {
         $blogAvailable = Schema::hasTable('blog_translation_jobs') && Schema::hasColumn('blog_translation_jobs', 'estimated_cost_usd');
         $serviceAvailable = Schema::hasTable('service_translation_jobs') && Schema::hasColumn('service_translation_jobs', 'estimated_cost_usd');
+        $telegramAvailable = Schema::hasTable('telegram_posts');
 
-        if (! $blogAvailable && ! $serviceAvailable) {
+        if (! $blogAvailable && ! $serviceAvailable && ! $telegramAvailable) {
             return Stat::make('AI translation spend', 'n/a')
                 ->description('Needs a database update')
                 ->color('gray');
@@ -86,6 +89,11 @@ class DashboardStatsWidget extends StatsOverviewWidget
         if ($serviceAvailable) {
             $totalCost += (float) ServiceTranslationJob::query()->whereNotNull('provider')->sum('estimated_cost_usd');
             $totalJobs += ServiceTranslationJob::query()->whereNotNull('provider')->count();
+        }
+
+        if ($telegramAvailable) {
+            $totalCost += (float) TelegramPost::query()->sum('estimated_cost_usd') + (float) TelegramPost::query()->sum('image_cost_usd');
+            $totalJobs += TelegramPost::query()->whereNotNull('ai_provider')->count();
         }
 
         return Stat::make('AI translation spend', '$'.number_format($totalCost, 2))

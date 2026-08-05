@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.7",
-    "notes": "Added a new Telegram Settings toggle, \"Record messages posted directly to the channel\" (independent of the main posting toggle) - when on, polls Telegram every minute for anything posted to the channel outside this panel (manually, or by another tool) and saves it into the same history the AI reads to avoid repeating itself, and into the Queue page's Sent history. Note: this can only capture messages posted after it's turned on - Telegram's Bot API has no way to fetch a channel's older history, only a full personal account login could, which is out of scope here."
+    "version": "1.16.8",
+    "notes": "Added two new Dashboard cards: \"Service translation pipeline\" (new services found in the last 24h, description/title translations waiting to be uploaded, how many are translating right now, and how many were auto re-translated in the last 7 days because their source changed) and \"Telegram channel queue\" (posts pending review, failed sends needing a retry, how many sent in the last 24h, and how many are due to send on the next check - plus a note if Telegram posting is currently disabled). Both link straight to their full queue page. Also folded Telegram's AI spend (text + image generation) into the existing combined \"AI translation spend\" dashboard stat, matching what the AI Costs page already covers."
 }

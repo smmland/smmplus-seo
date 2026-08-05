@@ -13,7 +13,7 @@ class ServiceTranslation extends Model
         'description_auto_retranslated_at', 'description_translated_from_hash',
         'is_title_translated', 'title_translated_at', 'title_live_confirmed_at', 'title_check_note',
         'title_auto_retranslated_at', 'title_translated_from_hash', 'source_title_hash',
-        'first_seen_at', 'last_seen_at',
+        'first_seen_at', 'last_seen_at', 'removed_at',
     ];
 
     // How long the "recently re-translated" marker (queue()'s badges, the details popup) stays
@@ -36,6 +36,7 @@ class ServiceTranslation extends Model
             'title_auto_retranslated_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
+            'removed_at' => 'datetime',
         ];
     }
 

@@ -73,6 +73,7 @@ class AiSettingsService
     private const KEY_PROVIDER = 'ai_provider';
     private const KEY_API_KEY_PREFIX = 'ai_api_key_';
     private const KEY_MODEL_PREFIX = 'ai_model_';
+    private const KEY_IMAGE_MODEL = 'ai_image_model';
     private const KEY_BLOG_TRANSLATION_PROMPT = 'ai_prompt_blog_translation';
     private const KEY_SERVICE_TRANSLATION_PROMPT = 'ai_prompt_service_translation';
     private const KEY_SERVICE_TITLE_TRANSLATION_PROMPT = 'ai_prompt_service_title_translation';
@@ -80,6 +81,11 @@ class AiSettingsService
 
     private const DEFAULT_PROVIDER = 'claude';
     private const DEFAULT_MAX_CONCURRENT_TRANSLATIONS = 3;
+
+    // Image generation (TelegramImageAiService) always uses OpenAI regardless of which provider
+    // is the active *text* one - Claude has no image API - so this has its own default, separate
+    // from DEFAULT_MODELS['chatgpt'] (a text chat model, not an image one).
+    private const DEFAULT_IMAGE_MODEL = 'gpt-image-1';
 
     // Purely a safety rail against a typo'd huge number firing that many simultaneous requests
     // at once - the provider's own rate limits are the real ceiling, this just keeps a mistake
@@ -256,6 +262,20 @@ class AiSettingsService
     private static function modelStorageKey(string $provider): string
     {
         return self::KEY_MODEL_PREFIX.$provider;
+    }
+
+    // Always OpenAI's image model, regardless of getProvider()/getModel('claude'|'chatgpt') -
+    // see the DEFAULT_IMAGE_MODEL note above. Uses getApiKey('chatgpt') for auth, same reasoning.
+    public function getImageModel(): string
+    {
+        return $this->get(self::KEY_IMAGE_MODEL) ?? self::DEFAULT_IMAGE_MODEL;
+    }
+
+    public function setImageModel(?string $model): void
+    {
+        if ($model !== null && $model !== '') {
+            $this->set(self::KEY_IMAGE_MODEL, $model);
+        }
     }
 
     public function getBlogTranslationPrompt(): string

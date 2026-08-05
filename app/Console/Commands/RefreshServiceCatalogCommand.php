@@ -6,6 +6,7 @@ use App\Models\Language;
 use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
 use App\Services\ServiceCatalogService;
+use App\Services\TelegramPostGeneratorService;
 use App\Services\TranslationSettingsService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
@@ -28,7 +29,7 @@ class RefreshServiceCatalogCommand extends Command
 
     protected $description = 'Re-syncs the default-language services catalog, checks translation status per language, and queues missing/changed AI translations';
 
-    public function handle(ServiceCatalogService $catalog, TranslationSettingsService $settings): int
+    public function handle(ServiceCatalogService $catalog, TranslationSettingsService $settings, TelegramPostGeneratorService $telegramPosts): int
     {
         $sync = $catalog->syncDefaultCatalog();
 
@@ -37,6 +38,14 @@ class RefreshServiceCatalogCommand extends Command
 
             return self::FAILURE;
         }
+
+        // Drafts one Telegram post per added/updated/removed service (no-op if Telegram
+        // integration is disabled) - reuses this sync's own detection rather than a second fetch.
+        $telegramPosts->draftServiceChanges(
+            $sync['addedServices'] ?? [],
+            $sync['changedServices'] ?? [],
+            $sync['removedServices'] ?? [],
+        );
 
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
         $activeLanguages = Language::query()

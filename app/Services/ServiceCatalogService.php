@@ -120,7 +120,15 @@ class ServiceCatalogService
      * it has its is_translated reset to null, so refreshLanguage() re-checks it instead of
      * trusting a translation made against the old text forever.
      *
-     * @return array{ok: bool, error?: string, total?: int, new?: int, changed?: int}
+     * Also collects addedServices/changedServices/removedServices - the same per-row detection
+     * this method already does for $new/$changed, just returned as detail instead of only a
+     * count, for TelegramPostGeneratorService::draftServiceChanges() to turn into channel
+     * announcements. Removal is detected by elimination: any default-language row not marked
+     * removed_at yet that isn't touched by this sync (not present in the freshly parsed page) has
+     * removed_at set once here - a service that later reappears is silently un-flagged (see the
+     * loop below) rather than triggering a second announcement.
+     *
+     * @return array{ok: bool, error?: string, total?: int, new?: int, changed?: int, addedServices?: list<array{service_key: string, title: ?string, category_title: ?string}>, changedServices?: list<array{service_key: string, title: ?string, category_title: ?string}>, removedServices?: list<array{service_key: string, title: ?string, category_title: ?string}>}
      */
     public function syncDefaultCatalog(): array
     {
@@ -131,10 +139,21 @@ class ServiceCatalogService
             return ['ok' => false, 'error' => $parsed['error']];
         }
 
+        $previouslyKnownKeys = ServiceTranslation::query()
+            ->where('lang', $defaultLang)
+            ->whereNull('removed_at')
+            ->pluck('service_key')
+            ->all();
+
         $new = 0;
         $changed = 0;
+        $addedServices = [];
+        $changedServices = [];
+        $touchedKeys = [];
 
         foreach ($parsed['services'] as $service) {
+            $touchedKeys[] = $service['serviceId'];
+
             $hash = $service['descriptionText'] !== null ? md5($service['descriptionText']) : null;
             $titleHash = $service['title'] !== null ? md5($service['title']) : null;
 
@@ -157,10 +176,14 @@ class ServiceCatalogService
             $row->checked_at = now();
             $row->first_seen_at = $row->first_seen_at ?? now();
             $row->last_seen_at = now();
+            // Present in this sync, so it's not gone (whether or not it was previously flagged
+            // removed) - a service that disappears and later comes back is resumed silently.
+            $row->removed_at = null;
             $row->save();
 
             if ($isNew) {
                 $new++;
+                $addedServices[] = ['service_key' => $row->service_key, 'title' => $row->title, 'category_title' => $row->category_title];
             } else {
                 if ($descriptionChanged) {
                     $changed++;
@@ -180,10 +203,42 @@ class ServiceCatalogService
                         ->where('lang', '!=', $defaultLang)
                         ->update(['is_title_translated' => null]);
                 }
+
+                // Broader than the legacy $changed counter above (description-only, kept as-is
+                // for the existing sync-result UI text) - a title-only change is still worth its
+                // own Telegram announcement.
+                if ($descriptionChanged || $titleChanged) {
+                    $changedServices[] = ['service_key' => $row->service_key, 'title' => $row->title, 'category_title' => $row->category_title];
+                }
             }
         }
 
-        return ['ok' => true, 'total' => count($parsed['services']), 'new' => $new, 'changed' => $changed];
+        $removedKeys = array_diff($previouslyKnownKeys, $touchedKeys);
+        $removedServices = [];
+
+        if (! empty($removedKeys)) {
+            $removedRows = ServiceTranslation::query()
+                ->where('lang', $defaultLang)
+                ->whereIn('service_key', $removedKeys)
+                ->get();
+
+            foreach ($removedRows as $row) {
+                $row->removed_at = now();
+                $row->save();
+
+                $removedServices[] = ['service_key' => $row->service_key, 'title' => $row->title, 'category_title' => $row->category_title];
+            }
+        }
+
+        return [
+            'ok' => true,
+            'total' => count($parsed['services']),
+            'new' => $new,
+            'changed' => $changed,
+            'addedServices' => $addedServices,
+            'changedServices' => $changedServices,
+            'removedServices' => $removedServices,
+        ];
     }
 
     /**

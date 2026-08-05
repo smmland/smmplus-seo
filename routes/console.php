@@ -71,3 +71,20 @@ Schedule::command('services:process-queue')
     ->everyMinute()
     ->withoutOverlapping(20)
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Tops up the rolling week-ahead blog-summary Telegram post schedule - daily rather than a
+// strict once-a-week cron so a missed run self-heals on the next tick instead of leaving the
+// queue empty (see TelegramGenerateWeeklyPlanCommand). No-op when Telegram integration is
+// disabled in Telegram Settings.
+Schedule::command('telegram:generate-weekly-plan')
+    ->daily()
+    ->withoutOverlapping()
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Sends every due, non-rejected Telegram post (both the weekly blog plan and the near-immediate
+// service-change announcements service:refresh-catalog drafts above) - same no-persistent-worker
+// reasoning as translation:process-queue/services:process-queue.
+Schedule::command('telegram:send-queue')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

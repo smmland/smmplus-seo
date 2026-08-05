@@ -246,5 +246,78 @@
                 </div>
             @endif
         </x-filament::section>
+
+        <x-filament::section
+            heading="Sent history (last 30)"
+            description="What's actually gone out to the channel, most recent first - this is the same record fed back into the AI when writing new posts, so it can avoid repeating itself."
+            collapsible
+            class="mt-4"
+        >
+            @if (! $this->tableReady)
+                <p class="text-sm text-gray-500 dark:text-gray-400">This feature needs a database update first.</p>
+            @elseif ($this->sentHistory->isEmpty())
+                <p class="text-sm text-gray-500 dark:text-gray-400">Nothing has been sent yet.</p>
+            @else
+                <div class="overflow-x-auto">
+                    <table class="fi-ta-table w-full text-start">
+                        <thead>
+                            <tr>
+                                <th class="p-2 text-start text-sm font-semibold">Image</th>
+                                <th class="p-2 text-start text-sm font-semibold">Post</th>
+                                <th class="p-2 text-start text-sm font-semibold">Sent</th>
+                                <th class="p-2 text-start text-sm font-semibold">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($this->sentHistory as $post)
+                                <tr wire:key="history-{{ $post->id }}" class="border-t border-gray-100 dark:border-white/5 align-top">
+                                    <td class="p-2">
+                                        @if ($post->image_path)
+                                            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($post->image_path) }}" alt="" class="h-10 w-10 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
+                                        @else
+                                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-300 ring-1 ring-gray-950/10 dark:bg-white/5 dark:text-gray-600 dark:ring-white/10">
+                                                <x-filament::icon icon="heroicon-o-photo" class="h-4 w-4" />
+                                            </div>
+                                        @endif
+                                    </td>
+                                    <td class="p-2">
+                                        <x-filament::badge color="gray" size="xs">{{ $this::TYPE_FILTERS[$post->type] ?? $post->type }}</x-filament::badge>
+                                        <div class="mt-1 font-medium text-gray-950 dark:text-white">{{ $post->title }}</div>
+                                        <div class="mt-1 max-w-md text-xs text-gray-400 dark:text-gray-500">
+                                            {{ \Illuminate\Support\Str::limit($post->message_text, 140) }}
+                                        </div>
+                                    </td>
+                                    <td class="p-2 text-sm text-gray-600 dark:text-gray-300">
+                                        {{ $post->sent_at?->diffForHumans() }}
+                                    </td>
+                                    <td class="p-2">
+                                        <div class="flex items-center gap-2">
+                                            <x-filament::button
+                                                size="sm"
+                                                color="gray"
+                                                icon="heroicon-o-information-circle"
+                                                wire:click="mountAction('viewPost', {{ Illuminate\Support\Js::from(['postId' => $post->id, 'title' => $post->title]) }})"
+                                            >
+                                                Details
+                                            </x-filament::button>
+
+                                            <x-filament::icon-button
+                                                icon="heroicon-o-trash"
+                                                color="danger"
+                                                size="sm"
+                                                label="Delete"
+                                                tooltip="Delete from history"
+                                                wire:click="deletePost({{ $post->id }})"
+                                                wire:confirm="Delete this from history permanently? It's already been sent - this only removes the record."
+                                            />
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </x-filament::section>
     </div>
 </x-filament-panels::page>

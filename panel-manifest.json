@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.5",
-    "notes": "AI-drafted Telegram posts now get the channel's own recent history (last 8 posts of the same kind, excluding anything rejected) fed back into the prompt as \"don't repeat this wording/angle\" context - both the blog-summary and service-announcement prompts gained a new {{recent_posts}} placeholder for this. telegram_posts itself was already a permanent history (rows are never auto-pruned) - this just puts it to use during generation instead of only being browsable on the Queue page. NOTE: if the blog/service announcement prompt was already saved (not left at default) before this update, it won't pick up the new placeholder automatically - use the \"Reset ... prompt to default\" buttons on Telegram Settings if you want it, or add {{recent_posts}} to your own custom prompt by hand."
+    "version": "1.16.6",
+    "notes": "Added a \"Sent history (last 30)\" section to the Telegram Queue page - a plain, always-current, newest-first record of what's actually gone out to the channel, separate from the review queue above it (which mixes pending/rejected/sent together sorted by scheduled time, not recency). Same underlying data the AI already reads for its own \"don't repeat this\" context, now easy to browse in the panel too, with its own Details/Delete actions."
 }

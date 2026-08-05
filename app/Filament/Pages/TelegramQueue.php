@@ -47,6 +47,11 @@ class TelegramQueue extends Page implements HasActions
 
     private const QUEUE_PER_PAGE = 20;
 
+    // How many past sent posts sentHistory() shows - a quick-glance record of what's actually
+    // gone out, separate from the review queue above (which mixes past/future/rejected together
+    // under the "all statuses" filter, sorted soonest-scheduled-first rather than most-recent).
+    private const SENT_HISTORY_LIMIT = 30;
+
     public const TYPE_FILTERS = ['all' => 'All types', ...TelegramPost::TYPE_LABELS];
 
     public const STATUS_FILTERS = [
@@ -144,6 +149,26 @@ class TelegramQueue extends Page implements HasActions
     }
 
     /**
+     * The most recently sent posts, newest first - a plain, always-up-to-date record of what's
+     * actually gone out to the channel (TelegramPost rows are never auto-pruned, so this is just
+     * a read of that permanent history, same data recentMessagesContext() feeds back into new
+     * prompts - see TelegramPostGeneratorService).
+     */
+    #[Computed]
+    public function sentHistory()
+    {
+        if (! $this->tableReady()) {
+            return collect();
+        }
+
+        return TelegramPost::query()
+            ->where('status', TelegramPost::STATUS_SENT)
+            ->orderByDesc('sent_at')
+            ->limit(self::SENT_HISTORY_LIMIT)
+            ->get();
+    }
+
+    /**
      * Immediate, manual counterpart to the daily telegram:generate-weekly-plan schedule -
      * service-change announcements have no equivalent button here since they're only ever
      * drafted as a side effect of the Service Translation page's own "Sync now"/hourly sync.
@@ -228,6 +253,7 @@ class TelegramQueue extends Page implements HasActions
         TelegramPost::query()->where('id', $postId)->delete();
 
         unset($this->queue);
+        unset($this->sentHistory);
     }
 
     public function editPostAction(): Action

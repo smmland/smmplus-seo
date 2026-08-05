@@ -144,7 +144,7 @@ class TelegramPostGeneratorService
                 continue;
             }
 
-            [$imagePath, $imageSource] = $this->resolveImage(
+            [$imagePath, $imageSource, $imageCost] = $this->resolveImage(
                 $this->extractFirstImageSrc($url->content_extraction_path),
                 fn () => 'A clean, modern social media banner illustrating the blog article titled "'.$url->article_title.'". No text or letters in the image. Flat, minimal, professional style.',
             );
@@ -164,6 +164,7 @@ class TelegramPostGeneratorService
                 'input_tokens' => $result['input_tokens'] ?? null,
                 'output_tokens' => $result['output_tokens'] ?? null,
                 'estimated_cost_usd' => $result['estimated_cost_usd'] ?? null,
+                'image_cost_usd' => $imageCost,
             ]);
 
             $created++;
@@ -237,7 +238,7 @@ class TelegramPostGeneratorService
                 default => 'Removed: ',
             };
 
-            [$imagePath, $imageSource] = $this->resolveImage(
+            [$imagePath, $imageSource, $imageCost] = $this->resolveImage(
                 null,
                 fn () => 'A clean, modern social media banner for an SMM panel service called "'.($service['title'] ?? $service['service_key']).'" in the "'.($service['category_title'] ?? 'general').'" category. No text or letters in the image. Flat, minimal, professional style.',
             );
@@ -257,6 +258,7 @@ class TelegramPostGeneratorService
                 'input_tokens' => $result['input_tokens'] ?? null,
                 'output_tokens' => $result['output_tokens'] ?? null,
                 'estimated_cost_usd' => $result['estimated_cost_usd'] ?? null,
+                'image_cost_usd' => $imageCost,
             ]);
 
             $created++;
@@ -310,7 +312,7 @@ class TelegramPostGeneratorService
      * generating one with AI (only if that's enabled in settings) when there's no usable src at
      * all, so a post is never sent with no image just because the source article had none.
      *
-     * @return array{0: ?string, 1: string} [diskPath, imageSource]
+     * @return array{0: ?string, 1: string, 2: ?float} [diskPath, imageSource, imageCostUsd]
      */
     private function resolveImage(?string $src, \Closure $aiPromptIfMissing): array
     {
@@ -324,14 +326,14 @@ class TelegramPostGeneratorService
                         $path = self::IMAGE_DIR.'/'.Str::uuid()->toString().'.'.$ext;
                         Storage::disk('public')->put($path, $bytes);
 
-                        return [$path, TelegramPost::IMAGE_ARTICLE];
+                        return [$path, TelegramPost::IMAGE_ARTICLE, null];
                     }
                 }
             } elseif (str_contains($src, self::LOCAL_BLOG_ASSET_MARKER)) {
                 $diskPath = substr($src, strpos($src, self::LOCAL_BLOG_ASSET_MARKER) + strlen(self::LOCAL_BLOG_ASSET_MARKER));
 
                 if (Storage::disk('public')->exists($diskPath)) {
-                    return [$diskPath, TelegramPost::IMAGE_ARTICLE];
+                    return [$diskPath, TelegramPost::IMAGE_ARTICLE, null];
                 }
             } else {
                 try {
@@ -345,17 +347,19 @@ class TelegramPostGeneratorService
                     $path = self::IMAGE_DIR.'/'.Str::uuid()->toString().'.'.$ext;
                     Storage::disk('public')->put($path, $response->body());
 
-                    return [$path, TelegramPost::IMAGE_ARTICLE];
+                    return [$path, TelegramPost::IMAGE_ARTICLE, null];
                 }
             }
         }
 
         if (! $this->settings->isImageGenerationEnabled()) {
-            return [null, TelegramPost::IMAGE_NONE];
+            return [null, TelegramPost::IMAGE_NONE, null];
         }
 
         $generated = $this->imageAi->generate($aiPromptIfMissing());
 
-        return $generated['ok'] ? [$generated['path'], TelegramPost::IMAGE_AI_GENERATED] : [null, TelegramPost::IMAGE_NONE];
+        return $generated['ok']
+            ? [$generated['path'], TelegramPost::IMAGE_AI_GENERATED, $generated['cost_usd'] ?? null]
+            : [null, TelegramPost::IMAGE_NONE, null];
     }
 }

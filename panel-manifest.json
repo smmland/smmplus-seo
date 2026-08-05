@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.3",
-    "notes": "Found the actual cause of \"Nothing new to schedule\" showing on the very first click of Generate now (turned out to be nothing to do with the update installer): topUpBlogPlan() found blog articles fine, but if AI text generation failed for every single one of them (e.g. no AI provider API key configured yet in AI Settings, or an invalid one), it silently created nothing and returned no explanation - falling through to a generic leftover message. Now that case reports the real AI error (e.g. \"No API key or model configured for...\") instead of a misleading \"already fully scheduled\"."
+    "version": "1.16.4",
+    "notes": "Telegram post costs (text generation and AI image generation, kept as separate numbers since only images have an on/off toggle) now show on the AI Costs page alongside blog/service translation spend, broken down by post type. Image generation cost estimates use OpenAI's per-image pricing (gpt-image-1/dall-e-3/dall-e-2)."
 }

@@ -6,6 +6,7 @@ use App\Models\BlogTranslationJob;
 use App\Models\Language;
 use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
+use App\Models\TelegramPost;
 use App\Models\Url;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Schema;
@@ -13,10 +14,11 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Moved out of General Settings into its own page, reached from the account menu (top-right
  * avatar, next to Settings and Sign out - see AdminPanelProvider::panel()'s userMenuItems())
- * instead of the sidebar, the same way HiddenTranslations is. Combines spend from both AI
- * translation pipelines this panel runs - blog articles (BlogTranslationJob) and service
- * descriptions (ServiceTranslationJob) - into one total, with a separate breakdown table per
- * pipeline since a blog "topic" and a "service" aren't the same kind of thing to list rows for.
+ * instead of the sidebar, the same way HiddenTranslations is. Combines spend from all three AI
+ * pipelines this panel runs - blog articles (BlogTranslationJob), service descriptions
+ * (ServiceTranslationJob), and Telegram posts (TelegramPost, text + image generation both) -
+ * into one total, with a separate breakdown table per pipeline since each groups by a different
+ * kind of thing (topic, service, or post type).
  */
 class AiCosts extends Page
 {
@@ -62,15 +64,17 @@ class AiCosts extends Page
      *     totalCost: float, totalInputTokens: int, totalOutputTokens: int, totalJobs: int, unknownPricingCount: int,
      *     blog: array{available: bool, byTopic: \Illuminate\Support\Collection, page: int, lastPage: int, total: int},
      *     service: array{available: bool, byService: \Illuminate\Support\Collection, page: int, lastPage: int, total: int},
+     *     telegram: array{available: bool, textCost: float, imageCost: float, imageCount: int, byType: \Illuminate\Support\Collection},
      * }
      */
     public function getAiCostStats(): array
     {
         $blog = $this->blogCostStats();
         $service = $this->serviceCostStats();
+        $telegram = $this->telegramCostStats();
 
         return [
-            'totalCost' => $blog['totalCost'] + $service['totalCost'],
+            'totalCost' => $blog['totalCost'] + $service['totalCost'] + $telegram['textCost'] + $telegram['imageCost'],
             'totalInputTokens' => $blog['totalInputTokens'] + $service['totalInputTokens'],
             'totalOutputTokens' => $blog['totalOutputTokens'] + $service['totalOutputTokens'],
             'totalJobs' => $blog['totalJobs'] + $service['totalJobs'],
@@ -88,6 +92,13 @@ class AiCosts extends Page
                 'page' => $service['page'],
                 'lastPage' => $service['lastPage'],
                 'total' => $service['total'],
+            ],
+            'telegram' => [
+                'available' => $telegram['available'],
+                'textCost' => $telegram['textCost'],
+                'imageCost' => $telegram['imageCost'],
+                'imageCount' => $telegram['imageCount'],
+                'byType' => $telegram['byType'],
             ],
         ];
     }
@@ -231,6 +242,54 @@ class AiCosts extends Page
             'page' => $page,
             'lastPage' => $lastPage,
             'total' => $totalServices,
+        ];
+    }
+
+    /**
+     * Text and image spend kept as two separate totals rather than one combined number - they're
+     * priced completely differently (per-token vs. per-image) and only the image side even has a
+     * toggle to turn it off (TelegramSettingsService::isImageGenerationEnabled()), so seeing them
+     * apart is what actually answers "how much would turning images off save me". Broken down by
+     * post type (blog summary vs. the three service-change kinds) rather than per-post like
+     * blog/service above - a telegram_posts row already IS one distinct item, not one of several
+     * per-language rows that need collapsing into a single line the way a topic/service does.
+     */
+    private function telegramCostStats(): array
+    {
+        $empty = ['available' => false, 'textCost' => 0.0, 'imageCost' => 0.0, 'imageCount' => 0, 'byType' => collect()];
+
+        if (! Schema::hasTable('telegram_posts')) {
+            return $empty;
+        }
+
+        $totals = TelegramPost::query()
+            // image_cost_usd (not image_path) is what actually counts an AI-generated image -
+            // a post whose image came free from the article itself has image_path set but no
+            // cost, and shouldn't be counted as a paid-for image here.
+            ->selectRaw('COALESCE(SUM(estimated_cost_usd), 0) as text_cost, COALESCE(SUM(image_cost_usd), 0) as image_cost, COUNT(image_cost_usd) as image_count')
+            ->first();
+
+        // Sorted in PHP rather than SQL - "combined cost" (text + image) isn't a single
+        // aggregated column the database can ORDER BY directly.
+        $byType = TelegramPost::query()
+            ->selectRaw('type, COALESCE(SUM(estimated_cost_usd), 0) as text_cost, COALESCE(SUM(image_cost_usd), 0) as image_cost, COUNT(*) as posts')
+            ->groupBy('type')
+            ->get()
+            ->sortByDesc(fn ($row) => (float) $row->text_cost + (float) $row->image_cost)
+            ->map(fn ($row) => [
+                'type' => $row->type,
+                'textCost' => (float) $row->text_cost,
+                'imageCost' => (float) $row->image_cost,
+                'posts' => (int) $row->posts,
+            ])
+            ->values();
+
+        return [
+            'available' => true,
+            'textCost' => (float) $totals->text_cost,
+            'imageCost' => (float) $totals->image_cost,
+            'imageCount' => (int) $totals->image_count,
+            'byType' => $byType,
         ];
     }
 }

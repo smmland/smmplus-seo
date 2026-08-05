@@ -22,7 +22,7 @@ class TelegramImageAiService
     public function __construct(private readonly AiSettingsService $aiSettings) {}
 
     /**
-     * @return array{ok: bool, path?: string, message: string}
+     * @return array{ok: bool, path?: string, message: string, model?: string, cost_usd?: ?float}
      */
     public function generate(string $prompt): array
     {
@@ -82,6 +82,6 @@ class TelegramImageAiService
         $path = self::IMAGE_DIR.'/'.Str::uuid()->toString().'.png';
         Storage::disk('public')->put($path, $bytes);
 
-        return ['ok' => true, 'path' => $path, 'message' => 'Image generated.'];
+        return ['ok' => true, 'path' => $path, 'message' => 'Image generated.', 'model' => $model, 'cost_usd' => $this->aiSettings->estimateImageCost($model)];
     }
 }

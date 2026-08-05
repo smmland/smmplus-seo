@@ -33,6 +33,18 @@ class AiSettingsService
         'o4-mini' => ['input' => 1.10, 'output' => 4.40],
     ];
 
+    // USD per generated image at the standard 1024x1024 size, approximate published pricing -
+    // same "not billed anywhere, just an estimate" caveat as the per-token table above. Flat
+    // per-image rather than per-token since that's how OpenAI's older (dall-e-*) models are
+    // priced; gpt-image-1 is actually token-based internally but OpenAI itself publishes a
+    // rough per-image equivalent at medium quality, used here for the same reason a flat rate
+    // is simpler to estimate from than trying to predict its exact token usage up front.
+    public const IMAGE_MODEL_PRICING_PER_IMAGE = [
+        'gpt-image-1' => 0.042,
+        'dall-e-3' => 0.040,
+        'dall-e-2' => 0.020,
+    ];
+
     // Documented for the prompt editor's UI - what {{token}} gets substituted with, once the
     // actual translate call is wired up in a later phase. Exact-string substitution only, so
     // prose in the prompt that merely *looks* like a token (e.g. a Twig "{{ post['content'] }}"
@@ -357,6 +369,12 @@ class AiSettingsService
         }
 
         return ($inputTokens / 1_000_000 * $rate['input']) + ($outputTokens / 1_000_000 * $rate['output']);
+    }
+
+    // The image counterpart to estimateCost() - see IMAGE_MODEL_PRICING_PER_IMAGE above.
+    public function estimateImageCost(string $model): ?float
+    {
+        return self::IMAGE_MODEL_PRICING_PER_IMAGE[$model] ?? null;
     }
 
     /**

@@ -47,13 +47,7 @@ class TelegramQueue extends Page implements HasActions
 
     private const QUEUE_PER_PAGE = 20;
 
-    public const TYPE_FILTERS = [
-        'all' => 'All types',
-        TelegramPost::TYPE_BLOG_SUMMARY => 'Blog summary',
-        TelegramPost::TYPE_SERVICE_ADDED => 'New service',
-        TelegramPost::TYPE_SERVICE_UPDATED => 'Service updated',
-        TelegramPost::TYPE_SERVICE_REMOVED => 'Service removed',
-    ];
+    public const TYPE_FILTERS = ['all' => 'All types', ...TelegramPost::TYPE_LABELS];
 
     public const STATUS_FILTERS = [
         'all' => 'All statuses',

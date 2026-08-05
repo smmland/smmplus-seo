@@ -40,8 +40,14 @@
             @endif
             @if ($post->estimated_cost_usd !== null)
                 <div>
-                    <span class="font-medium text-gray-600 dark:text-gray-300">Estimated cost:</span>
+                    <span class="font-medium text-gray-600 dark:text-gray-300">Text cost:</span>
                     ${{ number_format((float) $post->estimated_cost_usd, 4) }}
+                </div>
+            @endif
+            @if ($post->image_cost_usd !== null)
+                <div>
+                    <span class="font-medium text-gray-600 dark:text-gray-300">Image cost:</span>
+                    ${{ number_format((float) $post->image_cost_usd, 4) }}
                 </div>
             @endif
         </div>

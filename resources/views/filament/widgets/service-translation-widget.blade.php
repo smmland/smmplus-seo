@@ -18,7 +18,14 @@
                 This feature needs a database update first - go to General Settings and click "Update database".
             </p>
         @else
-            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {{-- grid-cols-2 (unprefixed) rather than a responsive sm:/lg: variant - this app
+                 serves Filament's pre-built CSS bundle, which only compiles classes some Filament
+                 core component happens to also use; sm:grid-cols-2/lg:grid-cols-4 aren't in it at
+                 all (confirmed against public/css/filament/filament/app.css), so those would
+                 silently no-op and leave every tile stacked in one column regardless of screen
+                 size. A fixed 2x2 works well here anyway now that this card is half the
+                 dashboard's width (columnSpan=1 on a 2-column grid), not full width. --}}
+            <div class="mt-4 grid grid-cols-2 gap-3">
                 <div class="rounded-lg border border-gray-200 p-3 dark:border-white/10">
                     <div class="flex items-center gap-2">
                         <x-filament::icon

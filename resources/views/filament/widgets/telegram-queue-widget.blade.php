@@ -23,7 +23,9 @@
                 This feature needs a database update first - go to General Settings and click "Update database".
             </p>
         @else
-            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {{-- See ServiceTranslationWidget's own blade for why this is a plain, unprefixed
+                 grid-cols-2 rather than a responsive sm:/lg: variant. --}}
+            <div class="mt-4 grid grid-cols-2 gap-3">
                 <div class="rounded-lg border border-gray-200 p-3 dark:border-white/10">
                     <div class="flex items-center gap-2">
                         <x-filament::icon

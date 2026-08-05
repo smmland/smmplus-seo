@@ -17,10 +17,11 @@ class TelegramQueueWidget extends Widget
 {
     protected static string $view = 'filament.widgets.telegram-queue-widget';
 
-    // Placed after ServiceTranslationWidget (sort 4).
+    // Placed after ServiceTranslationWidget (sort 4), side by side with it - see that widget's
+    // own comment on why column-span-1 does that on this 2-column dashboard grid.
     protected static ?int $sort = 5;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int | string | array $columnSpan = 1;
 
     protected function getViewData(): array
     {

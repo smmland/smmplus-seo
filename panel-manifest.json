@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.8",
-    "notes": "Added two new Dashboard cards: \"Service translation pipeline\" (new services found in the last 24h, description/title translations waiting to be uploaded, how many are translating right now, and how many were auto re-translated in the last 7 days because their source changed) and \"Telegram channel queue\" (posts pending review, failed sends needing a retry, how many sent in the last 24h, and how many are due to send on the next check - plus a note if Telegram posting is currently disabled). Both link straight to their full queue page. Also folded Telegram's AI spend (text + image generation) into the existing combined \"AI translation spend\" dashboard stat, matching what the AI Costs page already covers."
+    "version": "1.16.9",
+    "notes": "The two new Dashboard cards from the last update (Service translation pipeline, Telegram channel queue) now sit side by side instead of stacked full-width, each with a proper 2x2 stat grid. Also fixed a real display bug found while doing this: their stat tiles were using responsive grid classes (sm:grid-cols-2, lg:grid-cols-4) that don't actually exist in this app's pre-built CSS bundle, so every tile had silently been stacking in a single column regardless of screen size since the last update shipped - switched to a plain unprefixed grid-cols-2, which is compiled and works."
 }

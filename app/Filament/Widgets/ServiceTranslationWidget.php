@@ -19,10 +19,12 @@ class ServiceTranslationWidget extends Widget
 {
     protected static string $view = 'filament.widgets.service-translation-widget';
 
-    // Placed after DashboardStatsWidget (sort 3).
+    // Placed after DashboardStatsWidget (sort 3), side by side with TelegramQueueWidget (sort 5) -
+    // the Dashboard's own grid is 2 columns (Filament\Pages\Dashboard::getColumns()), so two
+    // consecutive column-span-1 widgets sit next to each other instead of each taking a full row.
     protected static ?int $sort = 4;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int | string | array $columnSpan = 1;
 
     protected function getViewData(): array
     {

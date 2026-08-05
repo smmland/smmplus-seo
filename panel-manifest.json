@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.4",
-    "notes": "Telegram post costs (text generation and AI image generation, kept as separate numbers since only images have an on/off toggle) now show on the AI Costs page alongside blog/service translation spend, broken down by post type. Image generation cost estimates use OpenAI's per-image pricing (gpt-image-1/dall-e-3/dall-e-2)."
+    "version": "1.16.5",
+    "notes": "AI-drafted Telegram posts now get the channel's own recent history (last 8 posts of the same kind, excluding anything rejected) fed back into the prompt as \"don't repeat this wording/angle\" context - both the blog-summary and service-announcement prompts gained a new {{recent_posts}} placeholder for this. telegram_posts itself was already a permanent history (rows are never auto-pruned) - this just puts it to use during generation instead of only being browsable on the Queue page. NOTE: if the blog/service announcement prompt was already saved (not left at default) before this update, it won't pick up the new placeholder automatically - use the \"Reset ... prompt to default\" buttons on Telegram Settings if you want it, or add {{recent_posts}} to your own custom prompt by hand."
 }

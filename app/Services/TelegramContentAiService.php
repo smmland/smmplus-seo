@@ -23,6 +23,7 @@ class TelegramContentAiService
         '{{content}}' => 'The article body (plain text)',
         '{{url}}' => 'The article\'s live URL',
         '{{target_language}}' => 'The channel\'s language',
+        '{{recent_posts}}' => 'Recent past posts to this channel, so the AI can avoid repeating the same wording/angle',
     ];
 
     public const SERVICE_ANNOUNCEMENT_PLACEHOLDERS = [
@@ -30,6 +31,7 @@ class TelegramContentAiService
         '{{service_title}}' => 'The service\'s name',
         '{{category_title}}' => 'The service\'s category',
         '{{target_language}}' => 'The channel\'s language',
+        '{{recent_posts}}' => 'Recent past posts to this channel, so the AI can avoid repeating the same wording/angle',
     ];
 
     private const RESPONSE_CONTRACT = <<<'TEXT'
@@ -56,6 +58,7 @@ class TelegramContentAiService
             '{{content}}' => $data['content'] ?? '',
             '{{url}}' => $data['url'] ?? '',
             '{{target_language}}' => $targetLanguage,
+            '{{recent_posts}}' => $data['recent_posts'] ?? '(none yet)',
         ];
 
         $userPrompt = strtr($this->telegramSettings->getBlogSummaryPrompt(), $replacements);
@@ -70,6 +73,7 @@ class TelegramContentAiService
             '{{service_title}}' => $data['service_title'] ?? '',
             '{{category_title}}' => $data['category_title'] ?? '',
             '{{target_language}}' => $targetLanguage,
+            '{{recent_posts}}' => $data['recent_posts'] ?? '(none yet)',
         ];
 
         $userPrompt = strtr($this->telegramSettings->getServiceAnnouncementPrompt(), $replacements);

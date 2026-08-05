@@ -21,6 +21,11 @@ class TelegramPostGeneratorService
 {
     private const IMAGE_DIR = 'telegram/images';
 
+    // How many recent posts get fed back into the prompt as "don't repeat this" context - see
+    // recentMessagesContext(). Enough to give the AI a real sense of what's already been said
+    // without bloating the prompt or the token bill.
+    private const RECENT_POSTS_CONTEXT_LIMIT = 8;
+
     // Where BlogContentExtractionService::assetUrl() points a locally-downloaded image at - see
     // its own $marker note there. Used here to recognize "this src is already a local file" vs
     // "this is still an external URL that needs fetching."
@@ -106,7 +111,9 @@ class TelegramPostGeneratorService
             return ['created' => 0, 'message' => 'No blog content available yet - extract some articles on the Blog Translation page first.'];
         }
 
-        $prepared = $candidates->mapWithKeys(function (Url $url) use ($targetLanguage) {
+        $recentPosts = $this->recentMessagesContext(TelegramPost::TYPE_BLOG_SUMMARY);
+
+        $prepared = $candidates->mapWithKeys(function (Url $url) use ($targetLanguage, $recentPosts) {
             $contentText = $this->readContentText($url->content_extraction_path);
 
             return [$url->id => [
@@ -115,6 +122,7 @@ class TelegramPostGeneratorService
                     'meta_description' => $url->meta_description,
                     'content' => Str::limit($contentText, 4000),
                     'url' => $url->source_url,
+                    'recent_posts' => $recentPosts,
                 ], $targetLanguage),
             ]];
         });
@@ -211,12 +219,14 @@ class TelegramPostGeneratorService
 
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
         $targetLanguage = Language::query()->where('code', $defaultLang)->value('name') ?? $defaultLang;
+        $recentPosts = $this->recentMessagesContext(...TelegramPost::SERVICE_TYPES);
 
         $prepared = collect($events)->mapWithKeys(fn ($event, $i) => [$i => [
             'prompt' => $this->contentAi->buildServiceAnnouncementPrompt([
                 'change_type' => $event['changeType'],
                 'service_title' => $event['service']['title'],
                 'category_title' => $event['service']['category_title'],
+                'recent_posts' => $recentPosts,
             ], $targetLanguage),
         ]]);
 
@@ -265,6 +275,32 @@ class TelegramPostGeneratorService
         }
 
         return ['created' => $created];
+    }
+
+    /**
+     * Formats the most recent posts of the given type(s) as "avoid repeating this" context fed
+     * into the {{recent_posts}} placeholder (TelegramContentAiService) - this is what fulfils
+     * "check what's already been said so nothing repetitive or too similar goes out again".
+     * Excludes rejected posts (explicitly discarded, not representative of the channel's actual
+     * voice) but includes everything else - even a still-pending draft is content the AI
+     * shouldn't echo. telegram_posts itself is the permanent history (rows are never pruned,
+     * only ever deleted one at a time by an admin from the Queue page), so this always has the
+     * full record to draw from.
+     */
+    private function recentMessagesContext(string ...$types): string
+    {
+        $posts = TelegramPost::query()
+            ->whereIn('type', $types)
+            ->where('status', '!=', TelegramPost::STATUS_REJECTED)
+            ->orderByDesc('created_at')
+            ->limit(self::RECENT_POSTS_CONTEXT_LIMIT)
+            ->pluck('message_text');
+
+        if ($posts->isEmpty()) {
+            return '(none yet)';
+        }
+
+        return $posts->map(fn ($text, $i) => ($i + 1).'. '.Str::limit(trim((string) $text), 200))->implode("\n");
     }
 
     private function readContentText(?string $contentPath): string

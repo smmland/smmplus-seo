@@ -39,6 +39,9 @@ class TelegramSettingsService
         - 2 to 5 short sentences. Make someone want to click through and read the full article.
         - End with the article's URL on its own line.
         - No hashtags unless they'd read naturally to a native speaker, don't force them.
+        - Read the recent past posts below and write something that reads differently from all of
+          them - a different opening line, a different angle, different phrasing. Don't reuse the
+          same hook, structure, or specific wording twice in a row.
 
         ## Article title
         {{title}}
@@ -51,6 +54,9 @@ class TelegramSettingsService
 
         ## URL to link to
         {{url}}
+
+        ## Recent past posts to this channel (avoid repeating their wording/angle)
+        {{recent_posts}}
         PROMPT;
 
     private const DEFAULT_SERVICE_ANNOUNCEMENT_PROMPT = <<<'PROMPT'
@@ -67,6 +73,11 @@ class TelegramSettingsService
         - 1 to 3 short sentences.
         - If the change type is "removed", don't apologize excessively - a brief, matter-of-fact
           notice is enough.
+        - Read the recent past posts below and vary your phrasing/opening from all of them - don't
+          reuse the same sentence structure or wording every time.
+
+        ## Recent past posts to this channel (avoid repeating their wording/angle)
+        {{recent_posts}}
         PROMPT;
 
     public function isEnabled(): bool

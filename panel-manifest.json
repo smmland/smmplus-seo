@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.2",
-    "notes": "Found and fixed a real gap in the self-update installer itself: copyIntoApp() called File::copy() but never checked whether it actually succeeded, so a single file silently failing to overwrite (a lock, a permissions quirk, anything transient) left the app running a mix of old and new code with the install still reporting full success and no way to tell which file was stale. Now a failed copy aborts the install with a clear error naming exactly which file(s) failed, instead of pretending everything updated."
+    "version": "1.16.3",
+    "notes": "Found the actual cause of \"Nothing new to schedule\" showing on the very first click of Generate now (turned out to be nothing to do with the update installer): topUpBlogPlan() found blog articles fine, but if AI text generation failed for every single one of them (e.g. no AI provider API key configured yet in AI Settings, or an invalid one), it silently created nothing and returned no explanation - falling through to a generic leftover message. Now that case reports the real AI error (e.g. \"No API key or model configured for...\") instead of a misleading \"already fully scheduled\"."
 }

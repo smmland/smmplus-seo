@@ -129,11 +129,18 @@ class TelegramPostGeneratorService
         $nextSlot = ($latestScheduled ? Carbon::parse($latestScheduled) : now())->addMinutes($interval);
 
         $created = 0;
+        $firstFailureMessage = null;
 
         foreach ($candidates as $url) {
             $result = $results[$url->id] ?? null;
 
             if (! $result || ! $result['ok']) {
+                // Every candidate reuses the same AI provider/key, so one failure (bad/missing
+                // API key, provider outage, ...) almost always means they all failed the same
+                // way - keeping just the first is enough to point at the real cause without a
+                // wall of duplicate errors.
+                $firstFailureMessage ??= $result['message'] ?? 'The AI request failed with no error message.';
+
                 continue;
             }
 
@@ -164,6 +171,10 @@ class TelegramPostGeneratorService
         }
 
         $this->settings->recordWeeklyPlanRun();
+
+        if ($created === 0 && $firstFailureMessage !== null) {
+            return ['created' => 0, 'message' => "Found {$candidates->count()} article(s) to write about, but AI generation failed for all of them: {$firstFailureMessage}"];
+        }
 
         return ['created' => $created];
     }

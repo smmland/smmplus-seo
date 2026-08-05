@@ -88,3 +88,12 @@ Schedule::command('telegram:send-queue')
     ->everyMinute()
     ->withoutOverlapping()
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Records anything posted directly to the channel outside this panel, by polling Telegram for
+// new updates - gated on its own Telegram Settings toggle (separate from the "post to Telegram"
+// one, since watching the channel is a different concern from writing to it). No-op when that
+// toggle is off.
+Schedule::command('telegram:capture-channel-posts')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.6",
-    "notes": "Added a \"Sent history (last 30)\" section to the Telegram Queue page - a plain, always-current, newest-first record of what's actually gone out to the channel, separate from the review queue above it (which mixes pending/rejected/sent together sorted by scheduled time, not recency). Same underlying data the AI already reads for its own \"don't repeat this\" context, now easy to browse in the panel too, with its own Details/Delete actions."
+    "version": "1.16.7",
+    "notes": "Added a new Telegram Settings toggle, \"Record messages posted directly to the channel\" (independent of the main posting toggle) - when on, polls Telegram every minute for anything posted to the channel outside this panel (manually, or by another tool) and saves it into the same history the AI reads to avoid repeating itself, and into the Queue page's Sent history. Note: this can only capture messages posted after it's turned on - Telegram's Bot API has no way to fetch a channel's older history, only a full personal account login could, which is out of scope here."
 }

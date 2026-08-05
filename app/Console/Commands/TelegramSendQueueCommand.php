@@ -40,7 +40,15 @@ class TelegramSendQueueCommand extends Command
                 : $bot->sendMessage($post->message_text);
 
             if ($result['ok']) {
-                $post->update(['status' => TelegramPost::STATUS_SENT, 'sent_at' => now(), 'error_message' => null]);
+                // telegram_message_id lets TelegramCaptureChannelPostsCommand recognize this
+                // exact message when it later polls the channel, so it's never re-captured as
+                // if it were someone else's manual post.
+                $post->update([
+                    'status' => TelegramPost::STATUS_SENT,
+                    'sent_at' => now(),
+                    'telegram_message_id' => $result['message_id'] ?? null,
+                    'error_message' => null,
+                ]);
                 $sent++;
             } else {
                 $post->update(['status' => TelegramPost::STATUS_FAILED, 'error_message' => $result['message']]);

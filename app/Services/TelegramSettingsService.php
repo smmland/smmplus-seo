@@ -15,10 +15,13 @@ class TelegramSettingsService
     private const KEY_BLOG_SUMMARY_PROMPT = 'telegram_prompt_blog_summary';
     private const KEY_SERVICE_ANNOUNCEMENT_PROMPT = 'telegram_prompt_service_announcement';
     private const KEY_LAST_WEEKLY_PLAN_RUN_AT = 'telegram_last_weekly_plan_run_at';
+    private const KEY_CHANNEL_CAPTURE_ENABLED = 'telegram_channel_capture_enabled';
+    private const KEY_LAST_UPDATE_ID = 'telegram_last_update_id';
 
     private const DEFAULT_ENABLED = false;
     private const DEFAULT_IMAGE_GENERATION_ENABLED = true;
     private const DEFAULT_POSTS_PER_DAY = 1;
+    private const DEFAULT_CHANNEL_CAPTURE_ENABLED = false;
 
     // How many days ahead topUpBlogPlan() keeps scheduled - see TelegramPostGeneratorService.
     public const BLOG_PLAN_WINDOW_DAYS = 7;
@@ -200,6 +203,36 @@ class TelegramSettingsService
     public function recordWeeklyPlanRun(): void
     {
         $this->set(self::KEY_LAST_WEEKLY_PLAN_RUN_AT, now()->toIso8601String());
+    }
+
+    // Independent of isEnabled() (the master posting toggle) - capturing what's already posted
+    // to the channel is a different concern from generating/sending new content, so it can be on
+    // even while the other is off (e.g. only watching the channel, not posting to it yet).
+    public function isChannelCaptureEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_CHANNEL_CAPTURE_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_CHANNEL_CAPTURE_ENABLED;
+    }
+
+    public function setChannelCaptureEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_CHANNEL_CAPTURE_ENABLED, $enabled ? '1' : '0');
+    }
+
+    // Telegram's getUpdates cursor - the highest update_id already processed, so each poll only
+    // asks for what's new (offset = this + 1) instead of redelivering the same updates forever.
+    // See TelegramCaptureChannelPostsCommand.
+    public function getLastUpdateId(): ?int
+    {
+        $stored = $this->get(self::KEY_LAST_UPDATE_ID);
+
+        return $stored !== null ? (int) $stored : null;
+    }
+
+    public function setLastUpdateId(int $updateId): void
+    {
+        $this->set(self::KEY_LAST_UPDATE_ID, (string) $updateId);
     }
 
     private function get(string $key): ?string

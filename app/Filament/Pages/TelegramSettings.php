@@ -40,6 +40,7 @@ class TelegramSettings extends Page implements HasForms
             'enabled' => $settings->isEnabled(),
             'botToken' => null,
             'channelId' => $settings->getChannelId(),
+            'channelCaptureEnabled' => $settings->isChannelCaptureEnabled(),
             'imageGenerationEnabled' => $settings->isImageGenerationEnabled(),
             'imageModel' => $aiSettings->getImageModel(),
             'postsPerDay' => $settings->getPostsPerDay(),
@@ -70,6 +71,10 @@ class TelegramSettings extends Page implements HasForms
                         TextInput::make('channelId')
                             ->label('Channel id')
                             ->placeholder('@yourchannel or -1001234567890'),
+
+                        Toggle::make('channelCaptureEnabled')
+                            ->label('Record messages posted directly to the channel')
+                            ->helperText('Independent of "Enable Telegram posting" above - watches the channel (polling Telegram every minute) and saves anything posted there outside this panel into the Queue page\'s history, so the AI knows about it too. Can only ever see messages posted after this is turned on - Telegram has no way for a bot to fetch a channel\'s older history.'),
                     ])
                     ->columns(2),
 
@@ -125,6 +130,7 @@ class TelegramSettings extends Page implements HasForms
         $settings->setEnabled((bool) $data['enabled']);
         $settings->setBotToken($data['botToken'] ?: null);
         $settings->setChannelId($data['channelId'] ?: null);
+        $settings->setChannelCaptureEnabled((bool) $data['channelCaptureEnabled']);
         $settings->setImageGenerationEnabled((bool) $data['imageGenerationEnabled']);
         $aiSettings->setImageModel($data['imageModel'] ?: null);
         $settings->setPostsPerDay((int) $data['postsPerDay']);

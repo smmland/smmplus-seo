@@ -22,7 +22,7 @@ class TelegramBotService
      * as everywhere else local images are stored in this app (BlogContentExtractionService,
      * TelegramImageAiService).
      *
-     * @return array{ok: bool, message: string}
+     * @return array{ok: bool, message: string, message_id?: int}
      */
     public function sendPhoto(string $imagePath, string $caption): array
     {
@@ -55,7 +55,7 @@ class TelegramBotService
      * found) - never used just because sendPhoto() failed, that's a real error to surface, not
      * silently retried as a text-only post.
      *
-     * @return array{ok: bool, message: string}
+     * @return array{ok: bool, message: string, message_id?: int}
      */
     public function sendMessage(string $text): array
     {
@@ -77,6 +77,101 @@ class TelegramBotService
         }
 
         return $this->parseResponse($response);
+    }
+
+    /**
+     * Polls for new updates since $offset (Telegram's own cursor convention: passing
+     * offset = last_update_id + 1 both fetches only what's new AND tells Telegram those older
+     * ones can be dropped from its queue). Short poll (timeout=0) rather than long-polling - this
+     * rides the same once-a-minute schedule:run tick every other command here does, so blocking
+     * the PHP process waiting on Telegram would just eat into that budget for no benefit.
+     * allowed_updates restricts this to channel posts only, not private messages or anything
+     * else this bot might technically receive.
+     *
+     * @return array{ok: bool, message: string, updates?: array}
+     */
+    public function getUpdates(int $offset, int $limit = 100): array
+    {
+        $token = $this->settings->getBotToken();
+
+        if (! $token) {
+            return ['ok' => false, 'message' => 'No bot token configured - set it up in Telegram Settings first.'];
+        }
+
+        try {
+            $response = Http::timeout(self::REQUEST_TIMEOUT_SECONDS)
+                ->asForm()
+                ->post("https://api.telegram.org/bot{$token}/getUpdates", [
+                    'offset' => $offset,
+                    'limit' => $limit,
+                    'timeout' => 0,
+                    'allowed_updates' => json_encode(['channel_post']),
+                ]);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
+        }
+
+        if (! $response->successful() || ! $response->json('ok')) {
+            return ['ok' => false, 'message' => $this->errorMessage($response)];
+        }
+
+        return ['ok' => true, 'message' => 'ok', 'updates' => $response->json('result', [])];
+    }
+
+    /**
+     * getUpdates only ever delivers anything if no webhook is registered for this bot - Telegram
+     * only uses one delivery method at a time. Idempotent (a no-op if none was set), called
+     * before every capture poll rather than once, since there's no reliable moment to call it
+     * "just once" on a host with no persistent process to remember that it already ran.
+     */
+    public function deleteWebhook(): void
+    {
+        $token = $this->settings->getBotToken();
+
+        if (! $token) {
+            return;
+        }
+
+        try {
+            Http::timeout(15)->post("https://api.telegram.org/bot{$token}/deleteWebhook");
+        } catch (\Throwable) {
+            // Best-effort - a failure here just means the next getUpdates call might come back
+            // empty, which is already handled as "nothing new" rather than an error.
+        }
+    }
+
+    /**
+     * Downloads a file Telegram is hosting (e.g. a photo from a captured channel post) by its
+     * file_id - a two-step process (resolve file_id to a path, then fetch it) that's how the Bot
+     * API always serves file content; there's no single "get the bytes" call.
+     */
+    public function downloadFile(string $fileId): ?string
+    {
+        $token = $this->settings->getBotToken();
+
+        if (! $token) {
+            return null;
+        }
+
+        try {
+            $fileResponse = Http::timeout(15)->get("https://api.telegram.org/bot{$token}/getFile", ['file_id' => $fileId]);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $filePath = $fileResponse->json('result.file_path');
+
+        if (! $fileResponse->successful() || ! $fileResponse->json('ok') || ! $filePath) {
+            return null;
+        }
+
+        try {
+            $download = Http::timeout(self::REQUEST_TIMEOUT_SECONDS)->get("https://api.telegram.org/file/bot{$token}/{$filePath}");
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $download->successful() ? $download->body() : null;
     }
 
     /**
@@ -128,12 +223,14 @@ class TelegramBotService
     }
 
     /**
-     * @return array{ok: bool, message: string}
+     * @return array{ok: bool, message: string, message_id?: int}
      */
     private function parseResponse(\Illuminate\Http\Client\Response $response): array
     {
         if ($response->successful() && $response->json('ok')) {
-            return ['ok' => true, 'message' => 'Sent.'];
+            $messageId = $response->json('result.message_id');
+
+            return ['ok' => true, 'message' => 'Sent.', ...($messageId !== null ? ['message_id' => $messageId] : [])];
         }
 
         return ['ok' => false, 'message' => $this->errorMessage($response)];

@@ -7,6 +7,7 @@ use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
 use App\Services\ServiceCatalogService;
 use App\Services\SettingsService;
+use App\Services\TranslationSettingsService;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -125,6 +126,34 @@ class ServiceTranslationQueue extends Page implements HasActions
     }
 
     /**
+     * How far along we are toward the next automatic hourly services:refresh-catalog run - the
+     * services counterpart to BlogTranslationQueue::cronProgress(), same shape, reading
+     * TranslationSettingsService's service-specific pair of methods instead.
+     *
+     * @return array{hasRun: bool, percent: int, remainingMinutes: ?int, lastRunAt: ?\Illuminate\Support\Carbon}
+     */
+    #[Computed]
+    public function cronProgress(): array
+    {
+        $settings = app(TranslationSettingsService::class);
+        $lastRunAt = $settings->getServiceLastScheduledRunAt();
+        $intervalMinutes = TranslationSettingsService::SERVICE_SCHEDULE_INTERVAL_MINUTES;
+
+        if (! $lastRunAt) {
+            return ['hasRun' => false, 'percent' => 0, 'remainingMinutes' => null, 'lastRunAt' => null];
+        }
+
+        $elapsedMinutes = min($intervalMinutes, max(0, abs(now()->diffInMinutes($lastRunAt))));
+
+        return [
+            'hasRun' => true,
+            'percent' => (int) round(($elapsedMinutes / $intervalMinutes) * 100),
+            'remainingMinutes' => (int) ceil(max(0, $intervalMinutes - $elapsedMinutes)),
+            'lastRunAt' => $lastRunAt,
+        ];
+    }
+
+    /**
      * @return array{services: \Illuminate\Support\Collection, page: int, lastPage: int, total: int}
      */
     #[Computed]
@@ -204,6 +233,8 @@ class ServiceTranslationQueue extends Page implements HasActions
                     'state' => $this->descriptionLanguageState($language, $row, $pendingLangs, $failedLangs),
                     'titleState' => $this->titleLanguageState($language, $row, $pendingTitleLangs, $failedTitleLangs),
                     'description' => $row?->description,
+                    'retranslated' => $row?->wasRecentlyAutoRetranslatedDescription() ?? false,
+                    'titleRetranslated' => $row?->wasRecentlyAutoRetranslatedTitle() ?? false,
                 ];
             });
 
@@ -808,6 +839,8 @@ class ServiceTranslationQueue extends Page implements HasActions
                 'titleError' => $titleJobs->get($language->code)?->status === ServiceTranslationJob::FAILED
                     ? $titleJobs->get($language->code)->message
                     : null,
+                'retranslated' => $row !== null && $row->wasRecentlyAutoRetranslatedDescription(),
+                'titleRetranslated' => $row !== null && $row->wasRecentlyAutoRetranslatedTitle(),
             ];
         })->values();
 

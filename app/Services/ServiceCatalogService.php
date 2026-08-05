@@ -248,10 +248,21 @@ class ServiceCatalogService
             // translated before that column existed (or reset to null by
             // syncDefaultCatalog()'s "source changed, please re-check" signal below) as having
             // nothing worth keeping, silently discarding a real translation.
+            //
+            // The trailing hash check is what actually lets a *stale* translation (default
+            // description changed since this row was translated) fall through to the "else"
+            // branch below instead of being protected forever: a real translation almost always
+            // differs from the default text regardless of whether the source has since changed
+            // (it's in a different language, after all), so the content comparison alone can
+            // never detect staleness on its own. description_translated_from_hash records what
+            // the default's hash was at translation time (ServiceAiTranslationService) -
+            // null for rows translated before that column existed, which keeps their existing
+            // (already-verified) protection rather than reinterpreting them as stale.
             $hasOwnTranslation = $row->exists
                 && filled($row->description_text)
                 && $default->description_text !== null
-                && $this->normalize($row->description_text) !== $this->normalize($default->description_text);
+                && $this->normalize($row->description_text) !== $this->normalize($default->description_text)
+                && ($row->description_translated_from_hash === null || $row->description_translated_from_hash === $default->source_description_hash);
 
             // Same idea, independent of the description one above - the title and description
             // of a row can each be in a different state (title uploaded already, description
@@ -259,7 +270,8 @@ class ServiceCatalogService
             $hasOwnTitleTranslation = $row->exists
                 && filled($row->title)
                 && $default->title !== null
-                && $this->normalize($row->title) !== $this->normalize($default->title);
+                && $this->normalize($row->title) !== $this->normalize($default->title)
+                && ($row->title_translated_from_hash === null || $row->title_translated_from_hash === $default->source_title_hash);
 
             $category_id = $service['categoryId'] ?? $default->category_id;
             $category_title = $default->category_title;

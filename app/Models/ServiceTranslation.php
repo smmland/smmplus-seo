@@ -10,10 +10,17 @@ class ServiceTranslation extends Model
         'service_key', 'lang', 'category_id', 'category_title', 'title',
         'description', 'description_text', 'source_description_hash',
         'is_translated', 'translated_at', 'live_confirmed_at', 'checked_at', 'check_note',
+        'description_auto_retranslated_at', 'description_translated_from_hash',
         'is_title_translated', 'title_translated_at', 'title_live_confirmed_at', 'title_check_note',
-        'source_title_hash',
+        'title_auto_retranslated_at', 'title_translated_from_hash', 'source_title_hash',
         'first_seen_at', 'last_seen_at',
     ];
+
+    // How long the "recently re-translated" marker (queue()'s badges, the details popup) stays
+    // showing after an automatic re-translation - long enough to be seen without needing to
+    // catch it same-day, short enough that it doesn't linger as stale trivia forever once the
+    // admin's moved on.
+    public const AUTO_RETRANSLATED_MARKER_DAYS = 7;
 
     protected function casts(): array
     {
@@ -22,9 +29,11 @@ class ServiceTranslation extends Model
             'translated_at' => 'datetime',
             'live_confirmed_at' => 'datetime',
             'checked_at' => 'datetime',
+            'description_auto_retranslated_at' => 'datetime',
             'is_title_translated' => 'boolean',
             'title_translated_at' => 'datetime',
             'title_live_confirmed_at' => 'datetime',
+            'title_auto_retranslated_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
         ];
@@ -79,5 +88,17 @@ class ServiceTranslation extends Model
         }
 
         return $this->title_live_confirmed_at === null || $this->title_live_confirmed_at->lt($this->title_translated_at);
+    }
+
+    public function wasRecentlyAutoRetranslatedDescription(): bool
+    {
+        return $this->description_auto_retranslated_at !== null
+            && $this->description_auto_retranslated_at->gt(now()->subDays(self::AUTO_RETRANSLATED_MARKER_DAYS));
+    }
+
+    public function wasRecentlyAutoRetranslatedTitle(): bool
+    {
+        return $this->title_auto_retranslated_at !== null
+            && $this->title_auto_retranslated_at->gt(now()->subDays(self::AUTO_RETRANSLATED_MARKER_DAYS));
     }
 }

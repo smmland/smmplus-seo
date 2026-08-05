@@ -119,6 +119,7 @@ class ServiceAiTranslationService
 
             $prepared[$job->id] = [
                 'field' => $job->field,
+                'trigger' => $job->trigger,
                 'sourceRow' => $sourceRow,
                 'targetLangCode' => $job->target_lang,
                 'targetLanguage' => $targetLanguage,
@@ -172,10 +173,12 @@ class ServiceAiTranslationService
                     continue;
                 }
 
+                $isRetranslation = $p['trigger'] === ServiceTranslationJob::TRIGGER_SOURCE_CHANGED;
+
                 if ($isTitle) {
-                    $this->saveTitleTranslation($p['sourceRow'], $p['targetLangCode'], $parsed['title']);
+                    $this->saveTitleTranslation($p['sourceRow'], $p['targetLangCode'], $parsed['title'], $isRetranslation);
                 } else {
-                    $this->saveDescriptionTranslation($p['sourceRow'], $p['targetLangCode'], $parsed['description']);
+                    $this->saveDescriptionTranslation($p['sourceRow'], $p['targetLangCode'], $parsed['description'], $isRetranslation);
                 }
 
                 $results[$jobId] = ['ok' => true, 'message' => ($isTitle ? 'Title translated' : 'Translated').' into '.$p['targetLanguage'].' and saved.', ...$usage];
@@ -312,7 +315,7 @@ class ServiceAiTranslationService
         return is_array($decoded) ? $decoded : null;
     }
 
-    private function saveDescriptionTranslation(ServiceTranslation $sourceRow, string $targetLangCode, string $translatedDescription): void
+    private function saveDescriptionTranslation(ServiceTranslation $sourceRow, string $targetLangCode, string $translatedDescription, bool $isRetranslation = false): void
     {
         $row = ServiceTranslation::query()->firstOrNew([
             'service_key' => $sourceRow->service_key,
@@ -335,7 +338,21 @@ class ServiceAiTranslationService
         // (untouched here), so needsSiteUpdate() can tell "translated, not uploaded yet" apart
         // from "confirmed live" until the next refresh actually verifies it against the site.
         $row->translated_at = now();
-        $row->check_note = 'Translated by AI - not yet confirmed live on the site.';
+        // What the default description's own hash was at the moment of this translation -
+        // refreshLanguage() compares this against the default row's *current* hash to tell a
+        // still-fresh translation apart from one made obsolete by a later source edit.
+        $row->description_translated_from_hash = $sourceRow->source_description_hash;
+
+        if ($isRetranslation) {
+            // Queued by RefreshServiceCatalogCommand because the default-language description
+            // changed since this row's last translation - marked distinctly (queue()'s badges,
+            // the details popup) so it reads as "just automatically re-translated", not just
+            // "translated", the moment the admin next opens the page.
+            $row->description_auto_retranslated_at = now();
+            $row->check_note = 'Automatically re-translated by AI - the source description changed. Not yet confirmed live on the site.';
+        } else {
+            $row->check_note = 'Translated by AI - not yet confirmed live on the site.';
+        }
 
         if ($isNew) {
             $row->first_seen_at = now();
@@ -345,7 +362,7 @@ class ServiceAiTranslationService
         $row->save();
     }
 
-    private function saveTitleTranslation(ServiceTranslation $sourceRow, string $targetLangCode, string $translatedTitle): void
+    private function saveTitleTranslation(ServiceTranslation $sourceRow, string $targetLangCode, string $translatedTitle, bool $isRetranslation = false): void
     {
         $row = ServiceTranslation::query()->firstOrNew([
             'service_key' => $sourceRow->service_key,
@@ -361,7 +378,15 @@ class ServiceAiTranslationService
         // Same reasoning as translated_at on the description side - kept fully separate so
         // titleNeedsSiteUpdate() can track this independently of the description's own state.
         $row->title_translated_at = now();
-        $row->title_check_note = 'Translated by AI - not yet confirmed live on the site.';
+        // The title counterpart to description_translated_from_hash above.
+        $row->title_translated_from_hash = $sourceRow->source_title_hash;
+
+        if ($isRetranslation) {
+            $row->title_auto_retranslated_at = now();
+            $row->title_check_note = 'Automatically re-translated by AI - the source title changed. Not yet confirmed live on the site.';
+        } else {
+            $row->title_check_note = 'Translated by AI - not yet confirmed live on the site.';
+        }
 
         if ($isNew) {
             $row->first_seen_at = now();

@@ -12,6 +12,7 @@ class TranslationSettingsService
     private const KEY_LAST_SCHEDULED_RUN_AT = 'translation_last_scheduled_run_at';
     private const KEY_AUTO_EXTRACT_NEW_BLOGS_ENABLED = 'translation_auto_extract_new_blogs_enabled';
     private const KEY_AUTO_TRANSLATE_NEW_BLOGS_ENABLED = 'translation_auto_translate_new_blogs_enabled';
+    private const KEY_SERVICE_LAST_SCHEDULED_RUN_AT = 'translation_service_last_scheduled_run_at';
 
     private const DEFAULT_AUTO_HIDE_ENABLED = false;
     private const DEFAULT_RECHECK_INTERVAL_HOURS = 12;
@@ -20,6 +21,9 @@ class TranslationSettingsService
 
     // Matches routes/console.php's Schedule::command('translation:refresh-blog-status')->hourly().
     public const SCHEDULE_INTERVAL_MINUTES = 60;
+
+    // Matches routes/console.php's Schedule::command('services:refresh-catalog')->hourly().
+    public const SERVICE_SCHEDULE_INTERVAL_MINUTES = 60;
 
     public function isAutoHideEnabled(): bool
     {
@@ -88,6 +92,21 @@ class TranslationSettingsService
     public function recordScheduledRun(): void
     {
         $this->set(self::KEY_LAST_SCHEDULED_RUN_AT, now()->toIso8601String());
+    }
+
+    public function getServiceLastScheduledRunAt(): ?Carbon
+    {
+        $stored = $this->get(self::KEY_SERVICE_LAST_SCHEDULED_RUN_AT);
+
+        return $stored !== null ? Carbon::parse($stored) : null;
+    }
+
+    // The services counterpart to recordScheduledRun() - called only by the hourly
+    // `services:refresh-catalog` cron command, not by the Service Translation page's own "Sync
+    // now" button.
+    public function recordServiceScheduledRun(): void
+    {
+        $this->set(self::KEY_SERVICE_LAST_SCHEDULED_RUN_AT, now()->toIso8601String());
     }
 
     private function get(string $key): ?string

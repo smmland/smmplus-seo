@@ -208,6 +208,13 @@
                                     Not translated
                                 </span>
                             @endif
+
+                            @if ($language['titleRetranslated'] ?? false)
+                                <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium" style="background-color: rgba(var(--primary-500), .1); color: rgb(var(--primary-700))" title="The source title changed, so this was automatically re-translated">
+                                    <x-filament::icon icon="heroicon-m-arrow-path" class="h-3 w-3" />
+                                    Auto re-translated
+                                </span>
+                            @endif
                         </div>
 
                         @if (! $language['isDefault'] && ! $language['titlePending'])
@@ -267,6 +274,13 @@
                             @else
                                 <span class="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500 dark:bg-white/10 dark:text-gray-400">
                                     Not translated
+                                </span>
+                            @endif
+
+                            @if ($language['retranslated'] ?? false)
+                                <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium" style="background-color: rgba(var(--primary-500), .1); color: rgb(var(--primary-700))" title="The source description changed, so this was automatically re-translated">
+                                    <x-filament::icon icon="heroicon-m-arrow-path" class="h-3 w-3" />
+                                    Auto re-translated
                                 </span>
                             @endif
                         </div>

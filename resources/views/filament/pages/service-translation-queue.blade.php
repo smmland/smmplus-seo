@@ -83,13 +83,43 @@
         }
     </style>
 
-    <div>
+    <div wire:poll.20s>
         <x-filament::section>
+            <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                <span>Next automatic check (descriptions &amp; titles)</span>
+                <span>
+                    @if ($this->cronProgress['hasRun'])
+                        @if ($this->cronProgress['remainingMinutes'] > 0)
+                            in {{ $this->cronProgress['remainingMinutes'] }} min
+                        @else
+                            due any moment
+                        @endif
+                    @else
+                        waiting for the first automatic run
+                    @endif
+                </span>
+            </div>
+
+            <div class="mt-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10" style="height: 8px">
+                <div
+                    class="rounded-full bg-primary-500 transition-all duration-500"
+                    style="width: {{ $this->cronProgress['percent'] }}%; height: 8px"
+                ></div>
+            </div>
+
+            @if ($this->cronProgress['hasRun'])
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    Last automatic check: {{ $this->cronProgress['lastRunAt']->diffForHumans() }} - any service whose default description or title changed since its last translation is automatically re-translated and marked below.
+                </p>
+            @endif
+        </x-filament::section>
+
+        <x-filament::section class="mt-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <p class="text-sm font-medium text-gray-950 dark:text-white">Services catalog</p>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Every service lives on one shared listing page per language (unlike blog posts) - checked automatically every 12 hours, or run it now below.
+                        Every service lives on one shared listing page per language (unlike blog posts) - checked automatically every hour, or run it now below.
                     </p>
                 </div>
 

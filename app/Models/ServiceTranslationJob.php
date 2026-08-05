@@ -16,8 +16,11 @@ class ServiceTranslationJob extends Model
     public const FIELD_DESCRIPTION = 'description';
     public const FIELD_TITLE = 'title';
 
+    public const TRIGGER_MISSING = 'missing';
+    public const TRIGGER_SOURCE_CHANGED = 'source_changed';
+
     protected $fillable = [
-        'service_key', 'target_lang', 'field', 'status', 'message',
+        'service_key', 'target_lang', 'field', 'trigger', 'status', 'message',
         'provider', 'model', 'input_tokens', 'output_tokens', 'estimated_cost_usd',
     ];
 

@@ -7,6 +7,7 @@ use App\Models\TelegramPost;
 use App\Models\Url;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -41,6 +42,10 @@ class TelegramPostGeneratorService
      */
     public function topUpBlogPlan(): array
     {
+        if (! Schema::hasTable('telegram_posts')) {
+            return ['created' => 0, 'message' => 'Database update needed first - go to General Settings and click "Update database", then try again.'];
+        }
+
         if (! $this->settings->isEnabled()) {
             return ['created' => 0, 'message' => 'Telegram integration is disabled.'];
         }
@@ -59,7 +64,7 @@ class TelegramPostGeneratorService
         $needed = max(0, $totalWanted - $alreadyScheduled);
 
         if ($needed === 0) {
-            return ['created' => 0];
+            return ['created' => 0, 'message' => "The next {$postsPerDay}/day x ".TelegramSettingsService::BLOG_PLAN_WINDOW_DAYS." day window already has {$alreadyScheduled} post(s) scheduled (pending or confirmed) - check the list below. Lower here means nothing to add right now, not that anything failed."];
         }
 
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
@@ -178,7 +183,7 @@ class TelegramPostGeneratorService
      */
     public function draftServiceChanges(array $added, array $changed, array $removed): array
     {
-        if (! $this->settings->isEnabled()) {
+        if (! Schema::hasTable('telegram_posts') || ! $this->settings->isEnabled()) {
             return ['created' => 0];
         }
 

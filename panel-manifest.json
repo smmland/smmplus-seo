@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.0",
-    "notes": "Added a new Telegram Channel section (Queue + Settings) that turns the site's own content into AI-written Telegram posts with an image, reviewed by an admin before sending. Two sources: a rolling week-ahead plan of blog-article summaries (topped up daily), and near-immediate announcements when a service is added, updated, or removed (detected off the existing hourly services sync, drafted with a 30-minute review window). Every draft lands in one shared queue with Confirm/Reject/Edit/Delete actions - an unreviewed post still sends at its scheduled time, only Reject stops it. Images come from the article itself when it has one, otherwise generated with AI (OpenAI's Images API, toggle to disable). Requires creating a bot via @BotFather and adding it as an admin on the target channel, then entering its token + the channel id on the new Settings page."
+    "version": "1.16.1",
+    "notes": "Telegram Queue's \"Generate now\" button showed a bare \"Nothing new to schedule / the week ahead is already fully scheduled\" with no way to tell why - now includes the actual numbers (how many posts are already scheduled vs. how many are wanted) so it's clear whether that's expected or worth investigating further. Also guarded topUpBlogPlan()/draftServiceChanges() against the telegram_posts table not existing yet (a database update not yet installed), so that fails with a clear message instead of a raw error."
 }

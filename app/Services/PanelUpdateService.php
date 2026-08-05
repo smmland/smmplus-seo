@@ -207,6 +207,7 @@ class PanelUpdateService
     private function copyIntoApp(string $stagingDir): int
     {
         $fileCount = 0;
+        $failed = [];
 
         foreach (File::allFiles($stagingDir) as $file) {
             $relative = $file->getRelativePathname();
@@ -218,8 +219,24 @@ class PanelUpdateService
             $destination = base_path($relative);
 
             File::ensureDirectoryExists(dirname($destination));
-            File::copy($file->getPathname(), $destination);
+
+            // File::copy() returns false on failure (a locked file, a permissions quirk, ...)
+            // rather than throwing - previously that was never checked, so a single file
+            // silently failing to overwrite left the app in a half-updated state with the
+            // install still reporting success and no way to tell which file was stale.
+            if (! File::copy($file->getPathname(), $destination)) {
+                $failed[] = $relative;
+
+                continue;
+            }
+
             $fileCount++;
+        }
+
+        if (! empty($failed)) {
+            $list = implode(', ', array_slice($failed, 0, 10)).(count($failed) > 10 ? ', …' : '');
+
+            throw new RuntimeException("Copied {$fileCount} file(s), but ".count($failed)." failed to overwrite (still running the old version of those): {$list}. This usually means a file permissions issue - try again, or check with your hosting provider.");
         }
 
         return $fileCount;

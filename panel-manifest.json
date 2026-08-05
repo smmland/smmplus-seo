@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.1",
-    "notes": "Telegram Queue's \"Generate now\" button showed a bare \"Nothing new to schedule / the week ahead is already fully scheduled\" with no way to tell why - now includes the actual numbers (how many posts are already scheduled vs. how many are wanted) so it's clear whether that's expected or worth investigating further. Also guarded topUpBlogPlan()/draftServiceChanges() against the telegram_posts table not existing yet (a database update not yet installed), so that fails with a clear message instead of a raw error."
+    "version": "1.16.2",
+    "notes": "Found and fixed a real gap in the self-update installer itself: copyIntoApp() called File::copy() but never checked whether it actually succeeded, so a single file silently failing to overwrite (a lock, a permissions quirk, anything transient) left the app running a mix of old and new code with the install still reporting full success and no way to tell which file was stale. Now a failed copy aborts the install with a clear error naming exactly which file(s) failed, instead of pretending everything updated."
 }

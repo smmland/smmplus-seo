@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\GiveawayClaim;
+use App\Services\GiveawaySettingsService;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -118,6 +119,12 @@ class GiveawayClaims extends Page implements HasActions
             ->label('Mark as rewarded')
             ->icon('heroicon-o-check-badge')
             ->color('success')
+            ->fillForm(function (array $arguments) {
+                $claim = GiveawayClaim::query()->find($arguments['claimId']);
+                $amount = $claim ? app(GiveawaySettingsService::class)->getRewardAmountFor($claim->platform) : null;
+
+                return ['rewardNote' => $amount !== null ? "credited \${$amount} wallet balance" : null];
+            })
             ->form([
                 Textarea::make('rewardNote')
                     ->label('What was given (for your own records)')

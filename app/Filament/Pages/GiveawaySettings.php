@@ -38,8 +38,15 @@ class GiveawaySettings extends Page implements HasForms
             'telegramBotUsername' => $settings->getTelegramBotUsername(),
             'youtubeEnabled' => $settings->isYoutubeEnabled(),
             'youtubeChannelId' => $settings->getYoutubeChannelId(),
+            'youtubeSubscribeRewardAmount' => $settings->getYoutubeSubscribeRewardAmount(),
             'googleClientId' => $settings->getGoogleClientId(),
             'googleClientSecret' => null,
+            'youtubeDataApiKey' => null,
+            'youtubeFeaturedEnabled' => $settings->isYoutubeFeaturedEnabled(),
+            'youtubeFeaturedRewardAmount' => $settings->getYoutubeFeaturedRewardAmount(),
+            'youtubeVideoEnabled' => $settings->isYoutubeVideoEnabled(),
+            'youtubeVideoRequiredKeyword' => $settings->getYoutubeVideoRequiredKeyword(),
+            'youtubeVideoRewardAmount' => $settings->getYoutubeVideoRewardAmount(),
             'trustpilotEnabled' => $settings->isTrustpilotEnabled(),
             'trustpilotReviewUrl' => $settings->getTrustpilotReviewUrl(),
             'frontendReturnUrl' => $settings->getFrontendReturnUrl(),
@@ -76,8 +83,16 @@ class GiveawaySettings extends Page implements HasForms
                     ])
                     ->columns(2),
 
-                Section::make('YouTube')
-                    ->description('Requires a Google Cloud project with the YouTube Data API v3 enabled and OAuth 2.0 credentials. Add the redirect URI shown below as an authorized redirect URI in that project. While the OAuth app is unverified with Google, only accounts added as test users in the Google Cloud console can complete this - fine for early traction, submit for verification once the feature is proven.')
+                Section::make('YouTube channel id')
+                    ->description('The one channel identifier all three YouTube tasks below check against - its UC... id, not its @handle.')
+                    ->schema([
+                        TextInput::make('youtubeChannelId')
+                            ->label('YouTube channel id')
+                            ->placeholder('UCxxxxxxxxxxxxxxxxxxxxxx'),
+                    ]),
+
+                Section::make('YouTube — 1. Subscribe')
+                    ->description('Checked via Google OAuth (subscription status is private, only the subscriber\'s own consent can confirm it). Requires a Google Cloud project with the YouTube Data API v3 enabled and OAuth 2.0 credentials. Add the redirect URI shown below as an authorized redirect URI in that project. While the OAuth app is unverified with Google, only accounts added as test users in the Google Cloud console can complete this - fine for early traction, submit for verification once the feature is proven.')
                     ->schema([
                         Placeholder::make('redirectUriHint')
                             ->label('Redirect URI to register with Google')
@@ -85,12 +100,13 @@ class GiveawaySettings extends Page implements HasForms
                             ->columnSpanFull(),
 
                         Toggle::make('youtubeEnabled')
-                            ->label('Enable YouTube giveaway'),
+                            ->label('Enable this task'),
 
-                        TextInput::make('youtubeChannelId')
-                            ->label('YouTube channel id')
-                            ->placeholder('UCxxxxxxxxxxxxxxxxxxxxxx')
-                            ->helperText('The channel users need to subscribe to - its UC... id, not its @handle.'),
+                        TextInput::make('youtubeSubscribeRewardAmount')
+                            ->label('Reward amount')
+                            ->numeric()
+                            ->prefix('$')
+                            ->helperText('Shown as a hint when marking a claim rewarded - crediting the wallet is still done by hand.'),
 
                         TextInput::make('googleClientId')
                             ->label('Google OAuth client id'),
@@ -102,6 +118,47 @@ class GiveawaySettings extends Page implements HasForms
                             ->helperText(fn () => app(GiveawaySettingsService::class)->hasGoogleClientSecret()
                                 ? 'A secret is already saved - leave blank to keep it, or type a new one to replace it.'
                                 : 'No secret saved yet.'),
+                    ])
+                    ->columns(2),
+
+                Section::make('YouTube — 2. Featured channel')
+                    ->description('Checked with a plain Google API key instead of OAuth - a channel\'s featured-channels list is public, so no consent screen is needed. Create an API key in the same Google Cloud project as above (APIs & Services → Credentials → Create API key), restricted to the YouTube Data API v3.')
+                    ->schema([
+                        TextInput::make('youtubeDataApiKey')
+                            ->label('YouTube Data API key')
+                            ->password()
+                            ->revealable()
+                            ->helperText(fn () => app(GiveawaySettingsService::class)->hasYoutubeDataApiKey()
+                                ? 'A key is already saved - leave blank to keep it, or type a new one to replace it. Shared with the "Made a video" task below.'
+                                : 'No key saved yet. Shared with the "Made a video" task below.')
+                            ->columnSpanFull(),
+
+                        Toggle::make('youtubeFeaturedEnabled')
+                            ->label('Enable this task'),
+
+                        TextInput::make('youtubeFeaturedRewardAmount')
+                            ->label('Reward amount')
+                            ->numeric()
+                            ->prefix('$'),
+                    ])
+                    ->columns(2),
+
+                Section::make('YouTube — 3. Made a video')
+                    ->description('Also checked with the same API key above - a video\'s title/description/visibility are public. The user pastes a link to their video; it only counts if it\'s public and mentions the keyword below.')
+                    ->schema([
+                        Toggle::make('youtubeVideoEnabled')
+                            ->label('Enable this task'),
+
+                        TextInput::make('youtubeVideoRewardAmount')
+                            ->label('Reward amount')
+                            ->numeric()
+                            ->prefix('$'),
+
+                        TextInput::make('youtubeVideoRequiredKeyword')
+                            ->label('Required keyword')
+                            ->placeholder('smmplus')
+                            ->helperText('Must appear somewhere in the video\'s title or description.')
+                            ->columnSpanFull(),
                     ])
                     ->columns(2),
 
@@ -140,13 +197,20 @@ class GiveawaySettings extends Page implements HasForms
         $settings->setTelegramBotUsername($data['telegramBotUsername'] ?: null);
         $settings->setYoutubeEnabled((bool) $data['youtubeEnabled']);
         $settings->setYoutubeChannelId($data['youtubeChannelId'] ?: null);
+        $settings->setYoutubeSubscribeRewardAmount($data['youtubeSubscribeRewardAmount'] !== '' && $data['youtubeSubscribeRewardAmount'] !== null ? (float) $data['youtubeSubscribeRewardAmount'] : null);
         $settings->setGoogleClientId($data['googleClientId'] ?: null);
         $settings->setGoogleClientSecret($data['googleClientSecret'] ?: null);
+        $settings->setYoutubeDataApiKey($data['youtubeDataApiKey'] ?: null);
+        $settings->setYoutubeFeaturedEnabled((bool) $data['youtubeFeaturedEnabled']);
+        $settings->setYoutubeFeaturedRewardAmount($data['youtubeFeaturedRewardAmount'] !== '' && $data['youtubeFeaturedRewardAmount'] !== null ? (float) $data['youtubeFeaturedRewardAmount'] : null);
+        $settings->setYoutubeVideoEnabled((bool) $data['youtubeVideoEnabled']);
+        $settings->setYoutubeVideoRequiredKeyword($data['youtubeVideoRequiredKeyword'] ?: null);
+        $settings->setYoutubeVideoRewardAmount($data['youtubeVideoRewardAmount'] !== '' && $data['youtubeVideoRewardAmount'] !== null ? (float) $data['youtubeVideoRewardAmount'] : null);
         $settings->setTrustpilotEnabled((bool) $data['trustpilotEnabled']);
         $settings->setTrustpilotReviewUrl($data['trustpilotReviewUrl'] ?: null);
         $settings->setFrontendReturnUrl($data['frontendReturnUrl']);
 
-        $this->form->fill([...$this->form->getState(), 'googleClientSecret' => null]);
+        $this->form->fill([...$this->form->getState(), 'googleClientSecret' => null, 'youtubeDataApiKey' => null]);
 
         Notification::make()
             ->title('Giveaway settings saved')

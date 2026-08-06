@@ -7,6 +7,7 @@ use App\Models\GiveawayClaim;
 use App\Services\GiveawaySettingsService;
 use App\Services\TelegramBotService;
 use App\Services\TelegramLoginVerifier;
+use App\Services\YoutubeDataApiService;
 use App\Services\YoutubeOAuthService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -41,7 +42,10 @@ class GiveawayController extends Controller
                 'botUsername' => $settings->getTelegramBotUsername(),
             ],
             'youtube' => [
-                'enabled' => $settings->isYoutubeEnabled(),
+                'subscribeEnabled' => $settings->isYoutubeEnabled(),
+                'featuredEnabled' => $settings->isYoutubeFeaturedEnabled(),
+                'videoEnabled' => $settings->isYoutubeVideoEnabled(),
+                'videoRequiredKeyword' => $settings->getYoutubeVideoRequiredKeyword(),
             ],
             'trustpilot' => [
                 'enabled' => $settings->isTrustpilotEnabled(),
@@ -253,7 +257,7 @@ class GiveawayController extends Controller
         $googleAccountId = $result['googleAccountId'] ?? ('unknown_'.md5($panelUserEmail));
 
         $existing = GiveawayClaim::query()
-            ->where('platform', GiveawayClaim::PLATFORM_YOUTUBE)
+            ->where('platform', GiveawayClaim::PLATFORM_YOUTUBE_SUBSCRIBE)
             ->where(function ($q) use ($panelUserEmail, $googleAccountId) {
                 $q->where('panel_user_email', $panelUserEmail)
                     ->orWhere('platform_account_id', $googleAccountId);
@@ -266,7 +270,7 @@ class GiveawayController extends Controller
 
         try {
             GiveawayClaim::create([
-                'platform' => GiveawayClaim::PLATFORM_YOUTUBE,
+                'platform' => GiveawayClaim::PLATFORM_YOUTUBE_SUBSCRIBE,
                 'panel_user_email' => $panelUserEmail,
                 'panel_username' => $panelUsername,
                 'platform_account_id' => $googleAccountId,
@@ -278,6 +282,130 @@ class GiveawayController extends Controller
         }
 
         return redirect()->away($returnBase.'?youtube=verified');
+    }
+
+    /**
+     * Unlike subscribing, this is checked with a public API key, not OAuth - a channel's
+     * featured-channels list is visible to anyone. See YoutubeDataApiService::checkFeaturedChannel().
+     */
+    public function submitYoutubeFeatured(Request $request, YoutubeDataApiService $youtubeData, GiveawaySettingsService $settings): JsonResponse
+    {
+        if (! $settings->isYoutubeFeaturedEnabled()) {
+            return response()->json(['ok' => false, 'status' => 'disabled', 'message' => 'This task is currently disabled.'], 200);
+        }
+
+        $panelUserEmail = $request->input('panel_user_email');
+        $panelUsername = $request->input('panel_username');
+        $channelInput = trim((string) $request->input('channel'));
+
+        if (! is_string($panelUserEmail) || ! filter_var($panelUserEmail, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['ok' => false, 'status' => 'invalid', 'message' => 'Missing or invalid panel user.'], 400);
+        }
+
+        if ($channelInput === '') {
+            return response()->json(['ok' => false, 'status' => 'invalid', 'message' => 'Please enter your channel handle or URL.'], 200);
+        }
+
+        $check = $youtubeData->checkFeaturedChannel($channelInput);
+
+        if (! $check['ok']) {
+            return response()->json(['ok' => false, 'status' => 'error', 'message' => $check['message']], 200);
+        }
+
+        $existing = GiveawayClaim::query()
+            ->where('platform', GiveawayClaim::PLATFORM_YOUTUBE_FEATURED)
+            ->where(function ($q) use ($panelUserEmail, $check) {
+                $q->where('panel_user_email', $panelUserEmail)
+                    ->orWhere('platform_account_id', $check['channelId']);
+            })
+            ->first();
+
+        if ($existing) {
+            return response()->json(['ok' => true, 'status' => 'already_claimed', 'message' => 'This has already been claimed.', 'claimStatus' => $existing->status]);
+        }
+
+        if (! $check['isFeatured']) {
+            return response()->json(['ok' => true, 'status' => 'not_found', 'message' => "We couldn't find our channel in your featured channels yet. Add it, then try again."]);
+        }
+
+        try {
+            GiveawayClaim::create([
+                'platform' => GiveawayClaim::PLATFORM_YOUTUBE_FEATURED,
+                'panel_user_email' => $panelUserEmail,
+                'panel_username' => $panelUsername,
+                'platform_account_id' => $check['channelId'],
+                'proof_url' => 'https://www.youtube.com/channel/'.$check['channelId'],
+                'verified_at' => now(),
+                'status' => GiveawayClaim::STATUS_VERIFIED,
+            ]);
+        } catch (QueryException) {
+            return response()->json(['ok' => true, 'status' => 'already_claimed', 'message' => 'This has already been claimed.']);
+        }
+
+        return response()->json(['ok' => true, 'status' => 'verified', 'message' => 'Verified - your reward request is now with our team.']);
+    }
+
+    /**
+     * Also checked with a public API key - a video's own title/description/visibility are
+     * public. See YoutubeDataApiService::checkVideoProof().
+     */
+    public function submitYoutubeVideo(Request $request, YoutubeDataApiService $youtubeData, GiveawaySettingsService $settings): JsonResponse
+    {
+        if (! $settings->isYoutubeVideoEnabled()) {
+            return response()->json(['ok' => false, 'status' => 'disabled', 'message' => 'This task is currently disabled.'], 200);
+        }
+
+        $panelUserEmail = $request->input('panel_user_email');
+        $panelUsername = $request->input('panel_username');
+        $videoUrl = trim((string) $request->input('video_url'));
+
+        if (! is_string($panelUserEmail) || ! filter_var($panelUserEmail, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['ok' => false, 'status' => 'invalid', 'message' => 'Missing or invalid panel user.'], 400);
+        }
+
+        if ($videoUrl === '') {
+            return response()->json(['ok' => false, 'status' => 'invalid', 'message' => 'Please paste a link to your video.'], 200);
+        }
+
+        $check = $youtubeData->checkVideoProof($videoUrl, $settings->getYoutubeVideoRequiredKeyword() ?? '');
+
+        if (! $check['ok']) {
+            return response()->json(['ok' => false, 'status' => 'error', 'message' => $check['message']], 200);
+        }
+
+        $videoId = $check['videoId'] ?? md5($videoUrl);
+
+        $existing = GiveawayClaim::query()
+            ->where('platform', GiveawayClaim::PLATFORM_YOUTUBE_VIDEO)
+            ->where(function ($q) use ($panelUserEmail, $videoId) {
+                $q->where('panel_user_email', $panelUserEmail)
+                    ->orWhere('platform_account_id', $videoId);
+            })
+            ->first();
+
+        if ($existing) {
+            return response()->json(['ok' => true, 'status' => 'already_claimed', 'message' => 'This has already been claimed.', 'claimStatus' => $existing->status]);
+        }
+
+        if (! $check['isValid']) {
+            return response()->json(['ok' => true, 'status' => 'not_found', 'message' => "We couldn't verify that video yet - make sure it's public and mentions us, then try again."]);
+        }
+
+        try {
+            GiveawayClaim::create([
+                'platform' => GiveawayClaim::PLATFORM_YOUTUBE_VIDEO,
+                'panel_user_email' => $panelUserEmail,
+                'panel_username' => $panelUsername,
+                'platform_account_id' => $videoId,
+                'proof_url' => $videoUrl,
+                'verified_at' => now(),
+                'status' => GiveawayClaim::STATUS_VERIFIED,
+            ]);
+        } catch (QueryException) {
+            return response()->json(['ok' => true, 'status' => 'already_claimed', 'message' => 'This has already been claimed.']);
+        }
+
+        return response()->json(['ok' => true, 'status' => 'verified', 'message' => 'Verified - your reward request is now with our team.']);
     }
 
     public function status(Request $request): JsonResponse

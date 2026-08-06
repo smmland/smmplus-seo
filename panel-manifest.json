@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.17.2",
-    "notes": "Giveaway phase 1 extended with a third task: leaving a review on Trustpilot. Unlike Telegram/YouTube (checked automatically), there's no public API to confirm a Trustpilot review is real, so the user pastes a link to their review as proof instead - it lands in Giveaway > Claims marked 'needs manual check' rather than 'verified', so the admin can go look at the actual review before rewarding it. New Trustpilot section on Giveaway > Settings (enable toggle + review page URL)."
+    "version": "1.17.3",
+    "notes": "YouTube giveaway task expanded from one (Subscribe) to three ordered, independently-rewarded tasks in a single YouTube column: 1) Subscribe (unchanged, Google OAuth), 2) Feature our channel as one of your own channel's featured channels, 3) make a public video that mentions us. Both new tasks are verified automatically with a public Google API key (no OAuth/consent needed - a channel's featured list and a video's metadata are public data), unlike Trustpilot which still needs manual admin review. Giveaway > Settings now has a reward-amount field per YouTube task (shown as a hint when marking a claim rewarded) plus the API key and required-video-keyword fields."
 }

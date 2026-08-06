@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\GiveawayClaim;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Crypt;
 
@@ -22,6 +23,28 @@ class GiveawaySettingsService
 
     private const KEY_YOUTUBE_CHANNEL_ID = 'giveaway_youtube_channel_id';
 
+    // The other two YouTube tasks (featured channel, made a video) are checked with a public
+    // Google API key, not OAuth - a channel's featured-channels list and a video's own metadata
+    // are both public data, no user consent needed to read them. See YoutubeDataApiService.
+    private const KEY_YOUTUBE_FEATURED_ENABLED = 'giveaway_youtube_featured_enabled';
+
+    private const KEY_YOUTUBE_VIDEO_ENABLED = 'giveaway_youtube_video_enabled';
+
+    private const KEY_YOUTUBE_DATA_API_KEY = 'giveaway_youtube_data_api_key';
+
+    // What has to appear in a submitted video's title/description for it to count - e.g. a
+    // hashtag or the brand name, so a random unrelated video can't be submitted as proof.
+    private const KEY_YOUTUBE_VIDEO_REQUIRED_KEYWORD = 'giveaway_youtube_video_required_keyword';
+
+    // Reward amounts are informational only (reward delivery itself is still manual - see
+    // GiveawayClaims) - shown to the admin as a pre-filled hint when marking a claim rewarded,
+    // one figure per YouTube task since the user wants each to pay a different amount.
+    private const KEY_YOUTUBE_SUBSCRIBE_REWARD_AMOUNT = 'giveaway_youtube_subscribe_reward_amount';
+
+    private const KEY_YOUTUBE_FEATURED_REWARD_AMOUNT = 'giveaway_youtube_featured_reward_amount';
+
+    private const KEY_YOUTUBE_VIDEO_REWARD_AMOUNT = 'giveaway_youtube_video_reward_amount';
+
     private const KEY_TRUSTPILOT_REVIEW_URL = 'giveaway_trustpilot_review_url';
 
     private const KEY_GOOGLE_CLIENT_ID = 'giveaway_google_client_id';
@@ -35,6 +58,10 @@ class GiveawaySettingsService
     private const DEFAULT_TELEGRAM_ENABLED = false;
 
     private const DEFAULT_YOUTUBE_ENABLED = false;
+
+    private const DEFAULT_YOUTUBE_FEATURED_ENABLED = false;
+
+    private const DEFAULT_YOUTUBE_VIDEO_ENABLED = false;
 
     private const DEFAULT_TRUSTPILOT_ENABLED = false;
 
@@ -69,6 +96,119 @@ class GiveawaySettingsService
     public function setYoutubeEnabled(bool $enabled): void
     {
         $this->set(self::KEY_YOUTUBE_ENABLED, $enabled ? '1' : '0');
+    }
+
+    public function isYoutubeFeaturedEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_YOUTUBE_FEATURED_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_YOUTUBE_FEATURED_ENABLED;
+    }
+
+    public function setYoutubeFeaturedEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_YOUTUBE_FEATURED_ENABLED, $enabled ? '1' : '0');
+    }
+
+    public function isYoutubeVideoEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_YOUTUBE_VIDEO_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_YOUTUBE_VIDEO_ENABLED;
+    }
+
+    public function setYoutubeVideoEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_YOUTUBE_VIDEO_ENABLED, $enabled ? '1' : '0');
+    }
+
+    public function hasYoutubeDataApiKey(): bool
+    {
+        return $this->get(self::KEY_YOUTUBE_DATA_API_KEY) !== null;
+    }
+
+    public function getYoutubeDataApiKey(): ?string
+    {
+        $encrypted = $this->get(self::KEY_YOUTUBE_DATA_API_KEY);
+
+        if ($encrypted === null) {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($encrypted);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    // Same "blank means keep the existing secret" rule as the Google OAuth client secret below.
+    public function setYoutubeDataApiKey(?string $key): void
+    {
+        if ($key === null || $key === '') {
+            return;
+        }
+
+        $this->set(self::KEY_YOUTUBE_DATA_API_KEY, Crypt::encryptString($key));
+    }
+
+    public function getYoutubeVideoRequiredKeyword(): ?string
+    {
+        return $this->get(self::KEY_YOUTUBE_VIDEO_REQUIRED_KEYWORD);
+    }
+
+    public function setYoutubeVideoRequiredKeyword(?string $keyword): void
+    {
+        $this->set(self::KEY_YOUTUBE_VIDEO_REQUIRED_KEYWORD, trim((string) $keyword));
+    }
+
+    public function getYoutubeSubscribeRewardAmount(): ?float
+    {
+        $stored = $this->get(self::KEY_YOUTUBE_SUBSCRIBE_REWARD_AMOUNT);
+
+        return $stored !== null && $stored !== '' ? (float) $stored : null;
+    }
+
+    public function setYoutubeSubscribeRewardAmount(?float $amount): void
+    {
+        $this->set(self::KEY_YOUTUBE_SUBSCRIBE_REWARD_AMOUNT, $amount !== null ? (string) $amount : '');
+    }
+
+    public function getYoutubeFeaturedRewardAmount(): ?float
+    {
+        $stored = $this->get(self::KEY_YOUTUBE_FEATURED_REWARD_AMOUNT);
+
+        return $stored !== null && $stored !== '' ? (float) $stored : null;
+    }
+
+    public function setYoutubeFeaturedRewardAmount(?float $amount): void
+    {
+        $this->set(self::KEY_YOUTUBE_FEATURED_REWARD_AMOUNT, $amount !== null ? (string) $amount : '');
+    }
+
+    public function getYoutubeVideoRewardAmount(): ?float
+    {
+        $stored = $this->get(self::KEY_YOUTUBE_VIDEO_REWARD_AMOUNT);
+
+        return $stored !== null && $stored !== '' ? (float) $stored : null;
+    }
+
+    public function setYoutubeVideoRewardAmount(?float $amount): void
+    {
+        $this->set(self::KEY_YOUTUBE_VIDEO_REWARD_AMOUNT, $amount !== null ? (string) $amount : '');
+    }
+
+    // One lookup point for GiveawayClaims' "Mark as rewarded" modal to pre-fill its note with the
+    // configured amount for whichever platform the claim being rewarded is - keyed by
+    // GiveawayClaim::PLATFORM_* value so it stays in sync automatically as tasks are added.
+    public function getRewardAmountFor(string $platform): ?float
+    {
+        return match ($platform) {
+            GiveawayClaim::PLATFORM_YOUTUBE_SUBSCRIBE => $this->getYoutubeSubscribeRewardAmount(),
+            GiveawayClaim::PLATFORM_YOUTUBE_FEATURED => $this->getYoutubeFeaturedRewardAmount(),
+            GiveawayClaim::PLATFORM_YOUTUBE_VIDEO => $this->getYoutubeVideoRewardAmount(),
+            default => null,
+        };
     }
 
     public function isTrustpilotEnabled(): bool

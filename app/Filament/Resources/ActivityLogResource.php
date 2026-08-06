@@ -28,6 +28,9 @@ class ActivityLogResource extends Resource
 
     protected static ?string $navigationLabel = 'Activity Log';
 
+    // Same reasoning as UserResource - reached from the header's user menu, not the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $recordTitleAttribute = 'action';
 
     public static function canViewAny(): bool

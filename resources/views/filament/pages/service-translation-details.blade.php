@@ -10,76 +10,78 @@
         {{ $categoryTitle ?? 'Uncategorized' }} · id {{ $serviceKey }}
     </p>
 
-    <div class="mb-3 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-        <button type="button" @click="exportOpen = !exportOpen" class="flex w-full items-center justify-between gap-2 text-start text-sm font-medium text-gray-950 dark:text-white">
-            <span class="flex items-center gap-2">
-                <x-filament::icon icon="heroicon-o-arrow-down-tray" class="h-4 w-4 text-gray-400" />
-                Download description export
-            </span>
-            <x-filament::icon icon="heroicon-o-chevron-down" x-show="!exportOpen" class="h-4 w-4 text-gray-400" />
-            <x-filament::icon icon="heroicon-o-chevron-up" x-show="exportOpen" x-cloak class="h-4 w-4 text-gray-400" />
-        </button>
+    @if ($hasDescription)
+        <div class="mb-3 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+            <button type="button" @click="exportOpen = !exportOpen" class="flex w-full items-center justify-between gap-2 text-start text-sm font-medium text-gray-950 dark:text-white">
+                <span class="flex items-center gap-2">
+                    <x-filament::icon icon="heroicon-o-arrow-down-tray" class="h-4 w-4 text-gray-400" />
+                    Download description export
+                </span>
+                <x-filament::icon icon="heroicon-o-chevron-down" x-show="!exportOpen" class="h-4 w-4 text-gray-400" />
+                <x-filament::icon icon="heroicon-o-chevron-up" x-show="exportOpen" x-cloak class="h-4 w-4 text-gray-400" />
+            </button>
 
-        <div x-show="exportOpen" x-cloak class="mt-3 space-y-3">
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-                Pick which languages to include, then download a zip with one text file per language ({{ '{lang}.txt' }}) containing just that language's description.
-            </p>
+            <div x-show="exportOpen" x-cloak class="mt-3 space-y-3">
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    Pick which languages to include, then download a zip with one text file per language ({{ '{lang}.txt' }}) containing just that language's description.
+                </p>
 
-            <table class="w-full text-start text-xs">
-                <thead>
-                    <tr class="text-gray-500 dark:text-gray-400">
-                        <th class="p-1.5 text-start font-medium"></th>
-                        <th class="p-1.5 text-start font-medium">Language</th>
-                        <th class="p-1.5 text-start font-medium">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($languages as $language)
-                        <tr class="border-t border-gray-950/5 dark:border-white/10">
-                            <td class="p-1.5">
-                                <input
-                                    type="checkbox"
-                                    x-model="exportSelected['{{ $language['code'] }}']"
-                                    {{ $language['exists'] ? '' : 'disabled' }}
-                                    class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
-                                >
-                            </td>
-                            <td class="p-1.5 text-gray-700 dark:text-gray-200">
-                                <span class="font-medium">{{ strtoupper($language['code']) }}</span>
-                                <span class="text-gray-400 dark:text-gray-500">{{ $language['name'] }}</span>
-                                @if ($language['isDefault'])
-                                    <x-filament::badge color="gray" size="xs">Default</x-filament::badge>
-                                @endif
-                            </td>
-                            <td class="p-1.5">
-                                @if (! $language['exists'])
-                                    <x-filament::badge color="gray" size="xs">No content</x-filament::badge>
-                                @elseif ($language['isTranslated'] && ! $language['needsSiteUpdate'])
-                                    <x-filament::badge color="success" size="xs">Uploaded</x-filament::badge>
-                                @elseif ($language['isTranslated'])
-                                    <x-filament::badge color="warning" size="xs">Needs upload</x-filament::badge>
-                                @elseif ($language['error'])
-                                    <x-filament::badge color="danger" size="xs">Error</x-filament::badge>
-                                @else
-                                    <x-filament::badge color="warning" size="xs">Not translated yet</x-filament::badge>
-                                @endif
-                            </td>
+                <table class="w-full text-start text-xs">
+                    <thead>
+                        <tr class="text-gray-500 dark:text-gray-400">
+                            <th class="p-1.5 text-start font-medium"></th>
+                            <th class="p-1.5 text-start font-medium">Language</th>
+                            <th class="p-1.5 text-start font-medium">Status</th>
                         </tr>
-                    @endforeach
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @foreach ($languages as $language)
+                            <tr class="border-t border-gray-950/5 dark:border-white/10">
+                                <td class="p-1.5">
+                                    <input
+                                        type="checkbox"
+                                        x-model="exportSelected['{{ $language['code'] }}']"
+                                        {{ $language['exists'] ? '' : 'disabled' }}
+                                        class="rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:border-white/20 dark:bg-white/5"
+                                    >
+                                </td>
+                                <td class="p-1.5 text-gray-700 dark:text-gray-200">
+                                    <span class="font-medium">{{ strtoupper($language['code']) }}</span>
+                                    <span class="text-gray-400 dark:text-gray-500">{{ $language['name'] }}</span>
+                                    @if ($language['isDefault'])
+                                        <x-filament::badge color="gray" size="xs">Default</x-filament::badge>
+                                    @endif
+                                </td>
+                                <td class="p-1.5">
+                                    @if (! $language['exists'])
+                                        <x-filament::badge color="gray" size="xs">No content</x-filament::badge>
+                                    @elseif ($language['isTranslated'] && ! $language['needsSiteUpdate'])
+                                        <x-filament::badge color="success" size="xs">Uploaded</x-filament::badge>
+                                    @elseif ($language['isTranslated'])
+                                        <x-filament::badge color="warning" size="xs">Needs upload</x-filament::badge>
+                                    @elseif ($language['error'])
+                                        <x-filament::badge color="danger" size="xs">Error</x-filament::badge>
+                                    @else
+                                        <x-filament::badge color="warning" size="xs">Not translated yet</x-filament::badge>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
 
-            <div class="flex justify-end">
-                <x-filament::button
-                    size="sm"
-                    icon="heroicon-o-arrow-down-tray"
-                    @click="$wire.downloadServiceExport({{ Illuminate\Support\Js::from($serviceKey) }}, Object.keys(exportSelected).filter(code => exportSelected[code]))"
-                >
-                    Download zip
-                </x-filament::button>
+                <div class="flex justify-end">
+                    <x-filament::button
+                        size="sm"
+                        icon="heroicon-o-arrow-down-tray"
+                        @click="$wire.downloadServiceExport({{ Illuminate\Support\Js::from($serviceKey) }}, Object.keys(exportSelected).filter(code => exportSelected[code]))"
+                    >
+                        Download zip
+                    </x-filament::button>
+                </div>
             </div>
         </div>
-    </div>
+    @endif
 
     {{-- Separate panel entirely from the description export above - never combined into the
          same zip or file, per how title translation is tracked/queued/downloaded throughout
@@ -240,6 +242,10 @@
                 </div>
 
                 <div class="mt-3 border-t border-gray-100 pt-3 dark:border-white/5">
+                    @if (! $hasDescription)
+                        <span class="text-xs font-medium text-gray-400 dark:text-gray-500">Description</span>
+                        <p class="mt-2 text-xs italic text-gray-400 dark:text-gray-500">No description on the site for this service - nothing to translate.</p>
+                    @else
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div class="flex items-center gap-2">
                             <span class="text-xs font-medium text-gray-400 dark:text-gray-500">Description</span>
@@ -308,6 +314,7 @@
                         </div>
                     @else
                         <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">No description yet.</p>
+                    @endif
                     @endif
                 </div>
 

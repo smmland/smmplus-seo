@@ -261,6 +261,13 @@ class ServiceTranslationQueue extends Page implements HasActions
                 'languages' => $languages,
                 'pendingLangs' => $pendingLangs,
                 'pendingTitleLangs' => $pendingTitleLangs,
+                // A service with nothing in its description on the site (a category header row,
+                // or one the source page just never filled in) has nothing to translate there -
+                // every non-default language would otherwise sit at "missing" forever with no way
+                // to ever clear it. The view swaps the whole badge row for one line, and every
+                // description-queuing entry point below (queueSingle/missingLanguagesFor) refuses
+                // to queue for these regardless of how the request got there.
+                'hasDescription' => filled($defaultRow->description),
             ];
         });
 
@@ -488,6 +495,16 @@ class ServiceTranslationQueue extends Page implements HasActions
             return ['ok' => false, 'message' => 'Panel update in progress.'];
         }
 
+        if ($field === ServiceTranslationJob::FIELD_DESCRIPTION && ! $this->serviceHasDescription($serviceKey)) {
+            Notification::make()
+                ->title('Nothing to translate')
+                ->body('This service has no description on the site - only its title can be translated.')
+                ->warning()
+                ->send();
+
+            return ['ok' => false, 'message' => 'No description to translate.'];
+        }
+
         if ($this->hasPendingJob($serviceKey, $targetLangCode, $field)) {
             Notification::make()
                 ->title('Already translating')
@@ -638,6 +655,13 @@ class ServiceTranslationQueue extends Page implements HasActions
     private function missingLanguagesFor(string $serviceKey, string $field): \Illuminate\Support\Collection
     {
         $existingByLang = ServiceTranslation::query()->where('service_key', $serviceKey)->get()->keyBy('lang');
+
+        // A service with no default-language description has nothing for translateAllMissing*()
+        // or the bulk "queue missing descriptions" action to queue - reported the same as "every
+        // language already done" rather than a special case each caller has to know about.
+        if ($field === ServiceTranslationJob::FIELD_DESCRIPTION && blank($existingByLang->get($this->defaultLangCode())?->description)) {
+            return collect();
+        }
 
         $pendingLangs = ServiceTranslationJob::query()
             ->where('service_key', $serviceKey)
@@ -899,12 +923,27 @@ class ServiceTranslationQueue extends Page implements HasActions
             'defaultLangCode' => $defaultLangCode,
             'serviceKey' => $serviceKey,
             'categoryTitle' => $rows->get($defaultLangCode)?->category_title,
+            'hasDescription' => filled($rows->get($defaultLangCode)?->description),
         ];
     }
 
     private function defaultLangCode(): string
     {
         return Language::query()->where('is_default', true)->value('code') ?? 'en';
+    }
+
+    // The single source of truth for "can this service's description be translated at all" -
+    // queueSingle() (one language) and missingLanguagesFor() (all-missing / bulk) both defer to
+    // this rather than each re-deriving it, so a service can never end up translatable through
+    // one entry point but blocked through another.
+    private function serviceHasDescription(string $serviceKey): bool
+    {
+        return filled(
+            ServiceTranslation::query()
+                ->where('service_key', $serviceKey)
+                ->where('lang', $this->defaultLangCode())
+                ->value('description')
+        );
     }
 
     private function queueTranslation(string $serviceKey, string $targetLangCode, string $field): void

@@ -29,6 +29,11 @@ class UserResource extends Resource
 
     protected static ?string $navigationLabel = 'Users';
 
+    // Reached from the "Administration" shortcut in the header's user menu instead (see
+    // AdminPanelProvider::userMenuItems()) - not a sidebar item, but still a completely normal,
+    // fully-routed resource otherwise.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function canViewAny(): bool

@@ -302,16 +302,20 @@
                                 </td>
                                 <td class="p-2">
                                     <p class="mb-1 text-xs font-medium text-gray-400 dark:text-gray-500">Description</p>
-                                    <div class="flex flex-wrap gap-1">
-                                        @foreach ($service['languages'] as $language)
-                                            @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'state'])
-                                        @endforeach
-                                    </div>
-
-                                    @if (! empty($service['pendingLangs']))
-                                        <div class="st-progress-track" style="margin-top: 6px;">
-                                            <div class="st-progress-bar"></div>
+                                    @if ($service['hasDescription'])
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach ($service['languages'] as $language)
+                                                @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'state'])
+                                            @endforeach
                                         </div>
+
+                                        @if (! empty($service['pendingLangs']))
+                                            <div class="st-progress-track" style="margin-top: 6px;">
+                                                <div class="st-progress-bar"></div>
+                                            </div>
+                                        @endif
+                                    @else
+                                        <p class="text-xs italic text-gray-400 dark:text-gray-500">No description on the site - nothing to translate.</p>
                                     @endif
 
                                     <p class="mb-1 mt-3 text-xs font-medium text-gray-400 dark:text-gray-500">Title</p>
@@ -337,16 +341,18 @@
                                             Details
                                         </x-filament::button>
 
-                                        <x-filament::icon-button
-                                            icon="heroicon-o-language"
-                                            color="gray"
-                                            size="sm"
-                                            label="Translate missing descriptions"
-                                            tooltip="Queue every missing description"
-                                            wire:click="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
-                                        />
+                                        @if ($service['hasDescription'])
+                                            <x-filament::icon-button
+                                                icon="heroicon-o-language"
+                                                color="gray"
+                                                size="sm"
+                                                label="Translate missing descriptions"
+                                                tooltip="Queue every missing description"
+                                                wire:click="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="translateAllMissingForService({{ Illuminate\Support\Js::from($service['row']->service_key) }})"
+                                            />
+                                        @endif
 
                                         <x-filament::icon-button
                                             icon="heroicon-o-tag"

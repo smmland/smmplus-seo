@@ -32,5 +32,58 @@
                 style="width: {{ $percent }}%; height: 8px"
             ></div>
         </div>
+
+        {{-- Inline grid-template-columns, not a grid-cols-4 class - the plain unprefixed
+             grid-cols-N classes (2, 3, 4...) are never actually compiled into this app's Filament
+             CSS bundle, only grid-cols-1 and responsive-prefixed variants are (confirmed directly
+             against public/css/filament/filament/app.css) - see ServiceTranslationWidget's own
+             blade for the fuller story of this same mistake being made and then actually fixed. --}}
+        <div class="mt-4 gap-3" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+            <div class="rounded-lg border border-gray-200 p-3 dark:border-white/10">
+                <div class="flex items-center gap-2">
+                    <x-filament::icon
+                        icon="heroicon-o-plus-circle"
+                        class="h-5 w-5 {{ $addedLastRun > 0 ? 'text-success-600' : 'text-gray-400' }}"
+                    />
+                    <span class="text-2xl font-bold text-gray-950 dark:text-white">{{ number_format($addedLastRun) }}</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">New links (last sync)</p>
+            </div>
+
+            <div class="rounded-lg border border-gray-200 p-3 dark:border-white/10">
+                <div class="flex items-center gap-2">
+                    <x-filament::icon
+                        icon="heroicon-o-globe-alt"
+                        class="h-5 w-5 text-primary-500"
+                    />
+                    <span class="text-2xl font-bold text-gray-950 dark:text-white">{{ number_format($totalInSitemap) }}</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Total links in sitemap</p>
+            </div>
+
+            @if ($hasRun && ($updatedLastRun > 0 || $removedLastRun > 0))
+                <div class="rounded-lg border border-gray-200 p-3 dark:border-white/10">
+                    <div class="flex items-center gap-2">
+                        <x-filament::icon
+                            icon="heroicon-o-arrow-path"
+                            class="h-5 w-5 {{ $updatedLastRun > 0 ? 'text-primary-500' : 'text-gray-400' }}"
+                        />
+                        <span class="text-2xl font-bold text-gray-950 dark:text-white">{{ number_format($updatedLastRun) }}</span>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Updated (last sync)</p>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-3 dark:border-white/10">
+                    <div class="flex items-center gap-2">
+                        <x-filament::icon
+                            icon="heroicon-o-minus-circle"
+                            class="h-5 w-5 {{ $removedLastRun > 0 ? 'text-danger-600' : 'text-gray-400' }}"
+                        />
+                        <span class="text-2xl font-bold text-gray-950 dark:text-white">{{ number_format($removedLastRun) }}</span>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Removed (last sync)</p>
+                </div>
+            @endif
+        </div>
     </x-filament::section>
 </x-filament-widgets::widget>

@@ -23,9 +23,10 @@
                 This feature needs a database update first - go to General Settings and click "Update database".
             </p>
         @else
-            {{-- See ServiceTranslationWidget's own blade for why this is a plain, unprefixed
-                 grid-cols-2 rather than a responsive sm:/lg: variant. --}}
-            <div class="mt-4 grid grid-cols-2 gap-3">
+            {{-- See ServiceTranslationWidget's own blade for why this is an inline
+                 grid-template-columns rather than a grid-cols-N class (that class was never
+                 actually compiled into this app's CSS bundle - re-verified this update). --}}
+            <div class="mt-4 gap-3" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
                 <div class="rounded-lg border border-gray-200 p-3 dark:border-white/10">
                     <div class="flex items-center gap-2">
                         <x-filament::icon

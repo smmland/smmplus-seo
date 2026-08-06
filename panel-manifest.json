@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.17.0",
-    "notes": "New Giveaway feature (phase 1: Telegram + YouTube): a new public page (giveaway.twig, on the smmplus-website site) lets logged-in users verify they joined the Telegram channel (via the Telegram Login Widget + a bot membership check) or subscribed on YouTube (via Google OAuth) - both checked automatically. Reward delivery itself stays manual: verified claims land in a new Giveaway > Claims admin page here, and the admin credits the wallet by hand in the real smm.plus panel then marks it rewarded, since this app has no API access to that panel's wallet system. New Giveaway > Settings page for the bot username, Google OAuth credentials, and YouTube channel id."
+    "version": "1.17.1",
+    "notes": "New Sitemap card on the Dashboard: new links found in the last sync, total links currently in the sitemap, plus updated/removed counts from the last sync. While building it, found and fixed a real bug from the previous update: the 'fix' that switched the Service translation pipeline and Telegram channel queue cards to a plain grid-cols-2 class didn't actually work - that class was never compiled into this app's CSS bundle either (only grid-cols-1 and responsive-prefixed variants are), so their stat tiles were still silently stacking in a single column this whole time. All three cards now use inline grid styles instead, which don't depend on any particular class being compiled, and are confirmed working."
 }

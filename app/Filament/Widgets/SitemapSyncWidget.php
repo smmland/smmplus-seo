@@ -3,14 +3,16 @@
 namespace App\Filament\Widgets;
 
 use App\Models\SyncRun;
+use App\Models\Url;
 use App\Services\SettingsService;
 use Filament\Widgets\Widget;
 
 /**
- * How far along we are toward the next sitemap sync, plus what the last one found - mirrors the
- * same "elapsed / interval" progress bar BlogTranslationQueue's cronProgress() already shows for
- * the translation-detection cron, just for SyncSitemapCommand's own admin-configurable interval
- * (SettingsService::getSyncIntervalHours()) instead.
+ * How far along we are toward the next sitemap sync, what the last one found, and the current
+ * state of the sitemap overall - mirrors the same "elapsed / interval" progress bar
+ * BlogTranslationQueue's cronProgress() already shows for the translation-detection cron, just
+ * for SyncSitemapCommand's own admin-configurable interval (SettingsService::getSyncIntervalHours())
+ * instead.
  */
 class SitemapSyncWidget extends Widget
 {
@@ -22,6 +24,11 @@ class SitemapSyncWidget extends Widget
 
     protected function getViewData(): array
     {
+        // Same is_active/is_hidden filter SitemapGeneratorService itself uses to decide what
+        // actually goes into sitemap.xml - "total links" here means what's really published, not
+        // every row this app has ever seen (which also includes hidden utility pages etc).
+        $totalInSitemap = Url::query()->where('is_active', true)->where('is_hidden', false)->count();
+
         $lastRun = SyncRun::query()
             ->where('status', SyncRun::SUCCESS)
             ->orderByDesc('started_at')
@@ -34,6 +41,10 @@ class SitemapSyncWidget extends Widget
                 'remainingMinutes' => null,
                 'lastRunAt' => null,
                 'linksAnalyzed' => 0,
+                'addedLastRun' => 0,
+                'updatedLastRun' => 0,
+                'removedLastRun' => 0,
+                'totalInSitemap' => $totalInSitemap,
             ];
         }
 
@@ -50,6 +61,10 @@ class SitemapSyncWidget extends Widget
             'remainingMinutes' => (int) ceil(max(0, $intervalMinutes - $elapsedMinutes)),
             'lastRunAt' => $lastRun->started_at,
             'linksAnalyzed' => $lastRun->total_fetched,
+            'addedLastRun' => $lastRun->added,
+            'updatedLastRun' => $lastRun->updated,
+            'removedLastRun' => $lastRun->removed,
+            'totalInSitemap' => $totalInSitemap,
         ];
     }
 }

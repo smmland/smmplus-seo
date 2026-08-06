@@ -16,6 +16,13 @@ class SyncService
     // invocation (cron-triggered), so "is a sync running" state can't live in memory.
     private const LOCK_KEY = 'sitemap-sync-lock';
 
+    // A URL absent from a single fetch is deactivated only after this many *consecutive* syncs
+    // still don't see it - not the first miss. A single transient hiccup on the source sitemap
+    // (partial fetch, timeout truncation, a temporary format change) would otherwise silently
+    // deactivate every real, live page missing from that one fetch, with no distinction from an
+    // actual removal - exactly the "pages vanish from the sitemap" symptom this protects against.
+    private const PRUNE_AFTER_CONSECUTIVE_MISSES = 3;
+
     public function __construct(
         private readonly SitemapFetcherService $fetcher,
         private readonly UrlClassifierService $classifier,
@@ -61,6 +68,12 @@ class SyncService
             $sourceUrl = $this->settings->getSourceSitemapUrl();
             $fetched = $this->fetcher->fetchAll($sourceUrl);
 
+            // Guarded the same way as is_ai_guessed below: on a host with no terminal access,
+            // this column can lag behind this code until "Update database" is clicked - degrades
+            // to the old (bug-affected) single-miss-prunes-instantly behavior for that window
+            // rather than a hard SQL error on an unknown column.
+            $hasMissedSyncsColumn = Schema::hasColumn('urls', 'missed_syncs');
+
             $seenSourceUrls = [];
             $added = 0;
             $updated = 0;
@@ -73,7 +86,7 @@ class SyncService
                 $existing = Url::query()->where('source_url', $entry['loc'])->first();
 
                 if (! $existing) {
-                    Url::query()->create([
+                    $attributes = [
                         'source_url' => $entry['loc'],
                         'path' => $classified['path'],
                         'lang' => $classified['lang'],
@@ -85,11 +98,15 @@ class SyncService
                         'is_active' => true,
                         'first_seen_at' => now(),
                         'last_seen_at' => now(),
-                    ]);
+                    ];
+                    if ($hasMissedSyncsColumn) {
+                        $attributes['missed_syncs'] = 0;
+                    }
+                    Url::query()->create($attributes);
                     $added++;
                 } else {
                     // Manually-recategorized URLs keep the admin's choice; only re-classify untouched ones.
-                    $existing->update([
+                    $attributes = [
                         'path' => $classified['path'],
                         'lang' => $classified['lang'],
                         'pattern_type' => $existing->is_manual ? $existing->pattern_type : $classified['pattern_type'],
@@ -98,7 +115,11 @@ class SyncService
                         'source_lastmod' => $lastmod,
                         'is_active' => true,
                         'last_seen_at' => now(),
-                    ]);
+                    ];
+                    if ($hasMissedSyncsColumn) {
+                        $attributes['missed_syncs'] = 0;
+                    }
+                    $existing->update($attributes);
                     $updated++;
                 }
             }
@@ -146,7 +167,20 @@ class SyncService
                     ->orWhere('lang', $defaultLang);
             });
 
-            $removed = $pruneQuery->update(['is_active' => false]);
+            if ($hasMissedSyncsColumn) {
+                // Don't deactivate on the first miss - bump the counter, and only actually
+                // deactivate rows that have now missed PRUNE_AFTER_CONSECUTIVE_MISSES fetches in a
+                // row. A real removal stays gone for many syncs in a row and still gets pruned
+                // (just a few sync intervals later than before); a one-off fetch glitch self-heals
+                // on the very next sync instead of taking real, live pages down with it.
+                (clone $pruneQuery)->increment('missed_syncs');
+
+                $removed = (clone $pruneQuery)
+                    ->where('missed_syncs', '>=', self::PRUNE_AFTER_CONSECUTIVE_MISSES)
+                    ->update(['is_active' => false]);
+            } else {
+                $removed = $pruneQuery->update(['is_active' => false]);
+            }
 
             $syncRun->update([
                 'status' => SyncRun::SUCCESS,

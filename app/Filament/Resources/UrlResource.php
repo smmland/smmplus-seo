@@ -142,6 +142,14 @@ class UrlResource extends Resource
                     ->boolean()
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('missed_syncs')
+                    ->label('Missed syncs')
+                    ->tooltip('How many syncs in a row this URL has been absent from the source sitemap - deactivated once this reaches 3. Above 0 means it\'s at risk even while still active.')
+                    ->badge()
+                    ->color(fn (?int $state) => $state > 0 ? 'warning' : 'gray')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\IconColumn::make('is_manual')
                     ->label('Manual')
                     ->boolean()

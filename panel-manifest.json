@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.17.3",
-    "notes": "YouTube giveaway task expanded from one (Subscribe) to three ordered, independently-rewarded tasks in a single YouTube column: 1) Subscribe (unchanged, Google OAuth), 2) Feature our channel as one of your own channel's featured channels, 3) make a public video that mentions us. Both new tasks are verified automatically with a public Google API key (no OAuth/consent needed - a channel's featured list and a video's metadata are public data), unlike Trustpilot which still needs manual admin review. Giveaway > Settings now has a reward-amount field per YouTube task (shown as a hint when marking a claim rewarded) plus the API key and required-video-keyword fields."
+    "version": "1.17.4",
+    "notes": "Sitemap sync hardening: a URL missing from a single sitemap fetch (a transient upstream hiccup - timeout, partial fetch, temporary format change) used to be deactivated immediately, pulling it out of the published sitemap on one bad fetch alone. Now it takes 3 consecutive syncs missing the same URL before it's deactivated; if it reappears on any sync before that, the miss counter resets to zero. A real removal still gets pruned, just a bit later; a one-off glitch self-heals on the next sync instead of taking live pages down with it. New 'Missed syncs' column (off by default) on the URLs page shows any URL currently at risk. Requires 'Update database' after installing this update."
 }

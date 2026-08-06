@@ -11,7 +11,7 @@ class Url extends Model
     protected $fillable = [
         'source_url', 'path', 'lang', 'pattern_type', 'slug', 'group_key',
         'source_lastmod', 'priority', 'changefreq', 'is_hidden', 'is_manual', 'is_ai_guessed',
-        'is_active', 'first_seen_at', 'last_seen_at',
+        'is_active', 'missed_syncs', 'first_seen_at', 'last_seen_at',
         'translation_title', 'is_translated', 'translation_checked_at', 'translation_check_note', 'auto_hidden_for_translation',
         'site_update_override',
         'content_extracted_at', 'content_extraction_path',

@@ -145,7 +145,7 @@
         </x-filament::section>
 
         <x-filament::section class="mt-4">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="mb-3 flex flex-col gap-3">
                 <input
                     type="text"
                     wire:model.live.debounce.400ms="search"
@@ -153,23 +153,38 @@
                     class="fi-input block w-full max-w-sm rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
                 >
 
-                <div class="flex flex-wrap items-center gap-3">
-                    <label class="flex cursor-pointer items-center gap-2">
+                <div class="flex flex-wrap items-end gap-4">
+                    <div class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Description status</span>
+                        <select
+                            wire:model.live="statusFilter"
+                            class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                        >
+                            @foreach ($this::STATUS_FILTERS as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Title status</span>
+                        <select
+                            wire:model.live="titleStatusFilter"
+                            class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
+                        >
+                            @foreach ($this::STATUS_FILTERS as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <label class="flex cursor-pointer items-center gap-2" style="padding-bottom: 6px;">
                         <span class="st-toggle-track">
                             <input type="checkbox" wire:model.live="hasDescriptionOnly">
                             <span class="st-toggle-slider"></span>
                         </span>
                         <span class="text-sm text-gray-600 dark:text-gray-300">Has description only</span>
                     </label>
-
-                    <select
-                        wire:model.live="statusFilter"
-                        class="fi-input rounded-lg border-0 py-1.5 text-sm text-gray-950 ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/10"
-                    >
-                        @foreach ($this::STATUS_FILTERS as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
                 </div>
             </div>
 
@@ -232,8 +247,8 @@
             <p class="text-sm text-gray-500 dark:text-gray-400">
                 @if ($search !== '')
                     No services match that search.
-                @elseif ($statusFilter !== 'all')
-                    No services match "{{ $this::STATUS_FILTERS[$statusFilter] }}" - try switching the filter to "All services".
+                @elseif ($statusFilter !== 'all' || $titleStatusFilter !== 'all')
+                    No services match the selected description/title status filters - try switching one back to "All services".
                 @else
                     No services found yet - click "Sync now" above to fetch the catalog for the first time.
                 @endif

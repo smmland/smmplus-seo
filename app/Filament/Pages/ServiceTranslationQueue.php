@@ -56,6 +56,11 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     public string $statusFilter = 'missing';
 
+    // Independent from statusFilter - a service must satisfy BOTH to show (AND, not OR), so the
+    // two dropdowns compose the same way "search" and "status" already do. Defaults to 'all' so
+    // turning on the title filter is opt-in rather than the page starting out doubly-narrowed.
+    public string $titleStatusFilter = 'all';
+
     // Some services genuinely have no description on the site itself (a category header row
     // that slipped through, or a service the source page just never filled in) - there's nothing
     // to translate for those, so this lets them be filtered out of the list entirely.
@@ -71,9 +76,8 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     private const QUEUE_PER_PAGE = 20;
 
-    // Filters description status only - title has its own badges/actions throughout this page,
-    // but not a second copy of this dropdown (the list is already filtered down to what needs
-    // attention on the description side, which is what most workflows here start from).
+    // Same option set drives both the description and title status dropdowns - each just gets
+    // matched against a different per-language field ('state' vs 'titleState'), see queue().
     public const STATUS_FILTERS = [
         'missing' => 'Has a missing language',
         'needsUpdate' => 'Needs to be uploaded to the site',
@@ -88,6 +92,12 @@ class ServiceTranslationQueue extends Page implements HasActions
     }
 
     public function updatedStatusFilter(): void
+    {
+        $this->queuePage = 1;
+        $this->selectedServices = [];
+    }
+
+    public function updatedTitleStatusFilter(): void
     {
         $this->queuePage = 1;
         $this->selectedServices = [];
@@ -257,12 +267,11 @@ class ServiceTranslationQueue extends Page implements HasActions
         $filtered = $allServices->filter(function (array $service) {
             $nonDefault = $service['languages']->where('state', '!=', 'default');
 
-            return match ($this->statusFilter) {
-                'missing' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['missing', 'pending', 'error'], true)),
-                'needsUpdate' => $nonDefault->contains(fn (array $l) => in_array($l['state'], ['needsUpdate', 'pending'], true)),
-                'confirmed' => $nonDefault->isNotEmpty() && $nonDefault->every(fn (array $l) => $l['state'] === 'confirmed'),
-                default => true, // 'all'
-            };
+            if (! $this->matchesStatusFilter($nonDefault, 'state', $this->statusFilter)) {
+                return false;
+            }
+
+            return $this->matchesStatusFilter($nonDefault, 'titleState', $this->titleStatusFilter);
         })->values();
 
         $total = $filtered->count();
@@ -272,6 +281,23 @@ class ServiceTranslationQueue extends Page implements HasActions
         $services = $filtered->slice(($page - 1) * self::QUEUE_PER_PAGE, self::QUEUE_PER_PAGE)->values();
 
         return ['services' => $services, 'page' => $page, 'lastPage' => $lastPage, 'total' => $total];
+    }
+
+    /**
+     * The one status-matching rule shared by both the description and title dropdowns - $field is
+     * 'state' or 'titleState', $filter one of STATUS_FILTERS' keys. Pulled out so statusFilter and
+     * titleStatusFilter can never drift into subtly different matching logic.
+     *
+     * @param  \Illuminate\Support\Collection  $nonDefaultLanguages
+     */
+    private function matchesStatusFilter($nonDefaultLanguages, string $field, string $filter): bool
+    {
+        return match ($filter) {
+            'missing' => $nonDefaultLanguages->contains(fn (array $l) => in_array($l[$field], ['missing', 'pending', 'error'], true)),
+            'needsUpdate' => $nonDefaultLanguages->contains(fn (array $l) => in_array($l[$field], ['needsUpdate', 'pending'], true)),
+            'confirmed' => $nonDefaultLanguages->isNotEmpty() && $nonDefaultLanguages->every(fn (array $l) => $l[$field] === 'confirmed'),
+            default => true, // 'all'
+        };
     }
 
     /**

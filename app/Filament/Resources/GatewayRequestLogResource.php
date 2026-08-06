@@ -6,6 +6,7 @@ use App\Filament\Resources\GatewayRequestLogResource\Pages;
 use App\Models\GatewayBlockedIp;
 use App\Models\GatewayRequestLog;
 use App\Models\GatewayService;
+use App\Support\PanelSection;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -23,6 +24,11 @@ class GatewayRequestLogResource extends Resource
     protected static ?string $navigationLabel = 'Request Log';
 
     protected static ?string $modelLabel = 'request';
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+    }
 
     // Append-only audit log - nothing to create or edit by hand.
     public static function canCreate(): bool

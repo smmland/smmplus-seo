@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\GatewayBlockedIpResource\Pages;
 use App\Models\GatewayBlockedIp;
+use App\Support\PanelSection;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -21,6 +22,11 @@ class GatewayBlockedIpResource extends Resource
     protected static ?string $navigationLabel = 'Blocked IPs';
 
     protected static ?string $modelLabel = 'blocked IP';
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+    }
 
     public static function form(Form $form): Form
     {

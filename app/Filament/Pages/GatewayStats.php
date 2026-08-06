@@ -8,6 +8,7 @@ use App\Filament\Pages\GatewayStats\ServiceVolumeChart;
 use App\Models\GatewayBlockedIp;
 use App\Models\GatewayRequestLog;
 use App\Support\GatewayStatsPeriod;
+use App\Support\PanelSection;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Carbon;
@@ -24,6 +25,11 @@ class GatewayStats extends Page
     protected static ?string $navigationLabel = 'Statistics';
 
     protected static string $view = 'filament.pages.gateway-stats';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+    }
 
     #[Url]
     public string $period = 'today';

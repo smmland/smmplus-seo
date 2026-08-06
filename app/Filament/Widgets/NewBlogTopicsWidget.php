@@ -6,6 +6,7 @@ use App\Filament\Pages\BlogTranslationQueue;
 use App\Models\BlogTranslationJob;
 use App\Models\Language;
 use App\Models\Url;
+use App\Support\PanelSection;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Schema;
 
@@ -24,6 +25,11 @@ class NewBlogTopicsWidget extends Widget
     protected static ?int $sort = 2;
 
     protected int | string | array $columnSpan = 'full';
+
+    public static function canView(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+    }
 
     protected function getViewData(): array
     {

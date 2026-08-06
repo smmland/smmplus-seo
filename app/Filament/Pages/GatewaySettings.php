@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Services\GatewaySettingsService;
+use App\Support\PanelSection;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -27,6 +28,11 @@ class GatewaySettings extends Page implements HasForms
     protected static ?int $navigationSort = 100;
 
     protected static string $view = 'filament.pages.gateway-settings';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+    }
 
     public ?array $data = [];
 

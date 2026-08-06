@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.17.6",
-    "notes": "Added hreflang=\"x-default\" to every sitemap URL entry that already has language alternates (per Google's recommendation), pointing at the default-language (English) version. No admin action needed."
+    "version": "1.18.0",
+    "notes": "New: per-user access control. Administration > Users lets you create panel accounts and grant each one any combination of six areas - Translation, Free Service Gateway, Giveaway, Telegram Channel, SEO, General Settings - independently toggleable per user, editable any time from that same page. Existing accounts were automatically kept as full ('Super admin') access, so nothing changes for you unless you create a new user or edit an existing one's access. Installing panel updates and managing users themselves stay Super-admin-only regardless of section access, since either one can grant full access on its own. Requires 'Update database' after installing this update."
 }

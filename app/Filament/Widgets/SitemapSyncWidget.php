@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\SyncRun;
 use App\Models\Url;
 use App\Services\SettingsService;
+use App\Support\PanelSection;
 use Filament\Widgets\Widget;
 
 /**
@@ -21,6 +22,11 @@ class SitemapSyncWidget extends Widget
     protected static ?int $sort = 1;
 
     protected int | string | array $columnSpan = 'full';
+
+    public static function canView(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+    }
 
     protected function getViewData(): array
     {

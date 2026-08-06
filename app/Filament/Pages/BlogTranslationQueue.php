@@ -10,6 +10,7 @@ use App\Services\BlogTranslationDetectionService;
 use App\Services\HiddenTranslationService;
 use App\Services\SettingsService;
 use App\Services\TranslationSettingsService;
+use App\Support\PanelSection;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -33,6 +34,11 @@ class BlogTranslationQueue extends Page implements HasActions
     protected static ?string $navigationLabel = 'Blog Translation';
 
     protected static string $view = 'filament.pages.blog-translation-queue';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+    }
 
     public string $search = '';
 

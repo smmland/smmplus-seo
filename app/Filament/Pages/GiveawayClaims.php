@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\GiveawayClaim;
 use App\Services\GiveawaySettingsService;
+use App\Support\PanelSection;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -32,6 +33,11 @@ class GiveawayClaims extends Page implements HasActions
     protected static ?string $navigationLabel = 'Claims';
 
     protected static string $view = 'filament.pages.giveaway-claims';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::GIVEAWAY) ?? false;
+    }
 
     public string $platformFilter = 'all';
 

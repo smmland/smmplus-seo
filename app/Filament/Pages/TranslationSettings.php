@@ -6,6 +6,7 @@ use App\Services\AiSettingsService;
 use App\Services\BlogTranslationDetectionService;
 use App\Services\HiddenTranslationService;
 use App\Services\TranslationSettingsService;
+use App\Support\PanelSection;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -33,6 +34,11 @@ class TranslationSettings extends Page implements HasForms
     protected static ?int $navigationSort = 100;
 
     protected static string $view = 'filament.pages.translation-settings';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+    }
 
     public ?array $data = [];
 

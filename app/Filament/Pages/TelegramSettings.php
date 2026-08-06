@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Services\AiSettingsService;
 use App\Services\TelegramBotService;
 use App\Services\TelegramSettingsService;
+use App\Support\PanelSection;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -29,6 +30,11 @@ class TelegramSettings extends Page implements HasForms
     protected static ?int $navigationSort = 100;
 
     protected static string $view = 'filament.pages.telegram-settings';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TELEGRAM) ?? false;
+    }
 
     public ?array $data = [];
 

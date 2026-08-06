@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\LanguageResource\Pages;
 use App\Models\Language;
+use App\Support\PanelSection;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -19,6 +20,11 @@ class LanguageResource extends Resource
     protected static ?string $navigationGroup = 'Translation';
 
     protected static ?string $navigationLabel = 'Languages';
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+    }
 
     public static function form(Form $form): Form
     {

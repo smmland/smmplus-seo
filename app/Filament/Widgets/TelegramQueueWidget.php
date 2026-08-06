@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Filament\Pages\TelegramQueue;
 use App\Models\TelegramPost;
 use App\Services\TelegramSettingsService;
+use App\Support\PanelSection;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Schema;
 
@@ -22,6 +23,11 @@ class TelegramQueueWidget extends Widget
     protected static ?int $sort = 5;
 
     protected int | string | array $columnSpan = 1;
+
+    public static function canView(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TELEGRAM) ?? false;
+    }
 
     protected function getViewData(): array
     {

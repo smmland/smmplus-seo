@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Services\AiSettingsService;
 use App\Services\SettingsService;
+use App\Support\PanelSection;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -27,6 +28,11 @@ class GeneralSettings extends Page implements HasForms
     protected static ?string $title = 'General Settings';
 
     protected static string $view = 'filament.pages.general-settings';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::GENERAL) ?? false;
+    }
 
     public ?array $data = [];
 

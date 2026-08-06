@@ -6,6 +6,7 @@ use App\Filament\Pages\ServiceTranslationQueue;
 use App\Models\Language;
 use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
+use App\Support\PanelSection;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Schema;
 
@@ -25,6 +26,11 @@ class ServiceTranslationWidget extends Widget
     protected static ?int $sort = 4;
 
     protected int | string | array $columnSpan = 1;
+
+    public static function canView(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+    }
 
     protected function getViewData(): array
     {

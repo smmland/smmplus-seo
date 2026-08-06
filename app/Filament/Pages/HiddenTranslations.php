@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Url;
 use App\Services\HiddenTranslationService;
+use App\Support\PanelSection;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
@@ -44,6 +45,11 @@ class HiddenTranslations extends Page
     public static function shouldRegisterNavigation(): bool
     {
         return false;
+    }
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
     }
 
     public string $search = '';

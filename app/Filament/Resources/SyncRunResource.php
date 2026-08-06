@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\SyncRunResource\Pages;
 use App\Models\SyncRun;
+use App\Support\PanelSection;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -17,6 +18,11 @@ class SyncRunResource extends Resource
     protected static ?string $navigationGroup = 'SEO';
 
     protected static ?string $navigationLabel = 'Sync History';
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+    }
 
     // Read-only log of sync runs - nothing to create or edit by hand.
     public static function canCreate(): bool

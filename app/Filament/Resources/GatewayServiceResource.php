@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\GatewayServiceResource\Pages;
 use App\Models\GatewayService;
 use App\Models\GatewayUpstream;
+use App\Support\PanelSection;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -22,6 +23,11 @@ class GatewayServiceResource extends Resource
     protected static ?string $navigationLabel = 'Services';
 
     protected static ?string $recordTitleAttribute = 'label';
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+    }
 
     public static function form(Form $form): Form
     {

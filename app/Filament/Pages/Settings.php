@@ -6,6 +6,7 @@ use App\Filament\Pages\Settings\NewUrlsOverTimeChart;
 use App\Filament\Resources\SyncRunResource;
 use App\Models\SyncRun;
 use App\Services\SettingsService;
+use App\Support\PanelSection;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -25,6 +26,11 @@ class Settings extends Page implements HasForms
     protected static ?int $navigationSort = 100;
 
     protected static string $view = 'filament.pages.settings';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+    }
 
     public ?array $data = [];
 

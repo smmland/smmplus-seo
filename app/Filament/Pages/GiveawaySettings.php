@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Services\GiveawaySettingsService;
 use App\Services\TelegramSettingsService;
+use App\Support\PanelSection;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
@@ -27,6 +28,11 @@ class GiveawaySettings extends Page implements HasForms
     protected static ?int $navigationSort = 100;
 
     protected static string $view = 'filament.pages.giveaway-settings';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::GIVEAWAY) ?? false;
+    }
 
     public ?array $data = [];
 

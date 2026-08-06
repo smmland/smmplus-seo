@@ -8,6 +8,7 @@ use App\Models\ServiceTranslationJob;
 use App\Services\ServiceCatalogService;
 use App\Services\SettingsService;
 use App\Services\TranslationSettingsService;
+use App\Support\PanelSection;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -43,6 +44,11 @@ class ServiceTranslationQueue extends Page implements HasActions
     protected static ?string $navigationLabel = 'Service Translation';
 
     protected static string $view = 'filament.pages.service-translation-queue';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+    }
 
     public string $search = '';
 

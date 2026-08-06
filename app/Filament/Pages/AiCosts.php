@@ -8,6 +8,7 @@ use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
 use App\Models\TelegramPost;
 use App\Models\Url;
+use App\Support\PanelSection;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Schema;
 
@@ -29,6 +30,11 @@ class AiCosts extends Page
     public static function shouldRegisterNavigation(): bool
     {
         return false;
+    }
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::GENERAL) ?? false;
     }
 
     // How many rows each breakdown table shows per page - a busy site could have hundreds of

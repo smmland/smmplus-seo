@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\TelegramPost;
 use App\Services\TelegramPostGeneratorService;
 use App\Services\TelegramSettingsService;
+use App\Support\PanelSection;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -36,6 +37,11 @@ class TelegramQueue extends Page implements HasActions
     protected static ?int $navigationSort = -1;
 
     protected static string $view = 'filament.pages.telegram-queue';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::TELEGRAM) ?? false;
+    }
 
     public string $search = '';
 

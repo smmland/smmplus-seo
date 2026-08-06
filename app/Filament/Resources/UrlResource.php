@@ -7,6 +7,7 @@ use App\Models\Language;
 use App\Models\Url;
 use App\Services\BlogTranslationDetectionService;
 use App\Services\SitemapGeneratorService;
+use App\Support\PanelSection;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -25,6 +26,11 @@ class UrlResource extends Resource
     protected static ?string $navigationLabel = 'URLs';
 
     protected static ?string $recordTitleAttribute = 'source_url';
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+    }
 
     public static function form(Form $form): Form
     {

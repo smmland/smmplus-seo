@@ -26,6 +26,14 @@ class PanelUpdate extends Page
         return false;
     }
 
+    // Deliberately not a grantable PanelSection like the other pages - installing an update
+    // replaces the app's own code, so handing that out is equivalent to handing out full access
+    // regardless of what else a user's permissions say.
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->is_super_admin ?? false;
+    }
+
     // Zip is whatever `git archive` produces - the same file sent for every update. Livewire
     // handles the actual upload (to a temp disk) via $updateZip; this just hands the saved
     // temp file to PanelUpdateService once "Install update" is clicked, rather than acting on

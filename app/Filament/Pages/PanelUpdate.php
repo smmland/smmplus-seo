@@ -31,7 +31,7 @@ class PanelUpdate extends Page
     // regardless of what else a user's permissions say.
     public static function canAccess(): bool
     {
-        return auth()->user()?->is_super_admin ?? false;
+        return auth()->user()?->isSuperAdmin() ?? false;
     }
 
     // Zip is whatever `git archive` produces - the same file sent for every update. Livewire

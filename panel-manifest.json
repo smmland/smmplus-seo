@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.18.0",
-    "notes": "New: per-user access control. Administration > Users lets you create panel accounts and grant each one any combination of six areas - Translation, Free Service Gateway, Giveaway, Telegram Channel, SEO, General Settings - independently toggleable per user, editable any time from that same page. Existing accounts were automatically kept as full ('Super admin') access, so nothing changes for you unless you create a new user or edit an existing one's access. Installing panel updates and managing users themselves stay Super-admin-only regardless of section access, since either one can grant full access on its own. Requires 'Update database' after installing this update."
+    "version": "1.18.1",
+    "notes": "Fixes a lockout bug in 1.18.0: right after installing that update but before clicking 'Update database', the is_super_admin column the new access checks relied on didn't exist yet - which made the Panel Update page itself (and everything else) return 403 for everyone, with no way back in through the panel. Access checks now degrade to 'allow' when the relevant column is missing, exactly like this app's other lag-tolerant checks (is_ai_guessed, missed_syncs) - so a fresh install of a migration-requiring update can never lock an admin out of the one page that runs migrations. If you're only just now installing an update for the first time since 1.18.0 shipped, run 'Update database' immediately after this install and you're set - no SQL needed."
 }

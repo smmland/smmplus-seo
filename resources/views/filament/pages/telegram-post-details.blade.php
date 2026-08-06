@@ -4,6 +4,11 @@
     @else
         @if ($post->image_path)
             <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($post->image_path) }}" alt="" class="mb-4 w-full max-w-sm rounded-xl ring-1 ring-gray-950/10 dark:ring-white/10">
+        @elseif ($post->image_generation_error ?? null)
+            <div class="mb-4 rounded-lg p-3 text-sm" style="background-color: rgba(var(--danger-500), .1); color: rgb(var(--danger-700))">
+                <span class="font-medium">No image - AI generation failed:</span>
+                {{ $post->image_generation_error }}
+            </div>
         @endif
 
         <p class="mb-1 text-xs font-medium text-gray-400 dark:text-gray-500">

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.19.4",
-    "notes": "Telegram Channel > Queue: the 'Post' column (title + message preview) was noticeably wider than it needed to be, crowding out the other columns - narrowed it down (both in the pending queue and the sent-history table below it) so the page reads more evenly. No functional changes, no database changes."
+    "version": "1.20.0",
+    "notes": "Telegram Channel > Queue: 1) The 'Post' column is narrower still, and the action buttons (Details/Edit/Confirm/Reject/Delete) no longer wrap onto a second row. 2) When AI image generation is turned on but fails for a post (bad/missing OpenAI key, a model your OpenAI account isn't verified for, rate limits, etc.), the panel used to just silently show no image with no way to tell why - it now shows a small warning icon in the list (hover it for the reason) and the full error message inside the post's Details popup, right where the image would otherwise be. Successfully generated images already showed in both places - if you're not seeing any image at all, this update will tell you exactly why. Requires 'Update database' after installing this update (adds one nullable column to telegram_posts)."
 }

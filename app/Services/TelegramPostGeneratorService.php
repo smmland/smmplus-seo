@@ -152,7 +152,7 @@ class TelegramPostGeneratorService
                 continue;
             }
 
-            [$imagePath, $imageSource, $imageCost] = $this->resolveImage(
+            [$imagePath, $imageSource, $imageCost, $imageError] = $this->resolveImage(
                 $this->extractFirstImageSrc($url->content_extraction_path),
                 fn () => 'A clean, modern social media banner illustrating the blog article titled "'.$url->article_title.'". No text or letters in the image. Flat, minimal, professional style.',
             );
@@ -165,6 +165,7 @@ class TelegramPostGeneratorService
                 'message_text' => $result['message'],
                 'image_path' => $imagePath,
                 'image_source' => $imageSource,
+                'image_generation_error' => $imageError,
                 'scheduled_at' => $nextSlot,
                 'status' => TelegramPost::STATUS_PENDING,
                 'ai_provider' => $result['provider'] ?? null,
@@ -248,7 +249,7 @@ class TelegramPostGeneratorService
                 default => 'Removed: ',
             };
 
-            [$imagePath, $imageSource, $imageCost] = $this->resolveImage(
+            [$imagePath, $imageSource, $imageCost, $imageError] = $this->resolveImage(
                 null,
                 fn () => 'A clean, modern social media banner for an SMM panel service called "'.($service['title'] ?? $service['service_key']).'" in the "'.($service['category_title'] ?? 'general').'" category. No text or letters in the image. Flat, minimal, professional style.',
             );
@@ -261,6 +262,7 @@ class TelegramPostGeneratorService
                 'message_text' => $result['message'],
                 'image_path' => $imagePath,
                 'image_source' => $imageSource,
+                'image_generation_error' => $imageError,
                 'scheduled_at' => now()->addMinutes(TelegramSettingsService::SERVICE_CHANGE_REVIEW_MINUTES),
                 'status' => TelegramPost::STATUS_PENDING,
                 'ai_provider' => $result['provider'] ?? null,
@@ -348,7 +350,13 @@ class TelegramPostGeneratorService
      * generating one with AI (only if that's enabled in settings) when there's no usable src at
      * all, so a post is never sent with no image just because the source article had none.
      *
-     * @return array{0: ?string, 1: string, 2: ?float} [diskPath, imageSource, imageCostUsd]
+     * The 4th element carries the AI generation failure reason (bad/missing OpenAI key, a model
+     * the account isn't verified for, rate limits, ...) when that's why there's no image - it
+     * used to be silently discarded here, leaving "I turned image generation on but nothing
+     * shows up" with no way to diagnose from the panel. Null in every other case (a real image
+     * was found, or generation is simply turned off - not a failure, nothing to explain).
+     *
+     * @return array{0: ?string, 1: string, 2: ?float, 3: ?string} [diskPath, imageSource, imageCostUsd, generationError]
      */
     private function resolveImage(?string $src, \Closure $aiPromptIfMissing): array
     {
@@ -362,14 +370,14 @@ class TelegramPostGeneratorService
                         $path = self::IMAGE_DIR.'/'.Str::uuid()->toString().'.'.$ext;
                         Storage::disk('public')->put($path, $bytes);
 
-                        return [$path, TelegramPost::IMAGE_ARTICLE, null];
+                        return [$path, TelegramPost::IMAGE_ARTICLE, null, null];
                     }
                 }
             } elseif (str_contains($src, self::LOCAL_BLOG_ASSET_MARKER)) {
                 $diskPath = substr($src, strpos($src, self::LOCAL_BLOG_ASSET_MARKER) + strlen(self::LOCAL_BLOG_ASSET_MARKER));
 
                 if (Storage::disk('public')->exists($diskPath)) {
-                    return [$diskPath, TelegramPost::IMAGE_ARTICLE, null];
+                    return [$diskPath, TelegramPost::IMAGE_ARTICLE, null, null];
                 }
             } else {
                 try {
@@ -383,19 +391,19 @@ class TelegramPostGeneratorService
                     $path = self::IMAGE_DIR.'/'.Str::uuid()->toString().'.'.$ext;
                     Storage::disk('public')->put($path, $response->body());
 
-                    return [$path, TelegramPost::IMAGE_ARTICLE, null];
+                    return [$path, TelegramPost::IMAGE_ARTICLE, null, null];
                 }
             }
         }
 
         if (! $this->settings->isImageGenerationEnabled()) {
-            return [null, TelegramPost::IMAGE_NONE, null];
+            return [null, TelegramPost::IMAGE_NONE, null, null];
         }
 
         $generated = $this->imageAi->generate($aiPromptIfMissing());
 
         return $generated['ok']
-            ? [$generated['path'], TelegramPost::IMAGE_AI_GENERATED, $generated['cost_usd'] ?? null]
-            : [null, TelegramPost::IMAGE_NONE, null];
+            ? [$generated['path'], TelegramPost::IMAGE_AI_GENERATED, $generated['cost_usd'] ?? null, null]
+            : [null, TelegramPost::IMAGE_NONE, null, $generated['message'] ?? 'Image generation failed for an unknown reason.'];
     }
 }

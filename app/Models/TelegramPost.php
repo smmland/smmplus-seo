@@ -47,7 +47,7 @@ class TelegramPost extends Model
 
     protected $fillable = [
         'type', 'lang', 'related_key', 'title', 'message_text', 'image_path', 'image_source',
-        'scheduled_at', 'status', 'sent_at', 'telegram_message_id', 'error_message',
+        'image_generation_error', 'scheduled_at', 'status', 'sent_at', 'telegram_message_id', 'error_message',
         'ai_provider', 'ai_model', 'input_tokens', 'output_tokens', 'estimated_cost_usd', 'image_cost_usd',
     ];
 

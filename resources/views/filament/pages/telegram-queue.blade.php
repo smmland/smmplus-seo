@@ -89,17 +89,25 @@
                                     <td class="p-2">
                                         @if ($post->image_path)
                                             <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($post->image_path) }}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
+                                        @elseif ($post->image_generation_error ?? null)
+                                            <div
+                                                class="flex h-12 w-12 items-center justify-center rounded-lg ring-1 ring-gray-950/10 dark:ring-white/10"
+                                                style="background-color: rgba(var(--danger-500), .1); color: rgb(var(--danger-700))"
+                                                title="{{ 'Image generation failed: '.$post->image_generation_error }}"
+                                            >
+                                                <x-filament::icon icon="heroicon-o-exclamation-triangle" class="h-5 w-5" />
+                                            </div>
                                         @else
                                             <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-300 ring-1 ring-gray-950/10 dark:bg-white/5 dark:text-gray-600 dark:ring-white/10">
                                                 <x-filament::icon icon="heroicon-o-photo" class="h-5 w-5" />
                                             </div>
                                         @endif
                                     </td>
-                                    <td class="p-2">
+                                    <td class="p-2" style="max-width: 220px;">
                                         <x-filament::badge color="gray" size="xs">{{ $this::TYPE_FILTERS[$post->type] ?? $post->type }}</x-filament::badge>
                                         <div class="mt-1 font-medium text-gray-950 dark:text-white">{{ $post->title }}</div>
-                                        <div class="mt-1 max-w-xs text-xs text-gray-400 dark:text-gray-500">
-                                            {{ \Illuminate\Support\Str::limit($post->message_text, 90) }}
+                                        <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                            {{ \Illuminate\Support\Str::limit($post->message_text, 70) }}
                                         </div>
                                     </td>
                                     <td class="p-2 text-sm text-gray-600 dark:text-gray-300">
@@ -129,7 +137,7 @@
                                         @endif
                                     </td>
                                     <td class="p-2">
-                                        <div class="flex flex-wrap items-center gap-2">
+                                        <div class="flex items-center gap-2">
                                             <x-filament::button
                                                 size="sm"
                                                 color="gray"
@@ -280,11 +288,11 @@
                                             </div>
                                         @endif
                                     </td>
-                                    <td class="p-2">
+                                    <td class="p-2" style="max-width: 220px;">
                                         <x-filament::badge color="gray" size="xs">{{ $this::TYPE_FILTERS[$post->type] ?? $post->type }}</x-filament::badge>
                                         <div class="mt-1 font-medium text-gray-950 dark:text-white">{{ $post->title }}</div>
-                                        <div class="mt-1 max-w-xs text-xs text-gray-400 dark:text-gray-500">
-                                            {{ \Illuminate\Support\Str::limit($post->message_text, 90) }}
+                                        <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                            {{ \Illuminate\Support\Str::limit($post->message_text, 70) }}
                                         </div>
                                     </td>
                                     <td class="p-2 text-sm text-gray-600 dark:text-gray-300">

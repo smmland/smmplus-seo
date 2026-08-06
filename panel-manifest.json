@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.20.0",
-    "notes": "Telegram Channel > Queue: 1) The 'Post' column is narrower still, and the action buttons (Details/Edit/Confirm/Reject/Delete) no longer wrap onto a second row. 2) When AI image generation is turned on but fails for a post (bad/missing OpenAI key, a model your OpenAI account isn't verified for, rate limits, etc.), the panel used to just silently show no image with no way to tell why - it now shows a small warning icon in the list (hover it for the reason) and the full error message inside the post's Details popup, right where the image would otherwise be. Successfully generated images already showed in both places - if you're not seeing any image at all, this update will tell you exactly why. Requires 'Update database' after installing this update (adds one nullable column to telegram_posts)."
+    "version": "1.21.0",
+    "notes": "Telegram Channel > Queue: two new ways to post besides the AI-drafted queue. 1) 'Send now' - a new blue paper-airplane button on every pending/confirmed post sends it to the channel immediately instead of waiting for its scheduled time (up to a minute away on the automatic check). 2) 'New message' - a new button next to the filters opens a form to write your own message from scratch, with an optional image attached, and sends it right away. Either one failing (e.g. bot not configured yet) behaves exactly like any other failed post - it lands in the list with the error shown and its own Retry button. No database changes."
 }

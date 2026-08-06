@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\TelegramPost;
-use App\Services\TelegramBotService;
+use App\Services\TelegramPostSenderService;
 use App\Services\TelegramSettingsService;
 use Illuminate\Console\Command;
 
@@ -19,7 +19,7 @@ class TelegramSendQueueCommand extends Command
 
     protected $description = 'Sends every due, non-rejected Telegram post';
 
-    public function handle(TelegramSettingsService $settings, TelegramBotService $bot): int
+    public function handle(TelegramSettingsService $settings, TelegramPostSenderService $sender): int
     {
         if (! $settings->isEnabled()) {
             return self::SUCCESS;
@@ -35,25 +35,7 @@ class TelegramSendQueueCommand extends Command
         $failed = 0;
 
         foreach ($due as $post) {
-            $result = $post->image_path
-                ? $bot->sendPhoto($post->image_path, $post->message_text)
-                : $bot->sendMessage($post->message_text);
-
-            if ($result['ok']) {
-                // telegram_message_id lets TelegramCaptureChannelPostsCommand recognize this
-                // exact message when it later polls the channel, so it's never re-captured as
-                // if it were someone else's manual post.
-                $post->update([
-                    'status' => TelegramPost::STATUS_SENT,
-                    'sent_at' => now(),
-                    'telegram_message_id' => $result['message_id'] ?? null,
-                    'error_message' => null,
-                ]);
-                $sent++;
-            } else {
-                $post->update(['status' => TelegramPost::STATUS_FAILED, 'error_message' => $result['message']]);
-                $failed++;
-            }
+            $sender->sendNow($post)['ok'] ? $sent++ : $failed++;
         }
 
         if ($sent > 0 || $failed > 0) {

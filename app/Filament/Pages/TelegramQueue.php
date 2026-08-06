@@ -2,20 +2,24 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Language;
 use App\Models\TelegramPost;
 use App\Services\ActivityLogService;
 use App\Services\TelegramPostGeneratorService;
+use App\Services\TelegramPostSenderService;
 use App\Services\TelegramSettingsService;
 use App\Support\PanelSection;
 use App\Filament\Concerns\GuardsSectionEdits;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 
 /**
@@ -293,6 +297,37 @@ class TelegramQueue extends Page implements HasActions
         Notification::make()->title('Queued for retry - it will send on the next check')->success()->send();
     }
 
+    // Sends immediately rather than waiting for the next telegram:send-queue tick (up to a
+    // minute away) - same underlying send+status-update logic as that scheduled sweep, see
+    // TelegramPostSenderService. Confirmed isn't required first, same as the automatic send.
+    public function sendNowPost(int $postId, TelegramPostSenderService $sender): void
+    {
+        if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
+            return;
+        }
+
+        $post = TelegramPost::query()->find($postId);
+
+        if (! $post || ! in_array($post->status, TelegramPost::SENDABLE_STATUSES, true)) {
+            Notification::make()->title('This post cannot be sent right now')->warning()->send();
+
+            return;
+        }
+
+        $result = $sender->sendNow($post);
+
+        $this->logPostAction($result['ok'] ? 'telegram.post_sent_manually' : 'telegram.post_send_failed', $post);
+
+        unset($this->queue);
+        unset($this->sentHistory);
+
+        if ($result['ok']) {
+            Notification::make()->title('Sent to the channel')->success()->send();
+        } else {
+            Notification::make()->title('Send failed')->body($result['message'])->danger()->send();
+        }
+    }
+
     public function deletePost(int $postId): void
     {
         if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
@@ -355,6 +390,59 @@ class TelegramQueue extends Page implements HasActions
                 unset($this->queue);
 
                 Notification::make()->title('Post updated')->success()->send();
+            });
+    }
+
+    // A hand-written message (with an optional image of its own, unrelated to article/AI images)
+    // rather than one of the AI-drafted types - sent immediately on submit via the same
+    // TelegramPostSenderService the scheduled sweep and "Send now" use, so a send failure here
+    // behaves exactly like any other post's: status=failed, and the row's own Retry button picks
+    // it up from there.
+    public function newMessageAction(): Action
+    {
+        return Action::make('newMessage')
+            ->label('New message')
+            ->icon('heroicon-o-plus')
+            ->visible(fn (): bool => auth()->user()?->hasAccess(PanelSection::key(PanelSection::TELEGRAM, PanelSection::TIER_EDIT)) ?? false)
+            ->modalWidth(MaxWidth::TwoExtraLarge)
+            ->modalHeading('Send a custom message')
+            ->modalSubmitActionLabel('Send now')
+            ->form([
+                Textarea::make('messageText')
+                    ->label('Message text')
+                    ->required()
+                    ->rows(8),
+                FileUpload::make('image')
+                    ->label('Image (optional)')
+                    ->image()
+                    ->disk('public')
+                    ->directory('telegram/images')
+                    ->visibility('public'),
+            ])
+            ->action(function (array $data, TelegramPostSenderService $sender) {
+                $post = TelegramPost::create([
+                    'type' => TelegramPost::TYPE_CUSTOM,
+                    'lang' => Language::query()->where('is_default', true)->value('code') ?? 'en',
+                    'title' => Str::limit($data['messageText'], 60),
+                    'message_text' => $data['messageText'],
+                    'image_path' => $data['image'] ?? null,
+                    'image_source' => $data['image'] ? TelegramPost::IMAGE_MANUAL : TelegramPost::IMAGE_NONE,
+                    'scheduled_at' => now(),
+                    'status' => TelegramPost::STATUS_PENDING,
+                ]);
+
+                $result = $sender->sendNow($post);
+
+                $this->logPostAction($result['ok'] ? 'telegram.custom_message_sent' : 'telegram.custom_message_send_failed', $post);
+
+                unset($this->queue);
+                unset($this->sentHistory);
+
+                if ($result['ok']) {
+                    Notification::make()->title('Sent to the channel')->success()->send();
+                } else {
+                    Notification::make()->title('Saved, but sending failed')->body($result['message'])->danger()->send();
+                }
             });
     }
 

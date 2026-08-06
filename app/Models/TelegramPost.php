@@ -18,6 +18,12 @@ class TelegramPost extends Model
     // review or schedule.
     public const TYPE_MANUAL = 'manual_capture';
 
+    // The admin's own free-form text (+ optional image), written and sent right from the "New
+    // message" button on the Queue page - distinct from TYPE_MANUAL above, which is only ever
+    // for posts that went out through Telegram directly and were captured after the fact, never
+    // authored in this panel.
+    public const TYPE_CUSTOM = 'custom';
+
     public const SERVICE_TYPES = [self::TYPE_SERVICE_ADDED, self::TYPE_SERVICE_UPDATED, self::TYPE_SERVICE_REMOVED];
 
     // Shared between TelegramQueue's type filter and AiCosts' per-type cost breakdown, so both
@@ -27,12 +33,14 @@ class TelegramPost extends Model
         self::TYPE_SERVICE_ADDED => 'New service',
         self::TYPE_SERVICE_UPDATED => 'Service updated',
         self::TYPE_SERVICE_REMOVED => 'Service removed',
+        self::TYPE_CUSTOM => 'Custom message',
         self::TYPE_MANUAL => 'Posted directly (not via this panel)',
     ];
 
     public const IMAGE_ARTICLE = 'article';
     public const IMAGE_AI_GENERATED = 'ai_generated';
     public const IMAGE_CAPTURED = 'captured';
+    public const IMAGE_MANUAL = 'manual';
     public const IMAGE_NONE = 'none';
 
     public const STATUS_PENDING = 'pending';

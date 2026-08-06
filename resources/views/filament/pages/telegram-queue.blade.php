@@ -52,6 +52,13 @@
                             <option value="{{ $value }}">{{ $label }}</option>
                         @endforeach
                     </select>
+
+                    <x-filament::button
+                        icon="heroicon-o-plus"
+                        wire:click="mountAction('newMessage')"
+                    >
+                        New message
+                    </x-filament::button>
                 </div>
             </div>
 
@@ -167,6 +174,18 @@
                                                         wire:click="confirmPost({{ $post->id }})"
                                                     />
                                                 @endif
+
+                                                <x-filament::icon-button
+                                                    icon="heroicon-o-paper-airplane"
+                                                    color="primary"
+                                                    size="sm"
+                                                    label="Send now"
+                                                    tooltip="Send to the channel right now, instead of waiting for its scheduled time"
+                                                    wire:click="sendNowPost({{ $post->id }})"
+                                                    wire:confirm="Send this to the channel right now?"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="sendNowPost({{ $post->id }})"
+                                                />
 
                                                 <x-filament::icon-button
                                                     icon="heroicon-o-x-mark"

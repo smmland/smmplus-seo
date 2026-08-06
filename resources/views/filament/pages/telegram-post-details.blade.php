@@ -19,6 +19,8 @@
                 · image from the article
             @elseif ($post->image_source === 'captured')
                 · image captured from Telegram
+            @elseif ($post->image_source === 'manual')
+                · image uploaded manually
             @endif
         </p>
 

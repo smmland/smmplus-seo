@@ -111,7 +111,7 @@ class TelegramPostGeneratorService
             return ['created' => 0, 'message' => 'No blog content available yet - extract some articles on the Blog Translation page first.'];
         }
 
-        $recentPosts = $this->recentMessagesContext(TelegramPost::TYPE_BLOG_SUMMARY, TelegramPost::TYPE_MANUAL);
+        $recentPosts = $this->recentMessagesContext(TelegramPost::TYPE_BLOG_SUMMARY, TelegramPost::TYPE_CUSTOM, TelegramPost::TYPE_MANUAL);
 
         $prepared = $candidates->mapWithKeys(function (Url $url) use ($targetLanguage, $recentPosts) {
             $contentText = $this->readContentText($url->content_extraction_path);
@@ -220,7 +220,7 @@ class TelegramPostGeneratorService
 
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
         $targetLanguage = Language::query()->where('code', $defaultLang)->value('name') ?? $defaultLang;
-        $recentPosts = $this->recentMessagesContext(...[...TelegramPost::SERVICE_TYPES, TelegramPost::TYPE_MANUAL]);
+        $recentPosts = $this->recentMessagesContext(...[...TelegramPost::SERVICE_TYPES, TelegramPost::TYPE_CUSTOM, TelegramPost::TYPE_MANUAL]);
 
         $prepared = collect($events)->mapWithKeys(fn ($event, $i) => [$i => [
             'prompt' => $this->contentAi->buildServiceAnnouncementPrompt([

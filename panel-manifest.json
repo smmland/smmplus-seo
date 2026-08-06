@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.17.1",
-    "notes": "New Sitemap card on the Dashboard: new links found in the last sync, total links currently in the sitemap, plus updated/removed counts from the last sync. While building it, found and fixed a real bug from the previous update: the 'fix' that switched the Service translation pipeline and Telegram channel queue cards to a plain grid-cols-2 class didn't actually work - that class was never compiled into this app's CSS bundle either (only grid-cols-1 and responsive-prefixed variants are), so their stat tiles were still silently stacking in a single column this whole time. All three cards now use inline grid styles instead, which don't depend on any particular class being compiled, and are confirmed working."
+    "version": "1.17.2",
+    "notes": "Giveaway phase 1 extended with a third task: leaving a review on Trustpilot. Unlike Telegram/YouTube (checked automatically), there's no public API to confirm a Trustpilot review is real, so the user pastes a link to their review as proof instead - it lands in Giveaway > Claims marked 'needs manual check' rather than 'verified', so the admin can go look at the actual review before rewarding it. New Trustpilot section on Giveaway > Settings (enable toggle + review page URL)."
 }

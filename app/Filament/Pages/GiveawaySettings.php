@@ -40,6 +40,8 @@ class GiveawaySettings extends Page implements HasForms
             'youtubeChannelId' => $settings->getYoutubeChannelId(),
             'googleClientId' => $settings->getGoogleClientId(),
             'googleClientSecret' => null,
+            'trustpilotEnabled' => $settings->isTrustpilotEnabled(),
+            'trustpilotReviewUrl' => $settings->getTrustpilotReviewUrl(),
             'frontendReturnUrl' => $settings->getFrontendReturnUrl(),
         ]);
     }
@@ -103,6 +105,20 @@ class GiveawaySettings extends Page implements HasForms
                     ])
                     ->columns(2),
 
+                Section::make('Trustpilot')
+                    ->description('There\'s no public API to confirm a Trustpilot review is real, so this task works differently from the other two: the user pastes a link to their review as proof, and it lands in the Claims queue marked "needs manual check" instead of "verified" - go look at the actual review on Trustpilot before rewarding it.')
+                    ->schema([
+                        Toggle::make('trustpilotEnabled')
+                            ->label('Enable Trustpilot giveaway'),
+
+                        TextInput::make('trustpilotReviewUrl')
+                            ->label('Review page URL')
+                            ->url()
+                            ->placeholder('https://www.trustpilot.com/evaluate/smm.plus')
+                            ->helperText('Where the "Leave a review" button sends users.'),
+                    ])
+                    ->columns(2),
+
                 Section::make('Frontend')
                     ->description('Where the YouTube OAuth flow sends the browser back to after checking the subscription - the giveaway page on the actual site.')
                     ->schema([
@@ -126,6 +142,8 @@ class GiveawaySettings extends Page implements HasForms
         $settings->setYoutubeChannelId($data['youtubeChannelId'] ?: null);
         $settings->setGoogleClientId($data['googleClientId'] ?: null);
         $settings->setGoogleClientSecret($data['googleClientSecret'] ?: null);
+        $settings->setTrustpilotEnabled((bool) $data['trustpilotEnabled']);
+        $settings->setTrustpilotReviewUrl($data['trustpilotReviewUrl'] ?: null);
         $settings->setFrontendReturnUrl($data['frontendReturnUrl']);
 
         $this->form->fill([...$this->form->getState(), 'googleClientSecret' => null]);

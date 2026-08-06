@@ -5,9 +5,10 @@
                 <div>
                     <p class="text-sm font-medium text-gray-950 dark:text-white">Giveaway claims</p>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Every automatically-verified Telegram join / YouTube subscription. Nothing here sends a
-                        reward on its own - go credit the user's wallet in the real smm.plus admin panel, then
-                        mark the claim as rewarded here so it isn't paid twice.
+                        Telegram/YouTube claims are checked automatically. Trustpilot claims are self-reported (no
+                        API can confirm a review is real) - check the submitted link before rewarding those. Nothing
+                        here sends a reward on its own - go credit the user's wallet in the real smm.plus admin
+                        panel, then mark the claim as rewarded here so it isn't paid twice.
                     </p>
                 </div>
 
@@ -50,8 +51,7 @@
                 </div>
             @elseif ($this->claims->isEmpty())
                 <p class="text-sm text-gray-500 dark:text-gray-400">
-                    No claims yet - they'll show up here as soon as someone joins the Telegram channel or
-                    subscribes on YouTube through the giveaway page.
+                    No claims yet - they'll show up here as soon as someone completes a task on the giveaway page.
                 </p>
             @else
                 <div class="overflow-x-auto">
@@ -60,7 +60,8 @@
                             <tr>
                                 <th class="p-2 text-start text-sm font-semibold">Platform</th>
                                 <th class="p-2 text-start text-sm font-semibold">Panel user</th>
-                                <th class="p-2 text-start text-sm font-semibold">Verified</th>
+                                <th class="p-2 text-start text-sm font-semibold">Proof</th>
+                                <th class="p-2 text-start text-sm font-semibold">Submitted</th>
                                 <th class="p-2 text-start text-sm font-semibold">Status</th>
                                 <th class="p-2 text-start text-sm font-semibold">Actions</th>
                             </tr>
@@ -77,6 +78,15 @@
                                         <div class="font-medium text-gray-950 dark:text-white">{{ $claim->panel_user_email }}</div>
                                         <div class="text-xs text-gray-400 dark:text-gray-500">{{ $claim->panel_username ?? '—' }}</div>
                                     </td>
+                                    <td class="p-2 text-sm">
+                                        @if ($claim->proof_url)
+                                            <a href="{{ $claim->proof_url }}" target="_blank" rel="noopener" class="text-primary-600 underline">
+                                                {{ \Illuminate\Support\Str::limit($claim->proof_url, 40) }}
+                                            </a>
+                                        @else
+                                            <span class="text-gray-400 dark:text-gray-500">— (auto-verified)</span>
+                                        @endif
+                                    </td>
                                     <td class="p-2 text-sm text-gray-600 dark:text-gray-300">
                                         {{ $claim->verified_at?->diffForHumans() }}
                                     </td>
@@ -84,6 +94,9 @@
                                         @switch($claim->status)
                                             @case('verified')
                                                 <x-filament::badge color="warning" size="xs">Awaiting reward</x-filament::badge>
+                                                @break
+                                            @case('pending_review')
+                                                <x-filament::badge color="warning" size="xs">Needs manual check</x-filament::badge>
                                                 @break
                                             @case('rewarded')
                                                 <x-filament::badge color="success" size="xs">Rewarded</x-filament::badge>
@@ -104,7 +117,7 @@
                                     </td>
                                     <td class="p-2">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            @if ($claim->status === 'verified')
+                                            @if (in_array($claim->status, ['verified', 'pending_review']))
                                                 <x-filament::button
                                                     size="sm"
                                                     color="success"

@@ -43,6 +43,10 @@ class GiveawayController extends Controller
             'youtube' => [
                 'enabled' => $settings->isYoutubeEnabled(),
             ],
+            'trustpilot' => [
+                'enabled' => $settings->isTrustpilotEnabled(),
+                'reviewUrl' => $settings->getTrustpilotReviewUrl(),
+            ],
         ]);
     }
 
@@ -113,6 +117,69 @@ class GiveawayController extends Controller
         }
 
         return response()->json(['ok' => true, 'status' => 'verified', 'message' => 'Verified - your reward request is now with our team.']);
+    }
+
+    /**
+     * Trustpilot has no public API to confirm a review is real (unlike Telegram/YouTube, which
+     * self-verify), so this just records what the user submitted as proof and leaves it
+     * STATUS_PENDING_REVIEW for an admin to actually go check on Trustpilot before rewarding it -
+     * see GiveawayClaims (the admin queue) for that side of it.
+     */
+    public function submitTrustpilot(Request $request, GiveawaySettingsService $settings): JsonResponse
+    {
+        if (! $settings->isTrustpilotEnabled()) {
+            return response()->json(['ok' => false, 'status' => 'disabled', 'message' => 'Trustpilot giveaway is currently disabled.'], 200);
+        }
+
+        $panelUserEmail = $request->input('panel_user_email');
+        $panelUsername = $request->input('panel_username');
+        $proofUrl = trim((string) $request->input('proof_url'));
+
+        if (! is_string($panelUserEmail) || ! filter_var($panelUserEmail, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['ok' => false, 'status' => 'invalid', 'message' => 'Missing or invalid panel user.'], 400);
+        }
+
+        if ($proofUrl === '' || mb_strlen($proofUrl) > 2000) {
+            return response()->json(['ok' => false, 'status' => 'invalid', 'message' => 'Please paste a link to your review.'], 200);
+        }
+
+        // A hash of the submitted link, not the account itself - Trustpilot review URLs aren't
+        // guaranteed to carry a stable account identifier, but this still stops the same exact
+        // submission being reused across multiple panel accounts.
+        $proofKey = md5($proofUrl);
+
+        $existing = GiveawayClaim::query()
+            ->where('platform', GiveawayClaim::PLATFORM_TRUSTPILOT)
+            ->where(function ($q) use ($panelUserEmail, $proofKey) {
+                $q->where('panel_user_email', $panelUserEmail)
+                    ->orWhere('platform_account_id', $proofKey);
+            })
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'ok' => true,
+                'status' => 'already_claimed',
+                'message' => 'This has already been submitted.',
+                'claimStatus' => $existing->status,
+            ]);
+        }
+
+        try {
+            GiveawayClaim::create([
+                'platform' => GiveawayClaim::PLATFORM_TRUSTPILOT,
+                'panel_user_email' => $panelUserEmail,
+                'panel_username' => $panelUsername,
+                'platform_account_id' => $proofKey,
+                'proof_url' => $proofUrl,
+                'verified_at' => now(),
+                'status' => GiveawayClaim::STATUS_PENDING_REVIEW,
+            ]);
+        } catch (QueryException) {
+            return response()->json(['ok' => true, 'status' => 'already_claimed', 'message' => 'This has already been submitted.']);
+        }
+
+        return response()->json(['ok' => true, 'status' => 'pending_review', 'message' => "Thanks! Our team will check it and add your reward once confirmed."]);
     }
 
     public function youtubeOauthStart(Request $request, YoutubeOAuthService $youtube, GiveawaySettingsService $settings): RedirectResponse

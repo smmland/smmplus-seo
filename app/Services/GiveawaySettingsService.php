@@ -16,9 +16,13 @@ class GiveawaySettingsService
 
     private const KEY_YOUTUBE_ENABLED = 'giveaway_youtube_enabled';
 
+    private const KEY_TRUSTPILOT_ENABLED = 'giveaway_trustpilot_enabled';
+
     private const KEY_TELEGRAM_BOT_USERNAME = 'giveaway_telegram_bot_username';
 
     private const KEY_YOUTUBE_CHANNEL_ID = 'giveaway_youtube_channel_id';
+
+    private const KEY_TRUSTPILOT_REVIEW_URL = 'giveaway_trustpilot_review_url';
 
     private const KEY_GOOGLE_CLIENT_ID = 'giveaway_google_client_id';
 
@@ -31,6 +35,8 @@ class GiveawaySettingsService
     private const DEFAULT_TELEGRAM_ENABLED = false;
 
     private const DEFAULT_YOUTUBE_ENABLED = false;
+
+    private const DEFAULT_TRUSTPILOT_ENABLED = false;
 
     private const DEFAULT_FRONTEND_RETURN_URL = 'https://smm.plus/giveaway';
 
@@ -63,6 +69,32 @@ class GiveawaySettingsService
     public function setYoutubeEnabled(bool $enabled): void
     {
         $this->set(self::KEY_YOUTUBE_ENABLED, $enabled ? '1' : '0');
+    }
+
+    public function isTrustpilotEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_TRUSTPILOT_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_TRUSTPILOT_ENABLED;
+    }
+
+    public function setTrustpilotEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_TRUSTPILOT_ENABLED, $enabled ? '1' : '0');
+    }
+
+    // Where the giveaway page sends users to actually write the review - e.g.
+    // https://www.trustpilot.com/evaluate/smm.plus. There's no API to auto-verify a review
+    // (see GiveawayClaim::PLATFORM_TRUSTPILOT), so this is just the link the "Leave a review"
+    // button opens.
+    public function getTrustpilotReviewUrl(): ?string
+    {
+        return $this->get(self::KEY_TRUSTPILOT_REVIEW_URL);
+    }
+
+    public function setTrustpilotReviewUrl(?string $url): void
+    {
+        $this->set(self::KEY_TRUSTPILOT_REVIEW_URL, trim((string) $url));
     }
 
     // The giveaway page (giveaway.twig, in the separate smmplus-website repo) can't read this

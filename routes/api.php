@@ -25,6 +25,8 @@ Route::match(['GET', 'OPTIONS'], '/giveaway/config', [GiveawayController::class,
     ->middleware('gateway.cors');
 Route::match(['POST', 'OPTIONS'], '/giveaway/telegram/verify', [GiveawayController::class, 'verifyTelegram'])
     ->middleware('gateway.cors');
+Route::match(['POST', 'OPTIONS'], '/giveaway/trustpilot/submit', [GiveawayController::class, 'submitTrustpilot'])
+    ->middleware('gateway.cors');
 Route::match(['GET', 'OPTIONS'], '/giveaway/status', [GiveawayController::class, 'status'])
     ->middleware('gateway.cors');
 Route::get('/giveaway/youtube/oauth/start', [GiveawayController::class, 'youtubeOauthStart']);

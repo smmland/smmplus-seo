@@ -64,7 +64,7 @@ class GiveawayClaims extends Page implements HasActions
         }
 
         return GiveawayClaim::query()
-            ->where('status', GiveawayClaim::STATUS_VERIFIED)
+            ->whereIn('status', [GiveawayClaim::STATUS_VERIFIED, GiveawayClaim::STATUS_PENDING_REVIEW])
             ->selectRaw('platform, count(*) as total')
             ->groupBy('platform')
             ->pluck('total', 'platform')
@@ -95,7 +95,7 @@ class GiveawayClaims extends Page implements HasActions
     {
         GiveawayClaim::query()
             ->where('id', $claimId)
-            ->where('status', GiveawayClaim::STATUS_VERIFIED)
+            ->whereIn('status', [GiveawayClaim::STATUS_VERIFIED, GiveawayClaim::STATUS_PENDING_REVIEW])
             ->update(['status' => GiveawayClaim::STATUS_REJECTED]);
 
         unset($this->claims);

@@ -29,7 +29,15 @@ class SitemapGeneratorService
      */
     public function generate(): array
     {
-        $urls = Url::query()->where('is_active', true)->where('is_hidden', false)->get();
+        // Ordered by group_key then lang so every translation of the same page ends up
+        // adjacent in the output, instead of in whatever order the table scan happens to
+        // return rows in (effectively insertion order, unrelated to the page each row belongs
+        // to) - the previously unordered output is what made the generated sitemap look
+        // shuffled/unsorted despite every individual entry being correct.
+        $urls = Url::query()->where('is_active', true)->where('is_hidden', false)
+            ->orderBy('group_key')
+            ->orderBy('lang')
+            ->get();
 
         $byGroupKey = [];
         foreach ($urls as $url) {

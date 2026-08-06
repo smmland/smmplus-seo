@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.17.4",
-    "notes": "Sitemap sync hardening: a URL missing from a single sitemap fetch (a transient upstream hiccup - timeout, partial fetch, temporary format change) used to be deactivated immediately, pulling it out of the published sitemap on one bad fetch alone. Now it takes 3 consecutive syncs missing the same URL before it's deactivated; if it reappears on any sync before that, the miss counter resets to zero. A real removal still gets pruned, just a bit later; a one-off glitch self-heals on the next sync instead of taking live pages down with it. New 'Missed syncs' column (off by default) on the URLs page shows any URL currently at risk. Requires 'Update database' after installing this update."
+    "version": "1.17.5",
+    "notes": "Fixed unsorted sitemap output: the query that builds each sitemap-*.xml file had no ORDER BY, so entries came out in raw table-scan order instead of grouped by page - different articles' translations ended up interleaved with each other. Now sorted by group_key then language, so every language version of the same page (article, static page, home page) is listed consecutively before moving to the next page. No data changed, only the output order - no admin action needed for this part."
 }

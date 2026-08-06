@@ -98,8 +98,8 @@
                                     <td class="p-2">
                                         <x-filament::badge color="gray" size="xs">{{ $this::TYPE_FILTERS[$post->type] ?? $post->type }}</x-filament::badge>
                                         <div class="mt-1 font-medium text-gray-950 dark:text-white">{{ $post->title }}</div>
-                                        <div class="mt-1 max-w-md text-xs text-gray-400 dark:text-gray-500">
-                                            {{ \Illuminate\Support\Str::limit($post->message_text, 140) }}
+                                        <div class="mt-1 max-w-xs text-xs text-gray-400 dark:text-gray-500">
+                                            {{ \Illuminate\Support\Str::limit($post->message_text, 90) }}
                                         </div>
                                     </td>
                                     <td class="p-2 text-sm text-gray-600 dark:text-gray-300">
@@ -283,8 +283,8 @@
                                     <td class="p-2">
                                         <x-filament::badge color="gray" size="xs">{{ $this::TYPE_FILTERS[$post->type] ?? $post->type }}</x-filament::badge>
                                         <div class="mt-1 font-medium text-gray-950 dark:text-white">{{ $post->title }}</div>
-                                        <div class="mt-1 max-w-md text-xs text-gray-400 dark:text-gray-500">
-                                            {{ \Illuminate\Support\Str::limit($post->message_text, 140) }}
+                                        <div class="mt-1 max-w-xs text-xs text-gray-400 dark:text-gray-500">
+                                            {{ \Illuminate\Support\Str::limit($post->message_text, 90) }}
                                         </div>
                                     </td>
                                     <td class="p-2 text-sm text-gray-600 dark:text-gray-300">

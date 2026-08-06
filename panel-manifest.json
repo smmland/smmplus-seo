@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.19.3",
-    "notes": "Two changes: 1) The 'Administration' sidebar group (Users, Activity Log) moved into the header's user-menu dropdown, next to Settings/AI Costs/Update - same access rules as before, just reached from the avatar menu at top-right instead of the sidebar. 2) Service Translation page: a service whose description is empty on the site itself (a category header, or one the source page never filled in) now shows a single plain line ('No description on the site - nothing to translate') instead of a row of failure-looking badges, both in the list and inside the details popup, and every way to queue a description translation for it (the per-row button, the details popup, and the bulk 'queue missing descriptions' action) is now blocked, including if attempted directly - only its title can still be translated. No database changes."
+    "version": "1.19.4",
+    "notes": "Telegram Channel > Queue: the 'Post' column (title + message preview) was noticeably wider than it needed to be, crowding out the other columns - narrowed it down (both in the pending queue and the sent-history table below it) so the page reads more evenly. No functional changes, no database changes."
 }

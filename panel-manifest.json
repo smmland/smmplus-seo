@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.17.5",
-    "notes": "Fixed unsorted sitemap output: the query that builds each sitemap-*.xml file had no ORDER BY, so entries came out in raw table-scan order instead of grouped by page - different articles' translations ended up interleaved with each other. Now sorted by group_key then language, so every language version of the same page (article, static page, home page) is listed consecutively before moving to the next page. No data changed, only the output order - no admin action needed for this part."
+    "version": "1.17.6",
+    "notes": "Added hreflang=\"x-default\" to every sitemap URL entry that already has language alternates (per Google's recommendation), pointing at the default-language (English) version. No admin action needed."
 }

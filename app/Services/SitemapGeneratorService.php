@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Language;
 use App\Models\Url;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,8 @@ class SitemapGeneratorService
             $byCategory[$category] = collect($byCategory[$category]);
         }
 
+        $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
         $categories = [];
         $categoryLastmod = [];
 
@@ -65,7 +68,7 @@ class SitemapGeneratorService
             $list = $byCategory[$category];
             // An empty <urlset> is technically well-formed but Google Search Console flags it
             // as an error ("couldn't fetch" / no valid URLs), so skip publishing it entirely.
-            $categories[$category] = $list->isNotEmpty() ? $this->buildUrlsetXml($list, $byGroupKey) : null;
+            $categories[$category] = $list->isNotEmpty() ? $this->buildUrlsetXml($list, $byGroupKey, $defaultLang) : null;
             $categoryLastmod[$category] = $list
                 ->pluck('source_lastmod')
                 ->filter()
@@ -103,7 +106,7 @@ class SitemapGeneratorService
         return Cache::get(self::CACHE_KEY) ?? $this->generate();
     }
 
-    private function buildUrlsetXml($list, array $byGroupKey): string
+    private function buildUrlsetXml($list, array $byGroupKey, string $defaultLang): string
     {
         $doc = new \DOMDocument('1.0', 'UTF-8');
         $doc->formatOutput = true;
@@ -142,6 +145,18 @@ class SitemapGeneratorService
                     $linkNode->setAttribute('hreflang', $link['lang']);
                     $linkNode->setAttribute('href', $link['href']);
                     $urlNode->appendChild($linkNode);
+                }
+
+                // Google's own recommendation on top of the per-language alternates above: an
+                // x-default entry tells it which version to show a searcher whose language
+                // doesn't match any of the alternates listed.
+                $defaultLink = $links->firstWhere('lang', $defaultLang);
+                if ($defaultLink) {
+                    $defaultLinkNode = $doc->createElementNS(self::XHTML_XMLNS, 'xhtml:link');
+                    $defaultLinkNode->setAttribute('rel', 'alternate');
+                    $defaultLinkNode->setAttribute('hreflang', 'x-default');
+                    $defaultLinkNode->setAttribute('href', $defaultLink['href']);
+                    $urlNode->appendChild($defaultLinkNode);
                 }
             }
         }

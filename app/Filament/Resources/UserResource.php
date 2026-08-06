@@ -75,7 +75,7 @@ class UserResource extends Resource
             Forms\Components\Section::make('Section access')
                 ->description('What this user can see and manage, one toggle per part of the panel. Ignored entirely while "Super admin" above is on.')
                 ->schema([
-                    Forms\Components\CheckboxList::make('sections')
+                    Forms\Components\CheckboxList::make('granted_sections')
                         ->label('')
                         ->options(PanelSection::LABELS)
                         ->descriptions(PanelSection::DESCRIPTIONS)
@@ -101,11 +101,10 @@ class UserResource extends Resource
                     ->label('Super admin')
                     ->boolean(),
 
-                Tables\Columns\TextColumn::make('permissions.name')
+                Tables\Columns\TextColumn::make('granted_sections')
                     ->label('Sections')
-                    ->formatStateUsing(fn (string $state): string => PanelSection::LABELS[str_replace('access_', '', $state)] ?? $state)
+                    ->formatStateUsing(fn (string $state): string => PanelSection::LABELS[$state] ?? $state)
                     ->badge()
-                    ->separator(',')
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('created_at')

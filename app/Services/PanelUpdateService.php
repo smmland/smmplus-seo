@@ -114,6 +114,11 @@ class PanelUpdateService
 
             $versionNote = isset($manifest['version']) ? " Now on version {$manifest['version']}." : '';
 
+            app(ActivityLogService::class)->record(
+                'panel.update_installed',
+                subjectLabel: $manifest['version'] ?? null,
+            );
+
             return ['ok' => true, 'message' => "{$fileCount} file(s) installed.{$versionNote}", 'fileCount' => $fileCount];
         } catch (RuntimeException $e) {
             return ['ok' => false, 'message' => $e->getMessage()];

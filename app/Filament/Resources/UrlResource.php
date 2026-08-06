@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class UrlResource extends Resource
 {
@@ -29,7 +30,27 @@ class UrlResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::SEO)) ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::SEO, PanelSection::TIER_EDIT)) ?? false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return static::canCreate();
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::canCreate();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::canCreate();
     }
 
     public static function form(Form $form): Form
@@ -141,6 +162,7 @@ class UrlResource extends Resource
 
                 Tables\Columns\ToggleColumn::make('is_hidden')
                     ->label('Hidden')
+                    ->disabled(fn (): bool => ! static::canCreate())
                     ->afterStateUpdated(fn () => app(SitemapGeneratorService::class)->generate()),
 
                 Tables\Columns\IconColumn::make('is_active')
@@ -233,7 +255,7 @@ class UrlResource extends Resource
                     ->label('Recheck')
                     ->icon('heroicon-o-arrow-path')
                     ->color('gray')
-                    ->visible(fn (Url $record) => $record->pattern_type === 'BLOG' && $record->lang !== $defaultLang)
+                    ->visible(fn (Url $record) => static::canCreate() && $record->pattern_type === 'BLOG' && $record->lang !== $defaultLang)
                     ->action(function (Url $record) {
                         $result = app(BlogTranslationDetectionService::class)->refreshOne($record);
                         $record->refresh();
@@ -269,6 +291,7 @@ class UrlResource extends Resource
                     Tables\Actions\BulkAction::make('hide')
                         ->label('Hide from sitemap')
                         ->icon('heroicon-o-eye-slash')
+                        ->visible(fn (): bool => static::canCreate())
                         ->action(function ($records) {
                             Url::query()->whereIn('id', $records->pluck('id'))->update(['is_hidden' => true]);
                             app(SitemapGeneratorService::class)->generate();
@@ -278,6 +301,7 @@ class UrlResource extends Resource
                     Tables\Actions\BulkAction::make('show')
                         ->label('Show in sitemap')
                         ->icon('heroicon-o-eye')
+                        ->visible(fn (): bool => static::canCreate())
                         ->action(function ($records) {
                             Url::query()->whereIn('id', $records->pluck('id'))->update(['is_hidden' => false]);
                             app(SitemapGeneratorService::class)->generate();

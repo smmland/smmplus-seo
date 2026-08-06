@@ -11,6 +11,7 @@ use App\Services\HiddenTranslationService;
 use App\Services\SettingsService;
 use App\Services\TranslationSettingsService;
 use App\Support\PanelSection;
+use App\Filament\Concerns\GuardsSectionEdits;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -26,6 +27,7 @@ use ZipArchive;
 class BlogTranslationQueue extends Page implements HasActions
 {
     use InteractsWithActions;
+    use GuardsSectionEdits;
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
@@ -37,7 +39,7 @@ class BlogTranslationQueue extends Page implements HasActions
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::TRANSLATION)) ?? false;
     }
 
     public string $search = '';
@@ -115,6 +117,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function queueMissingForSelectedTopics(): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -353,6 +359,10 @@ class BlogTranslationQueue extends Page implements HasActions
     // clears it (see queueTranslation()), so overriding never gets stuck hiding real progress.
     public function toggleSiteUpdateOverride(string $groupKey, string $targetLangCode): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         if (! Schema::hasColumn('urls', 'site_update_override')) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -401,6 +411,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function reactivateAllHiddenTranslations(): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $count = app(HiddenTranslationService::class)->reactivateAll();
 
         if ($count === 0) {
@@ -426,6 +440,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function reactivateLanguage(string $groupKey, string $targetLangCode): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $row = Url::query()->where('group_key', $groupKey)->where('lang', $targetLangCode)->first();
 
         if (! $row) {
@@ -448,6 +466,10 @@ class BlogTranslationQueue extends Page implements HasActions
 
     public function recheckTopic(string $groupKey, BlogTranslationDetectionService $detector): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $result = $detector->refreshTopic($groupKey);
 
         unset($this->queue);
@@ -478,6 +500,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function recheckMissingLanguage(string $groupKey, string $targetLangCode, BlogTranslationDetectionService $detector): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $result = $detector->checkMissingLanguage($groupKey, $targetLangCode);
 
         unset($this->queue);
@@ -503,6 +529,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function extractContent(int $urlId, BlogContentExtractionService $extractor): array
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return ['ok' => false, 'error' => 'No permission.'];
+        }
+
         $row = Url::query()->find($urlId);
 
         if (! $row) {
@@ -550,6 +580,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function saveEditedContent(int $urlId, string $html): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $row = Url::query()->find($urlId);
 
         if (! $row) {
@@ -605,6 +639,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function uploadEditedImage(int $urlId, string $dataUrl): ?string
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return null;
+        }
+
         $row = Url::query()->find($urlId);
 
         if (! $row) {
@@ -650,6 +688,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function translateLanguage(string $groupKey, string $targetLangCode): array
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return ['ok' => false, 'message' => 'No permission.'];
+        }
+
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -701,6 +743,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function translateNextMissingLanguage(string $groupKey): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -784,6 +830,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function translateAllMissingLanguages(string $groupKey): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -868,6 +918,10 @@ class BlogTranslationQueue extends Page implements HasActions
      */
     public function deleteTranslation(string $groupKey, string $targetLangCode): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $defaultLangCode = Language::query()->where('is_default', true)->value('code') ?? 'en';
 
         if ($targetLangCode === $defaultLangCode) {

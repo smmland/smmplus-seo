@@ -73,13 +73,13 @@ class UserResource extends Resource
                 ->columns(2),
 
             Forms\Components\Section::make('Section access')
-                ->description('What this user can see and manage, one toggle per part of the panel. Ignored entirely while "Super admin" above is on.')
+                ->description('What this user can see and manage. Each part of the panel has up to three independent toggles - View (see the lists/queues, read-only), Edit (translate, confirm, mark rewarded, create/edit/delete records, ...), and Settings (that section\'s own settings page). Ignored entirely while "Super admin" above is on.')
                 ->schema([
                     Forms\Components\CheckboxList::make('granted_sections')
                         ->label('')
-                        ->options(PanelSection::LABELS)
-                        ->descriptions(PanelSection::DESCRIPTIONS)
-                        ->columns(2),
+                        ->options(PanelSection::flatOptions())
+                        ->columns(3)
+                        ->bulkToggleable(),
                 ])
                 ->hidden(fn (Get $get): bool => (bool) $get('is_super_admin')),
         ]);
@@ -103,7 +103,7 @@ class UserResource extends Resource
 
                 Tables\Columns\TextColumn::make('granted_sections')
                     ->label('Sections')
-                    ->formatStateUsing(fn (string $state): string => PanelSection::LABELS[$state] ?? $state)
+                    ->formatStateUsing(fn (string $state): string => PanelSection::flatOptions()[$state] ?? $state)
                     ->badge()
                     ->placeholder('—'),
 

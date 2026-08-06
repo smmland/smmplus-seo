@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Concerns\LogsActivity;
 use App\Support\PanelSection;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, LogsActivity;
 
     protected $fillable = ['name', 'email', 'password', 'is_super_admin', 'granted_sections'];
 
@@ -49,8 +50,10 @@ class User extends Authenticatable implements FilamentUser
      * "full admin" until PanelSection existed, so every account that predates it stays one (see
      * the is_super_admin migration), and it's the only way to reach user management or the
      * self-update installer, neither of which is itself a grantable PanelSection.
+     *
+     * $key is a full PanelSection::key() string (e.g. "giveaway_edit"), not a bare section name.
      */
-    public function hasAccess(string $section): bool
+    public function hasAccess(string $key): bool
     {
         if ($this->isSuperAdmin()) {
             return true;
@@ -62,7 +65,31 @@ class User extends Authenticatable implements FilamentUser
             return true;
         }
 
-        return in_array($section, $this->granted_sections ?? [], true);
+        return in_array($key, $this->granted_sections ?? [], true);
+    }
+
+    /**
+     * Page-level access check: true if the user holds any of the given keys - used for a
+     * section's main list/queue pages, which a VIEW-only or an EDIT grant should both open (EDIT
+     * implies you can also just look). Action-level gating still checks the EDIT key specifically
+     * via hasAccess().
+     *
+     * @param  list<string>  $keys
+     */
+    public function hasAnyAccess(array $keys): bool
+    {
+        foreach ($keys as $key) {
+            if ($this->hasAccess($key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function activityLabel(): string
+    {
+        return $this->email;
     }
 
     /**

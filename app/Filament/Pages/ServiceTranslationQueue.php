@@ -9,6 +9,7 @@ use App\Services\ServiceCatalogService;
 use App\Services\SettingsService;
 use App\Services\TranslationSettingsService;
 use App\Support\PanelSection;
+use App\Filament\Concerns\GuardsSectionEdits;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -36,6 +37,7 @@ use ZipArchive;
 class ServiceTranslationQueue extends Page implements HasActions
 {
     use InteractsWithActions;
+    use GuardsSectionEdits;
 
     protected static ?string $navigationIcon = 'heroicon-o-tag';
 
@@ -47,7 +49,7 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::TRANSLATION)) ?? false;
     }
 
     public string $search = '';
@@ -338,6 +340,10 @@ class ServiceTranslationQueue extends Page implements HasActions
      */
     public function runSyncNow(ServiceCatalogService $catalog): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         if (! $this->catalogTableAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -442,6 +448,10 @@ class ServiceTranslationQueue extends Page implements HasActions
      */
     private function queueSingle(string $serviceKey, string $targetLangCode, string $field): array
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return ['ok' => false, 'message' => 'No permission.'];
+        }
+
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -491,6 +501,10 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     private function queueAllMissingForService(string $serviceKey, string $field): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 
@@ -537,6 +551,10 @@ class ServiceTranslationQueue extends Page implements HasActions
 
     private function queueMissingForSelectedField(string $field): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         if (! $this->translationTrackingAvailable()) {
             $this->notifyDatabaseUpdateNeeded();
 

@@ -31,7 +31,7 @@ class GeneralSettings extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::GENERAL) ?? false;
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::GENERAL, PanelSection::TIER_SETTINGS)) ?? false;
     }
 
     public ?array $data = [];

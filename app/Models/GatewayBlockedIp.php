@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LogsActivity;
+use App\Support\PanelSection;
 use Illuminate\Database\Eloquent\Model;
 
 class GatewayBlockedIp extends Model
 {
+    use LogsActivity;
+
     protected $fillable = ['ip', 'note', 'is_active', 'blocked_until', 'offense_count'];
 
     protected function casts(): array
@@ -26,5 +30,15 @@ class GatewayBlockedIp extends Model
             ->where('is_active', true)
             ->where(fn ($q) => $q->whereNull('blocked_until')->orWhere('blocked_until', '>', now()))
             ->exists();
+    }
+
+    public function activityLabel(): string
+    {
+        return $this->ip;
+    }
+
+    public function activitySection(): ?string
+    {
+        return PanelSection::FREE_SERVICE;
     }
 }

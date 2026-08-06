@@ -3,9 +3,11 @@
 namespace App\Filament\Pages;
 
 use App\Models\TelegramPost;
+use App\Services\ActivityLogService;
 use App\Services\TelegramPostGeneratorService;
 use App\Services\TelegramSettingsService;
 use App\Support\PanelSection;
+use App\Filament\Concerns\GuardsSectionEdits;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -27,6 +29,7 @@ use Livewire\Attributes\Computed;
 class TelegramQueue extends Page implements HasActions
 {
     use InteractsWithActions;
+    use GuardsSectionEdits;
 
     protected static ?string $navigationIcon = 'heroicon-o-paper-airplane';
 
@@ -40,7 +43,7 @@ class TelegramQueue extends Page implements HasActions
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::TELEGRAM) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::TELEGRAM)) ?? false;
     }
 
     public string $search = '';
@@ -181,6 +184,10 @@ class TelegramQueue extends Page implements HasActions
      */
     public function generatePlanNow(TelegramPostGeneratorService $generator): void
     {
+        if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
+            return;
+        }
+
         if (! app(TelegramSettingsService::class)->isEnabled()) {
             Notification::make()
                 ->title('Telegram integration is disabled')
@@ -213,17 +220,33 @@ class TelegramQueue extends Page implements HasActions
 
     public function confirmPost(int $postId): void
     {
+        if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
+            return;
+        }
+
+        $post = TelegramPost::query()->find($postId);
+
         TelegramPost::query()->where('id', $postId)->where('status', TelegramPost::STATUS_PENDING)->update(['status' => TelegramPost::STATUS_CONFIRMED]);
+
+        $this->logPostAction('telegram.post_confirmed', $post);
 
         unset($this->queue);
     }
 
     public function rejectPost(int $postId): void
     {
+        if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
+            return;
+        }
+
+        $post = TelegramPost::query()->find($postId);
+
         TelegramPost::query()
             ->where('id', $postId)
             ->whereIn('status', TelegramPost::SENDABLE_STATUSES)
             ->update(['status' => TelegramPost::STATUS_REJECTED]);
+
+        $this->logPostAction('telegram.post_rejected', $post);
 
         unset($this->queue);
 
@@ -234,7 +257,15 @@ class TelegramQueue extends Page implements HasActions
     // than confirmed, since un-rejecting isn't the same as an admin actively re-approving it.
     public function unrejectPost(int $postId): void
     {
+        if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
+            return;
+        }
+
+        $post = TelegramPost::query()->find($postId);
+
         TelegramPost::query()->where('id', $postId)->where('status', TelegramPost::STATUS_REJECTED)->update(['status' => TelegramPost::STATUS_PENDING]);
+
+        $this->logPostAction('telegram.post_unrejected', $post);
 
         unset($this->queue);
     }
@@ -243,11 +274,19 @@ class TelegramQueue extends Page implements HasActions
     // original scheduled_at was (long past by the time it's noticed failed).
     public function retryPost(int $postId): void
     {
+        if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
+            return;
+        }
+
+        $post = TelegramPost::query()->find($postId);
+
         TelegramPost::query()->where('id', $postId)->where('status', TelegramPost::STATUS_FAILED)->update([
             'status' => TelegramPost::STATUS_PENDING,
             'scheduled_at' => now(),
             'error_message' => null,
         ]);
+
+        $this->logPostAction('telegram.post_retried', $post);
 
         unset($this->queue);
 
@@ -256,10 +295,27 @@ class TelegramQueue extends Page implements HasActions
 
     public function deletePost(int $postId): void
     {
+        if (! $this->assertCanEdit(PanelSection::TELEGRAM)) {
+            return;
+        }
+
+        $post = TelegramPost::query()->find($postId);
+
         TelegramPost::query()->where('id', $postId)->delete();
+
+        $this->logPostAction('telegram.post_deleted', $post);
 
         unset($this->queue);
         unset($this->sentHistory);
+    }
+
+    private function logPostAction(string $action, ?TelegramPost $post): void
+    {
+        if (! $post) {
+            return;
+        }
+
+        app(ActivityLogService::class)->record($action, $post, section: PanelSection::TELEGRAM, subjectLabel: $post->title ?? "#{$post->id}");
     }
 
     public function editPostAction(): Action
@@ -268,6 +324,7 @@ class TelegramQueue extends Page implements HasActions
             ->label('Edit')
             ->icon('heroicon-o-pencil-square')
             ->color('gray')
+            ->visible(fn (): bool => auth()->user()?->hasAccess(PanelSection::key(PanelSection::TELEGRAM, PanelSection::TIER_EDIT)) ?? false)
             ->modalWidth(MaxWidth::TwoExtraLarge)
             ->fillForm(function (array $arguments): array {
                 $post = TelegramPost::query()->find($arguments['postId']);
@@ -281,7 +338,19 @@ class TelegramQueue extends Page implements HasActions
                     ->rows(8),
             ])
             ->action(function (array $data, array $arguments) {
+                $post = TelegramPost::query()->find($arguments['postId']);
+
                 TelegramPost::query()->where('id', $arguments['postId'])->update(['message_text' => $data['messageText']]);
+
+                if ($post) {
+                    app(ActivityLogService::class)->record(
+                        'telegram.post_edited',
+                        $post,
+                        ['message_text' => ['old' => $post->message_text, 'new' => $data['messageText']]],
+                        PanelSection::TELEGRAM,
+                        $post->title ?? "#{$post->id}",
+                    );
+                }
 
                 unset($this->queue);
 

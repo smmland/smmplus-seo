@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class GatewayBlockedIpResource extends Resource
 {
@@ -25,7 +26,27 @@ class GatewayBlockedIpResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::FREE_SERVICE)) ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::FREE_SERVICE, PanelSection::TIER_EDIT)) ?? false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return static::canCreate();
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::canCreate();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::canCreate();
     }
 
     public static function form(Form $form): Form
@@ -97,6 +118,7 @@ class GatewayBlockedIpResource extends Resource
                     ->label(fn (GatewayBlockedIp $record) => $record->is_active ? 'Unblock' : 'Block')
                     ->icon(fn (GatewayBlockedIp $record) => $record->is_active ? 'heroicon-o-lock-open' : 'heroicon-o-lock-closed')
                     ->color(fn (GatewayBlockedIp $record) => $record->is_active ? 'success' : 'danger')
+                    ->visible(fn (): bool => static::canCreate())
                     ->action(fn (GatewayBlockedIp $record) => $record->update(
                         // Re-blocking manually from here is a permanent block, not a timed
                         // auto-block, so clear any leftover expiry from a past auto-block.
@@ -110,12 +132,14 @@ class GatewayBlockedIpResource extends Resource
                     Tables\Actions\BulkAction::make('block')
                         ->label('Block')
                         ->icon('heroicon-o-lock-closed')
+                        ->visible(fn (): bool => static::canCreate())
                         ->action(fn ($records) => GatewayBlockedIp::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => true, 'blocked_until' => null]))
                         ->deselectRecordsAfterCompletion(),
 
                     Tables\Actions\BulkAction::make('unblock')
                         ->label('Unblock')
                         ->icon('heroicon-o-lock-open')
+                        ->visible(fn (): bool => static::canCreate())
                         ->action(fn ($records) => GatewayBlockedIp::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => false]))
                         ->deselectRecordsAfterCompletion(),
 

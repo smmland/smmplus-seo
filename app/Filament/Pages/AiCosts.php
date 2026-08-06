@@ -34,7 +34,7 @@ class AiCosts extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::GENERAL) ?? false;
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::GENERAL, PanelSection::TIER_VIEW)) ?? false;
     }
 
     // How many rows each breakdown table shows per page - a busy site could have hundreds of

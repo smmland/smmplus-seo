@@ -31,7 +31,7 @@ class GatewaySettings extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::FREE_SERVICE, PanelSection::TIER_SETTINGS)) ?? false;
     }
 
     public ?array $data = [];

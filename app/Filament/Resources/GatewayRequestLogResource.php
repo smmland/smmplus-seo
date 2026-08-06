@@ -27,7 +27,7 @@ class GatewayRequestLogResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::FREE_SERVICE)) ?? false;
     }
 
     // Append-only audit log - nothing to create or edit by hand.

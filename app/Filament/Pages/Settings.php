@@ -29,7 +29,7 @@ class Settings extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::SEO, PanelSection::TIER_SETTINGS)) ?? false;
     }
 
     public ?array $data = [];

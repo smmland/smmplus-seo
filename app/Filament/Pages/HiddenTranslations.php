@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Url;
 use App\Services\HiddenTranslationService;
 use App\Support\PanelSection;
+use App\Filament\Concerns\GuardsSectionEdits;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
@@ -29,6 +30,8 @@ use Livewire\Attributes\Computed;
  */
 class HiddenTranslations extends Page
 {
+    use GuardsSectionEdits;
+
     protected static ?string $navigationIcon = 'heroicon-o-eye-slash';
 
     protected static ?string $navigationGroup = 'Translation';
@@ -49,7 +52,7 @@ class HiddenTranslations extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::TRANSLATION)) ?? false;
     }
 
     public string $search = '';
@@ -108,6 +111,10 @@ class HiddenTranslations extends Page
      */
     public function fixUnflaggedContent(): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $count = app(HiddenTranslationService::class)->fixUnflaggedContent();
 
         unset($this->unflaggedContentCount);
@@ -212,6 +219,10 @@ class HiddenTranslations extends Page
 
     public function reactivate(int $urlId): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $row = Url::query()->find($urlId);
 
         if (! $row) {
@@ -234,6 +245,10 @@ class HiddenTranslations extends Page
 
     public function reactivateAll(): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $count = app(HiddenTranslationService::class)->reactivateAll();
 
         if ($count === 0) {
@@ -261,6 +276,10 @@ class HiddenTranslations extends Page
      */
     public function deleteOrphaned(int $urlId): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $row = Url::query()->find($urlId);
 
         if (! $row) {
@@ -311,6 +330,10 @@ class HiddenTranslations extends Page
      */
     public function recoverFromDisk(string $slug, string $lang): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         app(HiddenTranslationService::class)->recoverFileAsRow($slug, $lang);
 
         $this->diskScanResults = collect($this->diskScanResults)
@@ -335,6 +358,10 @@ class HiddenTranslations extends Page
      */
     public function deleteDiskFile(string $slug, string $lang): void
     {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
         $baseDir = "blog/{$slug}";
         Storage::disk('public')->delete([
             "{$baseDir}/content-{$lang}.html",

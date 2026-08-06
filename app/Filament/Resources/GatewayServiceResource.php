@@ -11,6 +11,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class GatewayServiceResource extends Resource
 {
@@ -26,7 +27,27 @@ class GatewayServiceResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::FREE_SERVICE)) ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::FREE_SERVICE, PanelSection::TIER_EDIT)) ?? false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return static::canCreate();
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::canCreate();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::canCreate();
     }
 
     public static function form(Form $form): Form
@@ -165,12 +186,14 @@ class GatewayServiceResource extends Resource
                     Tables\Actions\BulkAction::make('activate')
                         ->label('Activate')
                         ->icon('heroicon-o-check-circle')
+                        ->visible(fn (): bool => static::canCreate())
                         ->action(fn ($records) => GatewayService::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => true]))
                         ->deselectRecordsAfterCompletion(),
 
                     Tables\Actions\BulkAction::make('deactivate')
                         ->label('Deactivate')
                         ->icon('heroicon-o-x-circle')
+                        ->visible(fn (): bool => static::canCreate())
                         ->action(fn ($records) => GatewayService::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => false]))
                         ->deselectRecordsAfterCompletion(),
 

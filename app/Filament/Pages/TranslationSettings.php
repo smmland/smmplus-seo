@@ -37,7 +37,7 @@ class TranslationSettings extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::TRANSLATION) ?? false;
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::TRANSLATION, PanelSection::TIER_SETTINGS)) ?? false;
     }
 
     public ?array $data = [];

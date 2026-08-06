@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LogsActivity;
+use App\Support\PanelSection;
 use Illuminate\Database\Eloquent\Model;
 
 class Url extends Model
 {
+    use LogsActivity;
+
     public const PATTERN_TYPES = ['HOME', 'BLOG', 'LANDING', 'STATIC', 'UTILITY', 'OTHER'];
 
     protected $fillable = [
@@ -109,5 +113,18 @@ class Url extends Model
         }
 
         return $this->content_extracted_at !== null && $this->content_extracted_at->gt($this->translation_checked_at);
+    }
+
+    public function activityLabel(): string
+    {
+        return $this->source_url;
+    }
+
+    // Blog rows are edited through BlogTranslationQueue/HiddenTranslations (Translation); every
+    // other pattern type is edited through UrlResource (SEO) - matches which admin page an edit
+    // to this particular row would actually have come through.
+    public function activitySection(): ?string
+    {
+        return $this->pattern_type === 'BLOG' ? PanelSection::TRANSLATION : PanelSection::SEO;
     }
 }

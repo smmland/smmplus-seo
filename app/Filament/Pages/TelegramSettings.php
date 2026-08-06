@@ -33,7 +33,7 @@ class TelegramSettings extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::TELEGRAM) ?? false;
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::TELEGRAM, PanelSection::TIER_SETTINGS)) ?? false;
     }
 
     public ?array $data = [];

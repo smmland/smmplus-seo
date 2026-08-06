@@ -21,7 +21,7 @@ class SyncRunResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::SEO)) ?? false;
     }
 
     // Read-only log of sync runs - nothing to create or edit by hand.

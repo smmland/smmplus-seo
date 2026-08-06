@@ -28,7 +28,7 @@ class GatewayStats extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::FREE_SERVICE) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::FREE_SERVICE)) ?? false;
     }
 
     #[Url]

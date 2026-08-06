@@ -25,7 +25,7 @@ class SitemapSyncWidget extends Widget
 
     public static function canView(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::SEO) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::SEO)) ?? false;
     }
 
     protected function getViewData(): array

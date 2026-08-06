@@ -26,7 +26,7 @@ class TelegramQueueWidget extends Widget
 
     public static function canView(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::TELEGRAM) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::TELEGRAM)) ?? false;
     }
 
     protected function getViewData(): array

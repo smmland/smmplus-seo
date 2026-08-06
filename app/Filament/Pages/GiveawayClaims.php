@@ -3,8 +3,10 @@
 namespace App\Filament\Pages;
 
 use App\Models\GiveawayClaim;
+use App\Services\ActivityLogService;
 use App\Services\GiveawaySettingsService;
 use App\Support\PanelSection;
+use App\Filament\Concerns\GuardsSectionEdits;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -25,6 +27,7 @@ use Livewire\Attributes\Computed;
 class GiveawayClaims extends Page implements HasActions
 {
     use InteractsWithActions;
+    use GuardsSectionEdits;
 
     protected static ?string $navigationIcon = 'heroicon-o-gift';
 
@@ -36,7 +39,7 @@ class GiveawayClaims extends Page implements HasActions
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::GIVEAWAY) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::GIVEAWAY)) ?? false;
     }
 
     public string $platformFilter = 'all';
@@ -100,10 +103,20 @@ class GiveawayClaims extends Page implements HasActions
 
     public function rejectClaim(int $claimId): void
     {
+        if (! $this->assertCanEdit(PanelSection::GIVEAWAY)) {
+            return;
+        }
+
+        $claim = GiveawayClaim::query()->find($claimId);
+
         GiveawayClaim::query()
             ->where('id', $claimId)
             ->whereIn('status', [GiveawayClaim::STATUS_VERIFIED, GiveawayClaim::STATUS_PENDING_REVIEW])
             ->update(['status' => GiveawayClaim::STATUS_REJECTED]);
+
+        if ($claim) {
+            app(ActivityLogService::class)->record('giveaway.claim_rejected', $claim, section: PanelSection::GIVEAWAY, subjectLabel: "{$claim->platform}: {$claim->panel_user_email}");
+        }
 
         unset($this->claims);
         unset($this->pendingCounts);
@@ -113,7 +126,17 @@ class GiveawayClaims extends Page implements HasActions
 
     public function deleteClaim(int $claimId): void
     {
+        if (! $this->assertCanEdit(PanelSection::GIVEAWAY)) {
+            return;
+        }
+
+        $claim = GiveawayClaim::query()->find($claimId);
+
         GiveawayClaim::query()->where('id', $claimId)->delete();
+
+        if ($claim) {
+            app(ActivityLogService::class)->record('giveaway.claim_deleted', $claim, section: PanelSection::GIVEAWAY, subjectLabel: "{$claim->platform}: {$claim->panel_user_email}");
+        }
 
         unset($this->claims);
         unset($this->pendingCounts);
@@ -125,6 +148,7 @@ class GiveawayClaims extends Page implements HasActions
             ->label('Mark as rewarded')
             ->icon('heroicon-o-check-badge')
             ->color('success')
+            ->visible(fn (): bool => auth()->user()?->hasAccess(PanelSection::key(PanelSection::GIVEAWAY, PanelSection::TIER_EDIT)) ?? false)
             ->fillForm(function (array $arguments) {
                 $claim = GiveawayClaim::query()->find($arguments['claimId']);
                 $amount = $claim ? app(GiveawaySettingsService::class)->getRewardAmountFor($claim->platform) : null;
@@ -138,12 +162,24 @@ class GiveawayClaims extends Page implements HasActions
                     ->rows(3),
             ])
             ->action(function (array $data, array $arguments) {
+                $claim = GiveawayClaim::query()->find($arguments['claimId']);
+
                 GiveawayClaim::query()->where('id', $arguments['claimId'])->update([
                     'status' => GiveawayClaim::STATUS_REWARDED,
                     'reward_note' => $data['rewardNote'] ?: null,
                     'rewarded_at' => now(),
                     'rewarded_by_user_id' => auth()->id(),
                 ]);
+
+                if ($claim) {
+                    app(ActivityLogService::class)->record(
+                        'giveaway.claim_rewarded',
+                        $claim,
+                        ['reward_note' => $data['rewardNote'] ?: null],
+                        PanelSection::GIVEAWAY,
+                        "{$claim->platform}: {$claim->panel_user_email}",
+                    );
+                }
 
                 unset($this->claims);
                 unset($this->pendingCounts);

@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LogsActivity;
+use App\Support\PanelSection;
 use Illuminate\Database\Eloquent\Model;
 
 class Language extends Model
 {
+    use LogsActivity;
+
     protected $fillable = ['code', 'name', 'is_default', 'is_active', 'sort_order'];
 
     // Single source of truth for which language codes read right-to-left - used everywhere a
@@ -30,5 +34,15 @@ class Language extends Model
     public static function direction(string $code): string
     {
         return self::isRtl($code) ? 'rtl' : 'ltr';
+    }
+
+    public function activityLabel(): string
+    {
+        return "{$this->code} ({$this->name})";
+    }
+
+    public function activitySection(): ?string
+    {
+        return PanelSection::TRANSLATION;
     }
 }

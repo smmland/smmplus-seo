@@ -174,6 +174,45 @@ class TelegramBotService
         return $download->successful() ? $download->body() : null;
     }
 
+    // Statuses Telegram returns for getChatMember that count as "currently in the channel" - a
+    // 'left'/'kicked' member still has a getChatMember row, just not one of these statuses.
+    private const CHAT_MEMBER_STATUSES = ['member', 'administrator', 'creator'];
+
+    /**
+     * Used by the Giveaway feature to check whether a given Telegram user id is currently a
+     * member of the configured channel - independent of the isEnabled() master posting toggle
+     * (same reasoning as getUpdates()/deleteWebhook(): checking membership is a different concern
+     * from posting content, so it works even while posting is turned off).
+     *
+     * @return array{ok: bool, message: string, isMember?: bool}
+     */
+    public function getChatMember(string $userId): array
+    {
+        $token = $this->settings->getBotToken();
+        $chatId = $this->settings->getChannelId();
+
+        if (! $token || ! $chatId) {
+            return ['ok' => false, 'message' => 'No bot token or channel id configured - set them up in Telegram Settings first.'];
+        }
+
+        try {
+            $response = Http::timeout(15)->get("https://api.telegram.org/bot{$token}/getChatMember", [
+                'chat_id' => $chatId,
+                'user_id' => $userId,
+            ]);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
+        }
+
+        if (! $response->successful() || ! $response->json('ok')) {
+            return ['ok' => false, 'message' => $this->errorMessage($response)];
+        }
+
+        $status = $response->json('result.status');
+
+        return ['ok' => true, 'message' => 'ok', 'isMember' => in_array($status, self::CHAT_MEMBER_STATUSES, true)];
+    }
+
     /**
      * Validates the bot token via Telegram's own lightweight `getMe` endpoint - real auth check,
      * doesn't touch the channel at all, for the settings page's "Test connection" button.

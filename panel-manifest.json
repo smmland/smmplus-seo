@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.16.9",
-    "notes": "The two new Dashboard cards from the last update (Service translation pipeline, Telegram channel queue) now sit side by side instead of stacked full-width, each with a proper 2x2 stat grid. Also fixed a real display bug found while doing this: their stat tiles were using responsive grid classes (sm:grid-cols-2, lg:grid-cols-4) that don't actually exist in this app's pre-built CSS bundle, so every tile had silently been stacking in a single column regardless of screen size since the last update shipped - switched to a plain unprefixed grid-cols-2, which is compiled and works."
+    "version": "1.17.0",
+    "notes": "New Giveaway feature (phase 1: Telegram + YouTube): a new public page (giveaway.twig, on the smmplus-website site) lets logged-in users verify they joined the Telegram channel (via the Telegram Login Widget + a bot membership check) or subscribed on YouTube (via Google OAuth) - both checked automatically. Reward delivery itself stays manual: verified claims land in a new Giveaway > Claims admin page here, and the admin credits the wallet by hand in the real smm.plus panel then marks it rewarded, since this app has no API access to that panel's wallet system. New Giveaway > Settings page for the bot username, Google OAuth credentials, and YouTube channel id."
 }

@@ -19,13 +19,31 @@ class DashboardStatsWidget extends StatsOverviewWidget
     // Placed after NewBlogTopicsWidget (sort 2) and SitemapSyncWidget (sort 1).
     protected static ?int $sort = 3;
 
+    // Each card links to (and is gated the same as) a specific page - GatewayStats, Hidden
+    // Translations, AiCosts - so a user without access to that page never sees a dashboard card
+    // teasing numbers from it either. Hides the whole widget once none of the three apply.
+    public static function canView(): bool
+    {
+        return GatewayStats::canAccess() || HiddenTranslations::canAccess() || AiCosts::canAccess();
+    }
+
     protected function getStats(): array
     {
-        return [
-            $this->gatewayRequestsStat(),
-            $this->recoveryStat(),
-            $this->aiSpendStat(),
-        ];
+        $stats = [];
+
+        if (GatewayStats::canAccess()) {
+            $stats[] = $this->gatewayRequestsStat();
+        }
+
+        if (HiddenTranslations::canAccess()) {
+            $stats[] = $this->recoveryStat();
+        }
+
+        if (AiCosts::canAccess()) {
+            $stats[] = $this->aiSpendStat();
+        }
+
+        return $stats;
     }
 
     // Success vs everything-else (blocked IPs, rate limits, invalid requests, upstream errors -

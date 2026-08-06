@@ -48,10 +48,14 @@ class AdminPanelProvider extends PanelProvider
                 Widgets\AccountWidget::class,
             ])
             ->userMenuItems([
+                // Each mirrors its page's own canAccess() so a user who can't open the page
+                // never even sees the shortcut to it here - kept as a static call (not a
+                // duplicated permission check) so the two can never drift apart.
                 MenuItem::make()
                     ->label('Settings')
                     ->icon('heroicon-o-adjustments-horizontal')
-                    ->url(fn () => GeneralSettings::getUrl()),
+                    ->url(fn () => GeneralSettings::getUrl())
+                    ->visible(fn (): bool => GeneralSettings::canAccess()),
                 // Registered after Settings (Filament renders custom user menu items in the order
                 // they're added here, above the built-in Logout item) so this sits directly next
                 // to "Sign out" in the dropdown, as asked for - moved out of General Settings
@@ -59,11 +63,13 @@ class AdminPanelProvider extends PanelProvider
                 MenuItem::make()
                     ->label('AI Costs')
                     ->icon('heroicon-o-currency-dollar')
-                    ->url(fn () => AiCosts::getUrl()),
+                    ->url(fn () => AiCosts::getUrl())
+                    ->visible(fn (): bool => AiCosts::canAccess()),
                 MenuItem::make()
                     ->label('Update')
                     ->icon('heroicon-o-arrow-up-tray')
-                    ->url(fn () => PanelUpdate::getUrl()),
+                    ->url(fn () => PanelUpdate::getUrl())
+                    ->visible(fn (): bool => PanelUpdate::canAccess()),
             ])
             ->middleware([
                 EncryptCookies::class,

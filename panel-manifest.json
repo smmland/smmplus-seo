@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.19.1",
-    "notes": "Service Translation page (Translation > Service Translation): the description-status filter now has an independent title-status filter next to it, using the same options (has a missing language / needs to be uploaded / fully uploaded / all services) - a service must match both to show, so you can, say, look for services needing description work while ignoring their title status entirely (or vice versa). The filter bar was also tidied up: search on its own line, the two status dropdowns clearly labeled side by side, and the 'has description only' toggle moved next to them. No database changes."
+    "version": "1.19.2",
+    "notes": "Two visibility fixes so the per-user permission tiers (from 1.19.0) are respected everywhere, not just on the pages themselves: 1) The Settings / AI Costs / Update shortcuts above 'Sign out' in the top-right user menu now only show up if that user actually has access to the matching page - a user with none of the three sees just their name and Sign out. 2) The dashboard's stats cards (free service requests, hidden/orphaned translations, AI spend) now show only the cards for sections that user has view access to, and the whole card row disappears if none apply. No database changes."
 }

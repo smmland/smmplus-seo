@@ -12,3 +12,9 @@ Route::get('/sitemap-{category}.xml', [SitemapController::class, 'category']);
 
 Route::get('/blog-content/{path}', [BlogContentAssetController::class, 'show'])->where('path', '.*');
 Route::get('/editor-assets/{path}', [EditorAssetController::class, 'show'])->where('path', '.*');
+
+// Reuses the same disk-streaming controller as /blog-content - it's generic over any path on the
+// 'public' disk, not actually blog-specific - for Telegram post images (TelegramImageAiService,
+// TelegramPostGeneratorService, TelegramQueue's "New message" upload), for the same no-symlink
+// reason documented on that controller.
+Route::get('/telegram-images/{path}', [BlogContentAssetController::class, 'show'])->where('path', '.*');

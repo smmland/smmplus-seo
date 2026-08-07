@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.21.0",
-    "notes": "Telegram Channel > Queue: two new ways to post besides the AI-drafted queue. 1) 'Send now' - a new blue paper-airplane button on every pending/confirmed post sends it to the channel immediately instead of waiting for its scheduled time (up to a minute away on the automatic check). 2) 'New message' - a new button next to the filters opens a form to write your own message from scratch, with an optional image attached, and sends it right away. Either one failing (e.g. bot not configured yet) behaves exactly like any other failed post - it lands in the list with the error shown and its own Retry button. No database changes."
+    "version": "1.21.1",
+    "notes": "Fixes Telegram post images never showing up in the panel (list or Details popup) even though the same image sends to the channel fine: the panel was building the image's web address assuming a 'public/storage' shortcut link exists on the server, but that link can only be created by a command line this host doesn't give access to, so every image address was silently broken - the image itself was always saved correctly, the panel just couldn't point a browser at it. Now served through a route the same way this panel already handles blog article images, so no such link is ever needed. No database changes."
 }

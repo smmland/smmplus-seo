@@ -95,7 +95,7 @@
                                     </td>
                                     <td class="p-2">
                                         @if ($post->image_path)
-                                            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($post->image_path) }}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
+                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
                                         @elseif ($post->image_generation_error ?? null)
                                             <div
                                                 class="flex h-12 w-12 items-center justify-center rounded-lg ring-1 ring-gray-950/10 dark:ring-white/10"
@@ -300,7 +300,7 @@
                                 <tr wire:key="history-{{ $post->id }}" class="border-t border-gray-100 dark:border-white/5 align-top">
                                     <td class="p-2">
                                         @if ($post->image_path)
-                                            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($post->image_path) }}" alt="" class="h-10 w-10 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
+                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="" class="h-10 w-10 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
                                         @else
                                             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-300 ring-1 ring-gray-950/10 dark:bg-white/5 dark:text-gray-600 dark:ring-white/10">
                                                 <x-filament::icon icon="heroicon-o-photo" class="h-4 w-4" />

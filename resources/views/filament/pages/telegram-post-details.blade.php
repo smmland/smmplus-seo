@@ -64,5 +64,18 @@
         @if ($post->error_message)
             <p class="mt-3 text-xs text-danger-600 dark:text-danger-400">{{ $post->error_message }}</p>
         @endif
+
+        @if (in_array($post->status, ['pending', 'confirmed'], true) && (auth()->user()?->hasAccess(\App\Support\PanelSection::key(\App\Support\PanelSection::TELEGRAM, \App\Support\PanelSection::TIER_EDIT)) ?? false))
+            <x-filament::button
+                class="mt-4"
+                icon="heroicon-o-paper-airplane"
+                wire:click="sendNowPost({{ $post->id }})"
+                wire:confirm="Send this to the channel right now?"
+                wire:loading.attr="disabled"
+                wire:target="sendNowPost({{ $post->id }})"
+            >
+                Send now
+            </x-filament::button>
+        @endif
     @endif
 </div>

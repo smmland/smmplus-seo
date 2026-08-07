@@ -95,18 +95,14 @@
                                     </td>
                                     <td class="p-2">
                                         @if ($post->image_path)
-                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
+                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="Has an image - see Details" title="Has an image - see Details" class="h-6 w-6 rounded object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
                                         @elseif ($post->image_generation_error ?? null)
                                             <div
-                                                class="flex h-12 w-12 items-center justify-center rounded-lg ring-1 ring-gray-950/10 dark:ring-white/10"
+                                                class="flex h-6 w-6 items-center justify-center rounded ring-1 ring-gray-950/10 dark:ring-white/10"
                                                 style="background-color: rgba(var(--danger-500), .1); color: rgb(var(--danger-700))"
                                                 title="{{ 'Image generation failed: '.$post->image_generation_error }}"
                                             >
-                                                <x-filament::icon icon="heroicon-o-exclamation-triangle" class="h-5 w-5" />
-                                            </div>
-                                        @else
-                                            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-300 ring-1 ring-gray-950/10 dark:bg-white/5 dark:text-gray-600 dark:ring-white/10">
-                                                <x-filament::icon icon="heroicon-o-photo" class="h-5 w-5" />
+                                                <x-filament::icon icon="heroicon-o-exclamation-triangle" class="h-3.5 w-3.5" />
                                             </div>
                                         @endif
                                     </td>
@@ -174,18 +170,6 @@
                                                         wire:click="confirmPost({{ $post->id }})"
                                                     />
                                                 @endif
-
-                                                <x-filament::icon-button
-                                                    icon="heroicon-o-paper-airplane"
-                                                    color="primary"
-                                                    size="sm"
-                                                    label="Send now"
-                                                    tooltip="Send to the channel right now, instead of waiting for its scheduled time"
-                                                    wire:click="sendNowPost({{ $post->id }})"
-                                                    wire:confirm="Send this to the channel right now?"
-                                                    wire:loading.attr="disabled"
-                                                    wire:target="sendNowPost({{ $post->id }})"
-                                                />
 
                                                 <x-filament::icon-button
                                                     icon="heroicon-o-x-mark"
@@ -300,11 +284,7 @@
                                 <tr wire:key="history-{{ $post->id }}" class="border-t border-gray-100 dark:border-white/5 align-top">
                                     <td class="p-2">
                                         @if ($post->image_path)
-                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="" class="h-10 w-10 rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
-                                        @else
-                                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-300 ring-1 ring-gray-950/10 dark:bg-white/5 dark:text-gray-600 dark:ring-white/10">
-                                                <x-filament::icon icon="heroicon-o-photo" class="h-4 w-4" />
-                                            </div>
+                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="Has an image - see Details" title="Has an image - see Details" class="h-6 w-6 rounded object-cover ring-1 ring-gray-950/10 dark:ring-white/10">
                                         @endif
                                     </td>
                                     <td class="p-2" style="max-width: 220px;">

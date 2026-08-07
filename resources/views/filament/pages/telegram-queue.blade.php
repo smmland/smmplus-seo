@@ -99,14 +99,14 @@
                                              present), so they'd silently do nothing and this would render at
                                              the source image's real dimensions instead of a small indicator. --}}
                                         @if ($post->image_path)
-                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="Has an image - see Details" title="Has an image - see Details" class="rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10" style="height: 48px; width: 48px;">
+                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="Has an image - see Details" title="Has an image - see Details" class="rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10" style="height: 96px; width: 96px;">
                                         @elseif ($post->image_generation_error ?? null)
                                             <div
                                                 class="flex items-center justify-center rounded-lg ring-1 ring-gray-950/10 dark:ring-white/10"
-                                                style="height: 48px; width: 48px; background-color: rgba(var(--danger-500), .1); color: rgb(var(--danger-700))"
+                                                style="height: 96px; width: 96px; background-color: rgba(var(--danger-500), .1); color: rgb(var(--danger-700))"
                                                 title="{{ 'Image generation failed: '.$post->image_generation_error }}"
                                             >
-                                                <x-filament::icon icon="heroicon-o-exclamation-triangle" class="h-5 w-5" />
+                                                <x-filament::icon icon="heroicon-o-exclamation-triangle" class="h-8 w-8" />
                                             </div>
                                         @endif
                                     </td>
@@ -288,7 +288,7 @@
                                 <tr wire:key="history-{{ $post->id }}" class="border-t border-gray-100 dark:border-white/5 align-top">
                                     <td class="p-2">
                                         @if ($post->image_path)
-                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="Has an image - see Details" title="Has an image - see Details" class="rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10" style="height: 48px; width: 48px;">
+                                            <img src="{{ url('/telegram-images/'.$post->image_path) }}" alt="Has an image - see Details" title="Has an image - see Details" class="rounded-lg object-cover ring-1 ring-gray-950/10 dark:ring-white/10" style="height: 96px; width: 96px;">
                                         @endif
                                     </td>
                                     <td class="p-2" style="max-width: 220px;">

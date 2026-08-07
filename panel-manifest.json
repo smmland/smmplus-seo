@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.21.3",
-    "notes": "Fixes the Telegram Queue image thumbnail size, which wasn't actually being controlled by the panel at all in 1.21.1/1.21.2 despite both updates claiming to resize it: the sizing was set via a CSS class this panel's stylesheet doesn't actually include, so it silently had no effect and the image was rendering at its real full-size dimensions the whole time (which is why it looked oversized) - the previous update's attempt to shrink it hit the exact same silent no-op, coincidentally landing close to correct by luck of image proportions rather than an actual fix. Now sized directly rather than through that class, confirmed by measuring the actual rendered size rather than just reading the code - a clean 48x48 square, double the previous update's size as asked. No database changes."
+    "version": "1.21.4",
+    "notes": "Telegram Queue: the image thumbnail in the list is now 96x96 (double the previous update's 48x48, per request) - both the real thumbnail and the red warning icon shown when AI image generation failed. No database changes."
 }

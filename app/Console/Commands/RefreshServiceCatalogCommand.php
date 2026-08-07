@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Models\CategoryTranslation;
+use App\Models\CategoryTranslationJob;
 use App\Models\Language;
 use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
@@ -76,11 +78,81 @@ class RefreshServiceCatalogCommand extends Command
             }
         }
 
+        $categoriesQueued = 0;
+
+        if (Schema::hasTable('category_translation_jobs')) {
+            $categoriesQueued = $this->queueMissingCategories($defaultLang, $activeLanguages)['queued'];
+        }
+
         $settings->recordServiceScheduledRun();
 
-        $this->info("Synced {$sync['total']} service(s) ({$sync['new']} new, {$sync['changed']} changed). Checked {$totalChecked}, translated {$totalTranslated}, queued {$queued} ({$retranslated} re-translations due to a content change).");
+        $this->info("Synced {$sync['total']} service(s) ({$sync['new']} new, {$sync['changed']} changed). Checked {$totalChecked}, translated {$totalTranslated}, queued {$queued} ({$retranslated} re-translations due to a content change), {$categoriesQueued} category translation(s) queued.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The category counterpart to queueMissing() above - same "missing = no row yet, or exists
+     * but not looksTranslated(), and not already queued" shape, just against
+     * CategoryTranslation/CategoryTranslationJob (one field - a category has only a name, no
+     * separate description) instead of per-field service rows.
+     *
+     * @return array{queued: int, retranslated: int}
+     */
+    private function queueMissingCategories(string $defaultLang, \Illuminate\Support\Collection $activeLanguages): array
+    {
+        $categoryIds = CategoryTranslation::query()->where('lang', $defaultLang)->pluck('category_id');
+
+        if ($categoryIds->isEmpty() || $activeLanguages->isEmpty()) {
+            return ['queued' => 0, 'retranslated' => 0];
+        }
+
+        $existing = CategoryTranslation::query()
+            ->whereIn('category_id', $categoryIds)
+            ->whereIn('lang', $activeLanguages)
+            ->get()
+            ->keyBy(fn (CategoryTranslation $row) => $row->category_id.'|'.$row->lang);
+
+        $pending = CategoryTranslationJob::query()
+            ->whereIn('category_id', $categoryIds)
+            ->whereIn('status', CategoryTranslationJob::PENDING_STATUSES)
+            ->get()
+            ->keyBy(fn (CategoryTranslationJob $job) => $job->category_id.'|'.$job->target_lang);
+
+        $queued = 0;
+        $retranslated = 0;
+
+        foreach ($categoryIds as $categoryId) {
+            foreach ($activeLanguages as $langCode) {
+                $key = $categoryId.'|'.$langCode;
+
+                if ($pending->has($key)) {
+                    continue;
+                }
+
+                $row = $existing->get($key);
+
+                if ($row && $row->looksTranslated()) {
+                    continue;
+                }
+
+                $wasTranslatedBefore = $row && $row->translated_at !== null;
+                $trigger = $wasTranslatedBefore ? CategoryTranslationJob::TRIGGER_SOURCE_CHANGED : CategoryTranslationJob::TRIGGER_MISSING;
+
+                CategoryTranslationJob::query()->updateOrCreate(
+                    ['category_id' => $categoryId, 'target_lang' => $langCode],
+                    ['status' => CategoryTranslationJob::QUEUED, 'message' => null, 'trigger' => $trigger],
+                );
+
+                $queued++;
+
+                if ($trigger === CategoryTranslationJob::TRIGGER_SOURCE_CHANGED) {
+                    $retranslated++;
+                }
+            }
+        }
+
+        return ['queued' => $queued, 'retranslated' => $retranslated];
     }
 
     /**

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.21.4",
-    "notes": "Telegram Queue: the image thumbnail in the list is now 96x96 (double the previous update's 48x48, per request) - both the real thumbnail and the red warning icon shown when AI image generation failed. No database changes."
+    "version": "1.22.0",
+    "notes": "New: Translation > Category Translation. Category names (the section headers on the services page, e.g. 'Instagram Followers') are now translated, tracked, and synced completely on their own, the same way service titles already are - AI-translate, per-language status badges (missing/needs upload/confirmed live), zip export, and a 'Sync now' button. Categories piggyback on the same hourly services catalog sync, so nothing extra needs setting up - just open the new page and translate what's missing, or let the hourly check auto-queue it like everything else. New category-translation prompt added to Translation > Settings, editable and resettable like the others. Requires 'Update database' after installing this update (adds two new tables)."
 }

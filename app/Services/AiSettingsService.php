@@ -82,6 +82,14 @@ class AiSettingsService
         '{{target_language}}' => 'The language being translated into',
     ];
 
+    // The category name is translated on its own - see CategoryAiTranslationService - since it's
+    // shared by every service in that category rather than belonging to one, unlike the service
+    // title prompt above.
+    public const CATEGORY_TRANSLATION_PLACEHOLDERS = [
+        '{{category_title}}' => 'The category\'s current name to translate',
+        '{{target_language}}' => 'The language being translated into',
+    ];
+
     private const KEY_PROVIDER = 'ai_provider';
     private const KEY_API_KEY_PREFIX = 'ai_api_key_';
     private const KEY_MODEL_PREFIX = 'ai_model_';
@@ -89,6 +97,7 @@ class AiSettingsService
     private const KEY_BLOG_TRANSLATION_PROMPT = 'ai_prompt_blog_translation';
     private const KEY_SERVICE_TRANSLATION_PROMPT = 'ai_prompt_service_translation';
     private const KEY_SERVICE_TITLE_TRANSLATION_PROMPT = 'ai_prompt_service_title_translation';
+    private const KEY_CATEGORY_TRANSLATION_PROMPT = 'ai_prompt_category_translation';
     private const KEY_MAX_CONCURRENT_TRANSLATIONS = 'ai_max_concurrent_translations';
 
     private const DEFAULT_PROVIDER = 'claude';
@@ -208,6 +217,26 @@ class AiSettingsService
 
         ## Title to translate
         {{service_title}}
+        PROMPT;
+
+    // The category name itself, e.g. "Instagram Followers" - shown as a section header on the
+    // services page above every service in that category, translated on its own rather than per
+    // service (see CategoryAiTranslationService).
+    private const DEFAULT_CATEGORY_TRANSLATION_PROMPT = <<<'PROMPT'
+        Translate the service category name below from its original language into
+        {{target_language}} - and only {{target_language}}.
+
+        Translate like a native speaker would name this category for a
+        {{target_language}}-speaking audience - not a literal, word-for-word translation. Keep it
+        short, the same way a category/section heading reads, not a full sentence.
+
+        Rules:
+        - Plain text only - no HTML, no quotation marks around the result.
+        - Keep brand/platform names (e.g. Instagram, TikTok) unchanged unless a localized form is
+          already standard in {{target_language}}.
+
+        ## Category name to translate
+        {{category_title}}
         PROMPT;
 
     public function getProvider(): string
@@ -333,6 +362,21 @@ class AiSettingsService
     public function defaultServiceTitleTranslationPrompt(): string
     {
         return self::DEFAULT_SERVICE_TITLE_TRANSLATION_PROMPT;
+    }
+
+    public function getCategoryTranslationPrompt(): string
+    {
+        return $this->get(self::KEY_CATEGORY_TRANSLATION_PROMPT) ?? self::DEFAULT_CATEGORY_TRANSLATION_PROMPT;
+    }
+
+    public function setCategoryTranslationPrompt(string $prompt): void
+    {
+        $this->set(self::KEY_CATEGORY_TRANSLATION_PROMPT, $prompt);
+    }
+
+    public function defaultCategoryTranslationPrompt(): string
+    {
+        return self::DEFAULT_CATEGORY_TRANSLATION_PROMPT;
     }
 
     /**

@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\CategoryTranslation;
 use App\Models\Language;
 use App\Models\ServiceTranslation;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class ServiceCatalogService
 {
@@ -230,6 +232,8 @@ class ServiceCatalogService
             }
         }
 
+        $this->syncDefaultCategories($parsed['categories'], $defaultLang);
+
         return [
             'ok' => true,
             'total' => count($parsed['services']),
@@ -239,6 +243,54 @@ class ServiceCatalogService
             'changedServices' => $changedServices,
             'removedServices' => $removedServices,
         ];
+    }
+
+    /**
+     * The category counterpart to the per-service loop above - upserts one category_translations
+     * row (default language) per category found on this sync, hashing the label the same way
+     * source_description_hash/source_title_hash already do, and resetting every other language's
+     * is_translated to null when it changed so refreshLanguage() re-checks it instead of trusting
+     * a translation made against the old name forever. Schema-guarded since category_translations
+     * is a newer table than service_translations - an admin who hasn't clicked "Update database"
+     * yet after this feature shipped would otherwise crash the whole sync over a table this
+     * specific loop doesn't strictly need to touch.
+     *
+     * @param  array<string, ?string>  $categories
+     */
+    private function syncDefaultCategories(array $categories, string $defaultLang): void
+    {
+        if (! Schema::hasTable('category_translations')) {
+            return;
+        }
+
+        foreach ($categories as $categoryId => $label) {
+            if ($categoryId === '') {
+                continue;
+            }
+
+            $hash = $label !== null ? md5($label) : null;
+
+            $row = CategoryTranslation::query()->firstOrNew([
+                'category_id' => $categoryId,
+                'lang' => $defaultLang,
+            ]);
+
+            $changed = $row->exists && $hash !== null && $row->source_title_hash !== $hash;
+
+            $row->title = $label;
+            $row->source_title_hash = $hash;
+            $row->checked_at = now();
+            $row->first_seen_at = $row->first_seen_at ?? now();
+            $row->last_seen_at = now();
+            $row->save();
+
+            if ($changed) {
+                CategoryTranslation::query()
+                    ->where('category_id', $categoryId)
+                    ->where('lang', '!=', $defaultLang)
+                    ->update(['is_translated' => null]);
+            }
+        }
     }
 
     /**
@@ -386,7 +438,76 @@ class ServiceCatalogService
             }
         }
 
+        $this->refreshLanguageCategories($parsed['categories'], $langCode, $defaultLang);
+
         return ['ok' => true, 'checked' => $checked, 'translated' => $translated];
+    }
+
+    /**
+     * The category counterpart to the per-service loop above, reusing $parsed['categories'] from
+     * the exact same page fetch refreshLanguage() already made - no extra HTTP call. Same
+     * three-way branch as the per-service title check just above: live differs from default ->
+     * confirmed live; a translation is already stashed here but the live site still shows the
+     * default -> keep it, still flagged as not-yet-uploaded; neither -> not translated.
+     *
+     * @param  array<string, ?string>  $categories
+     */
+    private function refreshLanguageCategories(array $categories, string $langCode, string $defaultLang): void
+    {
+        if (! Schema::hasTable('category_translations')) {
+            return;
+        }
+
+        $defaultRows = CategoryTranslation::query()
+            ->where('lang', $defaultLang)
+            ->get()
+            ->keyBy('category_id');
+
+        foreach ($categories as $categoryId => $label) {
+            if ($categoryId === '') {
+                continue;
+            }
+
+            $default = $defaultRows->get($categoryId);
+
+            if (! $default) {
+                continue;
+            }
+
+            $liveDiffersFromDefault = $label !== null
+                && $default->title !== null
+                && $this->normalize($label) !== $this->normalize($default->title);
+
+            $row = CategoryTranslation::query()->firstOrNew([
+                'category_id' => $categoryId,
+                'lang' => $langCode,
+            ]);
+
+            $hasOwnTranslation = $row->exists
+                && filled($row->title)
+                && $default->title !== null
+                && $this->normalize($row->title) !== $this->normalize($default->title)
+                && ($row->title_translated_from_hash === null || $row->title_translated_from_hash === $default->source_title_hash);
+
+            if ($liveDiffersFromDefault) {
+                $row->title = $label;
+                $row->is_translated = true;
+                $row->live_confirmed_at = now();
+                $row->check_note = 'Confirmed live - name differs from the default language.';
+            } elseif ($hasOwnTranslation) {
+                $row->is_translated = true;
+                $row->check_note = 'Translated here, but the live site still shows the default-language name.';
+            } else {
+                $row->title = $label;
+                $row->is_translated = false;
+                $row->check_note = 'Name matches the default language - not translated yet.';
+            }
+
+            $row->checked_at = now();
+            $row->first_seen_at = $row->first_seen_at ?? now();
+            $row->last_seen_at = now();
+            $row->save();
+        }
     }
 
     private function defaultLang(): string

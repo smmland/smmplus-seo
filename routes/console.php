@@ -72,6 +72,14 @@ Schedule::command('services:process-queue')
     ->withoutOverlapping(20)
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
 
+// The category counterpart to services:process-queue above - categories piggyback on
+// services:refresh-catalog's own sync/queueing (ServiceCatalogService, RefreshServiceCatalogCommand),
+// so this is the only new scheduled entry this feature needs.
+Schedule::command('categories:process-queue')
+    ->everyMinute()
+    ->withoutOverlapping(20)
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
 // Tops up the rolling week-ahead blog-summary Telegram post schedule - daily rather than a
 // strict once-a-week cron so a missed run self-heals on the next tick instead of leaving the
 // queue empty (see TelegramGenerateWeeklyPlanCommand). No-op when Telegram integration is

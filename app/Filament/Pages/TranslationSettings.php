@@ -54,6 +54,7 @@ class TranslationSettings extends Page implements HasForms
             'blogTranslationPrompt' => $aiSettings->getBlogTranslationPrompt(),
             'serviceTranslationPrompt' => $aiSettings->getServiceTranslationPrompt(),
             'serviceTitleTranslationPrompt' => $aiSettings->getServiceTitleTranslationPrompt(),
+            'categoryTranslationPrompt' => $aiSettings->getCategoryTranslationPrompt(),
         ]);
     }
 
@@ -126,6 +127,16 @@ class TranslationSettings extends Page implements HasForms
                             ->rows(10)
                             ->extraInputAttributes(['class' => 'font-mono text-xs']),
                     ]),
+
+                Section::make('Category translation prompt')
+                    ->description('Sent to the AI when translating a category name on the Category Translation page - a category name is shared by every service in it, so it\'s translated and tracked on its own, separate from any one service\'s title.')
+                    ->schema([
+                        Textarea::make('categoryTranslationPrompt')
+                            ->label('Prompt')
+                            ->required()
+                            ->rows(10)
+                            ->extraInputAttributes(['class' => 'font-mono text-xs']),
+                    ]),
             ])
             ->statePath('data');
     }
@@ -147,6 +158,7 @@ class TranslationSettings extends Page implements HasForms
         $aiSettings->setBlogTranslationPrompt($data['blogTranslationPrompt']);
         $aiSettings->setServiceTranslationPrompt($data['serviceTranslationPrompt']);
         $aiSettings->setServiceTitleTranslationPrompt($data['serviceTitleTranslationPrompt']);
+        $aiSettings->setCategoryTranslationPrompt($data['categoryTranslationPrompt']);
 
         Notification::make()
             ->title('Settings saved')
@@ -187,6 +199,20 @@ class TranslationSettings extends Page implements HasForms
         $this->form->fill([
             ...$this->form->getState(),
             'serviceTitleTranslationPrompt' => $aiSettings->defaultServiceTitleTranslationPrompt(),
+        ]);
+
+        Notification::make()
+            ->title('Prompt reset to default')
+            ->body('Not saved yet - click Save to keep it.')
+            ->success()
+            ->send();
+    }
+
+    public function resetCategoryPromptToDefault(AiSettingsService $aiSettings): void
+    {
+        $this->form->fill([
+            ...$this->form->getState(),
+            'categoryTranslationPrompt' => $aiSettings->defaultCategoryTranslationPrompt(),
         ]);
 
         Notification::make()

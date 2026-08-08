@@ -13,6 +13,7 @@ use App\Filament\Concerns\GuardsSectionEdits;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -364,24 +365,49 @@ class TelegramQueue extends Page implements HasActions
             ->fillForm(function (array $arguments): array {
                 $post = TelegramPost::query()->find($arguments['postId']);
 
-                return ['messageText' => $post?->message_text];
+                return [
+                    'messageText' => $post?->message_text,
+                    'scheduledAt' => $post?->scheduled_at,
+                ];
             })
             ->form([
                 Textarea::make('messageText')
                     ->label('Message text')
                     ->required()
                     ->rows(8),
+
+                DateTimePicker::make('scheduledAt')
+                    ->label('Scheduled time')
+                    ->seconds(false)
+                    ->required()
+                    ->helperText('When this post actually sends, if it\'s never rejected first. Overrides whatever the automatic plan originally picked for it.'),
             ])
             ->action(function (array $data, array $arguments) {
                 $post = TelegramPost::query()->find($arguments['postId']);
+                $newScheduledAt = \Illuminate\Support\Carbon::parse($data['scheduledAt']);
 
-                TelegramPost::query()->where('id', $arguments['postId'])->update(['message_text' => $data['messageText']]);
+                $changes = [];
 
                 if ($post) {
+                    if ($post->message_text !== $data['messageText']) {
+                        $changes['message_text'] = ['old' => $post->message_text, 'new' => $data['messageText']];
+                    }
+
+                    if (! $post->scheduled_at?->eq($newScheduledAt)) {
+                        $changes['scheduled_at'] = ['old' => $post->scheduled_at?->toDateTimeString(), 'new' => $newScheduledAt->toDateTimeString()];
+                    }
+                }
+
+                TelegramPost::query()->where('id', $arguments['postId'])->update([
+                    'message_text' => $data['messageText'],
+                    'scheduled_at' => $newScheduledAt,
+                ]);
+
+                if ($post && ! empty($changes)) {
                     app(ActivityLogService::class)->record(
                         'telegram.post_edited',
                         $post,
-                        ['message_text' => ['old' => $post->message_text, 'new' => $data['messageText']]],
+                        $changes,
                         PanelSection::TELEGRAM,
                         $post->title ?? "#{$post->id}",
                     );

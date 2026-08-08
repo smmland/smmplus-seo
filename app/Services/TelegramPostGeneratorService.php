@@ -129,12 +129,17 @@ class TelegramPostGeneratorService
 
         $results = $this->contentAi->generateMany($prepared);
 
-        $interval = intdiv(24 * 60, max(1, $postsPerDay));
         $latestScheduled = TelegramPost::query()
             ->where('type', TelegramPost::TYPE_BLOG_SUMMARY)
             ->whereIn('status', TelegramPost::SENDABLE_STATUSES)
             ->max('scheduled_at');
-        $nextSlot = ($latestScheduled ? Carbon::parse($latestScheduled) : now())->addMinutes($interval);
+        $startAfter = $latestScheduled ? Carbon::parse($latestScheduled) : now();
+        if ($startAfter->lt(now())) {
+            $startAfter = now();
+        }
+
+        $slotTimes = $this->generateSlotTimes($this->settings->getPostSlots(), $startAfter, $candidates->count());
+        $slotIndex = 0;
 
         $created = 0;
         $firstFailureMessage = null;
@@ -166,7 +171,7 @@ class TelegramPostGeneratorService
                 'image_path' => $imagePath,
                 'image_source' => $imageSource,
                 'image_generation_error' => $imageError,
-                'scheduled_at' => $nextSlot,
+                'scheduled_at' => $slotTimes[$slotIndex] ?? $startAfter->copy()->addMinutes(30 * ($slotIndex + 1)),
                 'status' => TelegramPost::STATUS_PENDING,
                 'ai_provider' => $result['provider'] ?? null,
                 'ai_model' => $result['model'] ?? null,
@@ -176,8 +181,8 @@ class TelegramPostGeneratorService
                 'image_cost_usd' => $imageCost,
             ]);
 
+            $slotIndex++;
             $created++;
-            $nextSlot = $nextSlot->copy()->addMinutes($interval);
         }
 
         $this->settings->recordWeeklyPlanRun();
@@ -277,6 +282,74 @@ class TelegramPostGeneratorService
         }
 
         return ['created' => $created];
+    }
+
+    /**
+     * Turns the configured per-slot windows (TelegramSettingsService::getPostSlots()) into actual
+     * datetimes, walking forward day by day until $count of them land after $after - one slot
+     * check per day rather than trying to solve this algebraically, since a slot's random pick
+     * changes every call and there's no fixed interval to reason about analytically anymore. Each
+     * day's picks are sorted before filtering so the returned list is always chronological, even
+     * if an admin defines overlapping/out-of-order windows.
+     *
+     * @param  list<array{start: string, end: string}>  $slots
+     * @return list<Carbon>
+     */
+    private function generateSlotTimes(array $slots, Carbon $after, int $count): array
+    {
+        if (empty($slots) || $count <= 0) {
+            return [];
+        }
+
+        $times = [];
+        $day = $after->copy()->startOfDay();
+        $daysChecked = 0;
+
+        // Ceiling purely as a runaway guard (a misconfigured/empty window set could otherwise
+        // loop forever) - in practice this resolves within a day or two.
+        while (count($times) < $count && $daysChecked < 3650) {
+            $dayTimes = collect($slots)
+                ->map(fn (array $slot) => $this->randomTimeInWindow($day, $slot['start'] ?? '09:00', $slot['end'] ?? ($slot['start'] ?? '09:00')))
+                ->sort()
+                ->values();
+
+            foreach ($dayTimes as $candidate) {
+                if (count($times) >= $count) {
+                    break;
+                }
+
+                if ($candidate->gt($after)) {
+                    $times[] = $candidate;
+                }
+            }
+
+            $day = $day->copy()->addDay();
+            $daysChecked++;
+        }
+
+        return $times;
+    }
+
+    // A window with start === end (or end before start, which isn't supported as an
+    // overnight-wrapping range - treated as the start time) always returns that exact point;
+    // otherwise a uniformly random minute within [start, end] on $day.
+    private function randomTimeInWindow(Carbon $day, string $start, string $end): Carbon
+    {
+        $startMinutes = $this->minutesFromMidnight($start);
+        $endMinutes = $this->minutesFromMidnight($end);
+
+        if ($endMinutes <= $startMinutes) {
+            return $day->copy()->addMinutes($startMinutes);
+        }
+
+        return $day->copy()->addMinutes(random_int($startMinutes, $endMinutes));
+    }
+
+    private function minutesFromMidnight(string $time): int
+    {
+        [$hours, $minutes] = array_pad(explode(':', $time), 2, '0');
+
+        return ((int) $hours) * 60 + (int) $minutes;
     }
 
     /**

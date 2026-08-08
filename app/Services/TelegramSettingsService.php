@@ -12,6 +12,7 @@ class TelegramSettingsService
     private const KEY_CHANNEL_ID = 'telegram_channel_id';
     private const KEY_IMAGE_GENERATION_ENABLED = 'telegram_image_generation_enabled';
     private const KEY_POSTS_PER_DAY = 'telegram_posts_per_day';
+    private const KEY_POST_SLOTS = 'telegram_post_time_slots';
     private const KEY_BLOG_SUMMARY_PROMPT = 'telegram_prompt_blog_summary';
     private const KEY_SERVICE_ANNOUNCEMENT_PROMPT = 'telegram_prompt_service_announcement';
     private const KEY_LAST_WEEKLY_PLAN_RUN_AT = 'telegram_last_weekly_plan_run_at';
@@ -161,6 +162,58 @@ class TelegramSettingsService
     public function setPostsPerDay(int $count): void
     {
         $this->set(self::KEY_POSTS_PER_DAY, (string) max(1, $count));
+    }
+
+    /**
+     * One time window per post-per-day slot, in order (1st post of the day, 2nd, ...) - see
+     * TelegramPostGeneratorService::generateSlotTimes(). A window with start === end is an exact
+     * fixed time; start < end picks a random time in that range each day, independently per day.
+     * Reconciled against the current postsPerDay count on every read (trimmed if it shrank,
+     * padded with a sensible default if it grew) so the two settings can never drift out of sync
+     * with each other - there's no separate "how many slots" setting to keep in step by hand.
+     *
+     * @return list<array{start: string, end: string}>
+     */
+    public function getPostSlots(): array
+    {
+        $count = $this->getPostsPerDay();
+        $stored = $this->get(self::KEY_POST_SLOTS);
+        $slots = $stored ? (json_decode($stored, true) ?: []) : [];
+
+        $slots = array_values(array_slice($slots, 0, $count));
+
+        while (count($slots) < $count) {
+            $slots[] = $this->defaultSlot(count($slots), $count);
+        }
+
+        return $slots;
+    }
+
+    public function setPostSlots(array $slots): void
+    {
+        $normalized = collect($slots)
+            ->map(function ($slot) {
+                $start = $slot['start'] ?? '09:00';
+                $end = $slot['end'] ?? $start;
+
+                return ['start' => $start, 'end' => $end];
+            })
+            ->values()
+            ->all();
+
+        $this->set(self::KEY_POST_SLOTS, json_encode($normalized));
+    }
+
+    // Evenly spread across the day starting at 09:00 (a plausible "channel is active" start
+    // rather than midnight), each a fixed point (start === end) until the admin narrows it into
+    // a real window - matches nobody's real preference exactly, but gives a sane starting point
+    // instead of forcing every slot to be configured before anything can be scheduled at all.
+    private function defaultSlot(int $index, int $count): array
+    {
+        $minutesFromMidnight = (9 * 60 + intdiv(24 * 60, max(1, $count)) * $index) % (24 * 60);
+        $time = sprintf('%02d:%02d', intdiv($minutesFromMidnight, 60), $minutesFromMidnight % 60);
+
+        return ['start' => $time, 'end' => $time];
     }
 
     public function getBlogSummaryPrompt(): string

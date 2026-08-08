@@ -6,13 +6,17 @@ use App\Services\AiSettingsService;
 use App\Services\TelegramBotService;
 use App\Services\TelegramSettingsService;
 use App\Support\PanelSection;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 
@@ -50,6 +54,7 @@ class TelegramSettings extends Page implements HasForms
             'imageGenerationEnabled' => $settings->isImageGenerationEnabled(),
             'imageModel' => $aiSettings->getImageModel(),
             'postsPerDay' => $settings->getPostsPerDay(),
+            'postSlots' => $settings->getPostSlots(),
             'blogSummaryPrompt' => $settings->getBlogSummaryPrompt(),
             'serviceAnnouncementPrompt' => $settings->getServiceAnnouncementPrompt(),
         ]);
@@ -93,7 +98,19 @@ class TelegramSettings extends Page implements HasForms
                             ->minValue(1)
                             ->maxValue(20)
                             ->required()
-                            ->helperText('How many blog-summary posts to keep scheduled per day, spread across the next 7 days.'),
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                $count = max(1, (int) $state);
+                                $slots = collect($get('postSlots') ?? [])->values()->all();
+                                $slots = array_slice($slots, 0, $count);
+
+                                while (count($slots) < $count) {
+                                    $slots[] = ['start' => '09:00', 'end' => '09:00'];
+                                }
+
+                                $set('postSlots', $slots);
+                            })
+                            ->helperText('How many blog-summary posts to keep scheduled per day, spread across the next 7 days - each gets its own send-time window below.'),
 
                         Toggle::make('imageGenerationEnabled')
                             ->label('Generate images with AI')
@@ -105,6 +122,28 @@ class TelegramSettings extends Page implements HasForms
                             ->required(),
                     ])
                     ->columns(2),
+
+                Section::make('Send time windows')
+                    ->description('One row per post above, in order (1st post of the day, 2nd, ...). Set "From" and "To" to the same time for an exact fixed send time, or a real range to pick a random time within it - independently - each day.')
+                    ->schema([
+                        Repeater::make('postSlots')
+                            ->label('')
+                            ->addable(false)
+                            ->deletable(false)
+                            ->reorderable(false)
+                            ->schema([
+                                TimePicker::make('start')
+                                    ->label('From')
+                                    ->seconds(false)
+                                    ->required(),
+
+                                TimePicker::make('end')
+                                    ->label('To')
+                                    ->seconds(false)
+                                    ->required(),
+                            ])
+                            ->columns(2),
+                    ]),
 
                 Section::make('Blog summary prompt')
                     ->description('Sent to the AI to write each blog-summary post. {{tokens}} are replaced with the real article title/content/URL before sending - see the list below the field.')
@@ -140,6 +179,7 @@ class TelegramSettings extends Page implements HasForms
         $settings->setImageGenerationEnabled((bool) $data['imageGenerationEnabled']);
         $aiSettings->setImageModel($data['imageModel'] ?: null);
         $settings->setPostsPerDay((int) $data['postsPerDay']);
+        $settings->setPostSlots($data['postSlots'] ?? []);
         $settings->setBlogSummaryPrompt($data['blogSummaryPrompt']);
         $settings->setServiceAnnouncementPrompt($data['serviceAnnouncementPrompt']);
 

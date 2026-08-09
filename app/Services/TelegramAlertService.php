@@ -54,7 +54,7 @@ class TelegramAlertService
             return;
         }
 
-        $minutes = $post->scheduled_at->diffInMinutes(now(), true);
+        $minutes = round($post->scheduled_at->diffInMinutes(now(), true));
         $caption = "⏰ Sending to the channel in about {$minutes} minute(s):\n\n{$post->message_text}";
 
         $this->broadcast($caption, $post->image_path);

@@ -106,8 +106,9 @@ Schedule::command('telegram:capture-channel-posts')
     ->withoutOverlapping()
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
 
-// Personal DM preview - see Telegram Channel > Alerts. No-op when alerts (or this specific event)
-// are turned off.
+// Previews a post about to send, via personal DM (Telegram Channel > Alerts, no-op when that
+// specific event is turned off there) and via in-panel notification (always on, gated only by
+// the viewing admin's own Telegram-section access).
 Schedule::command('telegram:alert-post-previews')
     ->everyMinute()
     ->withoutOverlapping()

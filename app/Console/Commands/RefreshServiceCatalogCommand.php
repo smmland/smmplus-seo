@@ -2,11 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Filament\Pages\ServiceTranslationQueue;
+use App\Filament\Pages\TelegramQueue;
 use App\Models\CategoryTranslation;
 use App\Models\CategoryTranslationJob;
 use App\Models\Language;
 use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
+use App\Services\PanelNotificationService;
 use App\Services\ServiceCatalogService;
 use App\Services\TelegramAlertService;
 use App\Services\TelegramPostGeneratorService;
@@ -37,6 +40,7 @@ class RefreshServiceCatalogCommand extends Command
         TranslationSettingsService $settings,
         TelegramPostGeneratorService $telegramPosts,
         TelegramAlertService $alerts,
+        PanelNotificationService $notifications,
     ): int {
         $sync = $catalog->syncDefaultCatalog();
 
@@ -55,13 +59,19 @@ class RefreshServiceCatalogCommand extends Command
         );
 
         // Personal DM alerts (no-op if alerts are disabled or nobody's linked) - same detection,
-        // reused a third time.
+        // reused a third time. In-panel notifications are independent of the Telegram-specific
+        // toggles - visibility there is gated purely by the viewing admin's own section access
+        // (NotificationBell), not by whether DM alerts happen to be configured.
         foreach ($sync['addedServices'] ?? [] as $service) {
-            $alerts->notifyNewService($service['title'] ?? $service['service_key'], $service['category_title'] ?? null);
+            $title = $service['title'] ?? $service['service_key'];
+            $alerts->notifyNewService($title, $service['category_title'] ?? null);
+            $notifications->notify('telegram', 'new_service', "New service added: {$title}", $service['category_title'] ?? null, TelegramQueue::getUrl());
         }
 
         foreach ($sync['changedServices'] ?? [] as $service) {
-            $alerts->notifyServiceChanged($service['title'] ?? $service['service_key'], $service['category_title'] ?? null);
+            $title = $service['title'] ?? $service['service_key'];
+            $alerts->notifyServiceChanged($title, $service['category_title'] ?? null);
+            $notifications->notify('translation', 'service_changed', "Service changed - needs translation: {$title}", $service['category_title'] ?? null, ServiceTranslationQueue::getUrl());
         }
 
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';

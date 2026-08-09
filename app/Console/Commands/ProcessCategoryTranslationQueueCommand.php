@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Filament\Pages\CategoryTranslationQueue;
 use App\Models\CategoryTranslationJob;
 use App\Services\AiSettingsService;
 use App\Services\CategoryAiTranslationService;
+use App\Services\PanelNotificationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 
@@ -23,7 +25,7 @@ class ProcessCategoryTranslationQueueCommand extends Command
     // A category name is far shorter than even a service title - comfortably under one cron tick.
     private const TIME_BUDGET_SECONDS = 120;
 
-    public function handle(AiSettingsService $aiSettings, CategoryAiTranslationService $translator): int
+    public function handle(AiSettingsService $aiSettings, CategoryAiTranslationService $translator, PanelNotificationService $notifications): int
     {
         if (! Schema::hasTable('category_translation_jobs')) {
             return self::SUCCESS;
@@ -32,6 +34,7 @@ class ProcessCategoryTranslationQueueCommand extends Command
         $concurrency = $aiSettings->getMaxConcurrentTranslations();
         $deadline = now()->addSeconds(self::TIME_BUDGET_SECONDS);
         $processed = 0;
+        $doneCount = 0;
 
         while (now()->lt($deadline)) {
             $batch = CategoryTranslationJob::query()
@@ -62,7 +65,15 @@ class ProcessCategoryTranslationQueueCommand extends Command
                 ]);
 
                 $processed++;
+
+                if ($result['ok']) {
+                    $doneCount++;
+                }
             }
+        }
+
+        if ($doneCount > 0) {
+            $notifications->notify('translation', 'translation_completed', "{$doneCount} category translation(s) completed", null, CategoryTranslationQueue::getUrl());
         }
 
         $this->info("Processed {$processed} category translation job(s) at concurrency {$concurrency}.");

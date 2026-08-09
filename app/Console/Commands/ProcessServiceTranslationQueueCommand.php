@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Filament\Pages\ServiceTranslationQueue;
 use App\Models\ServiceTranslationJob;
 use App\Services\AiSettingsService;
+use App\Services\PanelNotificationService;
 use App\Services\ServiceAiTranslationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
@@ -23,7 +25,7 @@ class ProcessServiceTranslationQueueCommand extends Command
     // translation:process-queue's 850s budget - kept comfortably under the same cron tick.
     private const TIME_BUDGET_SECONDS = 240;
 
-    public function handle(AiSettingsService $aiSettings, ServiceAiTranslationService $translator): int
+    public function handle(AiSettingsService $aiSettings, ServiceAiTranslationService $translator, PanelNotificationService $notifications): int
     {
         if (! Schema::hasTable('service_translation_jobs')) {
             return self::SUCCESS;
@@ -32,6 +34,7 @@ class ProcessServiceTranslationQueueCommand extends Command
         $concurrency = $aiSettings->getMaxConcurrentTranslations();
         $deadline = now()->addSeconds(self::TIME_BUDGET_SECONDS);
         $processed = 0;
+        $doneCount = 0;
 
         while (now()->lt($deadline)) {
             $batch = ServiceTranslationJob::query()
@@ -62,7 +65,17 @@ class ProcessServiceTranslationQueueCommand extends Command
                 ]);
 
                 $processed++;
+
+                if ($result['ok']) {
+                    $doneCount++;
+                }
             }
+        }
+
+        // One batched summary per run rather than one per job - this can plausibly finish dozens
+        // of jobs in a single tick, and a notification per job would flood the panel.
+        if ($doneCount > 0) {
+            $notifications->notify('translation', 'translation_completed', "{$doneCount} service translation(s) completed", null, ServiceTranslationQueue::getUrl());
         }
 
         $this->info("Processed {$processed} service translation job(s) at concurrency {$concurrency}.");

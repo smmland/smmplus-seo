@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Models\BlogTranslationJob;
 use App\Models\Language;
 use App\Models\Url;
+use App\Filament\Pages\BlogTranslationQueue;
 use App\Services\BlogContentExtractionService;
+use App\Services\PanelNotificationService;
 use App\Services\SettingsService;
 use App\Services\TelegramAlertService;
 use App\Services\TranslationSettingsService;
@@ -40,6 +42,7 @@ class AutoProcessNewBlogsCommand extends Command
         BlogContentExtractionService $extractor,
         SettingsService $generalSettings,
         TelegramAlertService $alerts,
+        PanelNotificationService $notifications,
     ): int {
         if (! $settings->isAutoExtractNewBlogsEnabled()) {
             return self::SUCCESS;
@@ -82,7 +85,9 @@ class AutoProcessNewBlogsCommand extends Command
 
             $extracted++;
 
-            $alerts->notifyNewTranslatableText($row->article_title ?? $row->path);
+            $title = $row->article_title ?? $row->path;
+            $alerts->notifyNewTranslatableText($title);
+            $notifications->notify('translation', 'new_text', "New content needs translation: {$title}", null, BlogTranslationQueue::getUrl());
 
             if ($autoTranslate && $translationTrackingAvailable) {
                 $queued += $this->queueMissingTranslations($row->group_key);

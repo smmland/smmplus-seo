@@ -241,8 +241,11 @@ class BlogAiTranslationService
             // models (o3, o4-mini, gpt-5, ...) reject max_tokens outright with HTTP 400.
             // Reasoning models also spend part of this same budget on hidden "reasoning
             // tokens" before writing anything visible, so this needs real headroom above
-            // the translated article's expected size or those models come back empty.
-            'max_completion_tokens' => 32768,
+            // the translated article's expected size or those models come back empty -
+            // 32768 wasn't enough for longer articles even with reasoning_effort=low below,
+            // so this is set close to the shared ceiling across the whole reasoning family
+            // (o3/o4-mini and gpt-5/gpt-5-mini all support at least 100k output tokens).
+            'max_completion_tokens' => 100000,
             'response_format' => ['type' => 'json_object'],
             'messages' => [
                 ['role' => 'user', 'content' => $prompt],

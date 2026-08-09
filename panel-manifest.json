@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.24.0",
-    "notes": "Telegram Channel > Queue: Edit and Delete moved into each post's Details popup (the row itself now only shows Confirm/Reject/Retry, whichever apply), and each row shows a small progress bar under its scheduled time indicating how close it is to publishing. New Settings > Signature section lets you add a fixed signature to every outgoing post, with its own on/off toggle. New: personal Telegram alerts. Account menu > Alerts (top-right, next to Update) lets you add people to be DMed by the bot - after they open a one-time link and press Start in Telegram - whenever a new service is added, an existing service changes and needs translation, new content needs translation, or a post is about to be sent to the channel (configurable minutes ahead, with the same text+image preview). Requires 'Update database' after installing this update (adds one table and one column)."
+    "version": "1.24.1",
+    "notes": "Fixes ChatGPT blog translation failing with 'used its entire token budget on internal reasoning' on longer articles when a reasoning model (o3, o4-mini, gpt-5, gpt-5-mini, ...) is selected in AI Settings - the per-request token budget was too small to leave room for a long article's full translated output after the model's hidden reasoning tokens. Raised well within what every one of those models supports, so this no longer requires switching away from a reasoning model. No database update needed for this update."
 }

@@ -7,6 +7,7 @@ use App\Models\Language;
 use App\Models\Url;
 use App\Services\BlogContentExtractionService;
 use App\Services\SettingsService;
+use App\Services\TelegramAlertService;
 use App\Services\TranslationSettingsService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
@@ -38,6 +39,7 @@ class AutoProcessNewBlogsCommand extends Command
         TranslationSettingsService $settings,
         BlogContentExtractionService $extractor,
         SettingsService $generalSettings,
+        TelegramAlertService $alerts,
     ): int {
         if (! $settings->isAutoExtractNewBlogsEnabled()) {
             return self::SUCCESS;
@@ -79,6 +81,8 @@ class AutoProcessNewBlogsCommand extends Command
             }
 
             $extracted++;
+
+            $alerts->notifyNewTranslatableText($row->article_title ?? $row->path);
 
             if ($autoTranslate && $translationTrackingAvailable) {
                 $queued += $this->queueMissingTranslations($row->group_key);

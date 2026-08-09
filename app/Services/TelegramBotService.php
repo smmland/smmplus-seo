@@ -80,13 +80,101 @@ class TelegramBotService
     }
 
     /**
+     * Personal DM counterpart to sendPhoto()/sendMessage() - takes an explicit chat_id instead of
+     * the configured channel, and only requires a bot token (not the channel id, not isEnabled())
+     * since a personal alert is a different concern from channel posting, same reasoning as
+     * getChatMember()/getUpdates() below.
+     *
+     * @return array{ok: bool, message: string, message_id?: int}
+     */
+    public function sendMessageTo(string $chatId, string $text): array
+    {
+        $token = $this->settings->getBotToken();
+
+        if (! $token) {
+            return ['ok' => false, 'message' => 'No bot token configured - set it up in Telegram Settings first.'];
+        }
+
+        try {
+            $response = Http::timeout(self::REQUEST_TIMEOUT_SECONDS)
+                ->asForm()
+                ->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                    'chat_id' => $chatId,
+                    'text' => mb_strimwidth($text, 0, self::MESSAGE_MAX_LENGTH, '…'),
+                ]);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
+        }
+
+        return $this->parseResponse($response);
+    }
+
+    /**
+     * @return array{ok: bool, message: string, message_id?: int}
+     */
+    public function sendPhotoTo(string $chatId, string $imagePath, string $caption): array
+    {
+        $token = $this->settings->getBotToken();
+
+        if (! $token) {
+            return ['ok' => false, 'message' => 'No bot token configured - set it up in Telegram Settings first.'];
+        }
+
+        if (! Storage::disk('public')->exists($imagePath)) {
+            return ['ok' => false, 'message' => "Image file not found on disk: {$imagePath}"];
+        }
+
+        try {
+            $response = Http::timeout(self::REQUEST_TIMEOUT_SECONDS)
+                ->attach('photo', Storage::disk('public')->get($imagePath), basename($imagePath))
+                ->post("https://api.telegram.org/bot{$token}/sendPhoto", [
+                    'chat_id' => $chatId,
+                    'caption' => mb_strimwidth($caption, 0, self::CAPTION_MAX_LENGTH, '…'),
+                ]);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];
+        }
+
+        return $this->parseResponse($response);
+    }
+
+    /**
+     * Used to build the t.me/<username>?start=<token> deep link recipients open to link their
+     * chat_id - see TelegramAlertRecipient/AlertsSettings.
+     */
+    public function getBotUsername(): ?string
+    {
+        $token = $this->settings->getBotToken();
+
+        if (! $token) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(15)->get("https://api.telegram.org/bot{$token}/getMe");
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! $response->successful() || ! $response->json('ok')) {
+            return null;
+        }
+
+        return $response->json('result.username');
+    }
+
+    /**
      * Polls for new updates since $offset (Telegram's own cursor convention: passing
      * offset = last_update_id + 1 both fetches only what's new AND tells Telegram those older
      * ones can be dropped from its queue). Short poll (timeout=0) rather than long-polling - this
      * rides the same once-a-minute schedule:run tick every other command here does, so blocking
      * the PHP process waiting on Telegram would just eat into that budget for no benefit.
-     * allowed_updates restricts this to channel posts only, not private messages or anything
-     * else this bot might technically receive.
+     * allowed_updates restricts this to channel posts and private messages - the only two kinds
+     * TelegramCaptureChannelPostsCommand does anything with (channel-post capture and
+     * alert-recipient /start linking). Both share this one offset cursor, so both must always be
+     * requested together - passing offset marks every update below it as received by Telegram
+     * whether or not it matched allowed_updates, so polling for them separately would risk one
+     * silently losing updates the other hasn't processed yet.
      *
      * @return array{ok: bool, message: string, updates?: array}
      */
@@ -105,7 +193,7 @@ class TelegramBotService
                     'offset' => $offset,
                     'limit' => $limit,
                     'timeout' => 0,
-                    'allowed_updates' => json_encode(['channel_post']),
+                    'allowed_updates' => json_encode(['channel_post', 'message']),
                 ]);
         } catch (\Throwable $e) {
             return ['ok' => false, 'message' => 'Connection error: '.$e->getMessage()];

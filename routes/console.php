@@ -105,3 +105,10 @@ Schedule::command('telegram:capture-channel-posts')
     ->everyMinute()
     ->withoutOverlapping()
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Personal DM preview - see Telegram Channel > Alerts. No-op when alerts (or this specific event)
+// are turned off.
+Schedule::command('telegram:alert-post-previews')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

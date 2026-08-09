@@ -13,16 +13,21 @@ use App\Models\TelegramPost;
  */
 class TelegramPostSenderService
 {
-    public function __construct(private readonly TelegramBotService $bot) {}
+    public function __construct(
+        private readonly TelegramBotService $bot,
+        private readonly TelegramSettingsService $settings,
+    ) {}
 
     /**
      * @return array{ok: bool, message: string}
      */
     public function sendNow(TelegramPost $post): array
     {
+        $text = $this->withSignature($post->message_text);
+
         $result = $post->image_path
-            ? $this->bot->sendPhoto($post->image_path, $post->message_text)
-            : $this->bot->sendMessage($post->message_text);
+            ? $this->bot->sendPhoto($post->image_path, $text)
+            : $this->bot->sendMessage($text);
 
         if ($result['ok']) {
             // telegram_message_id lets TelegramCaptureChannelPostsCommand recognize this exact
@@ -39,5 +44,21 @@ class TelegramPostSenderService
         }
 
         return $result;
+    }
+
+    // Not stored back onto the post - see TelegramSettingsService::isSignatureEnabled() docblock.
+    private function withSignature(string $text): string
+    {
+        if (! $this->settings->isSignatureEnabled()) {
+            return $text;
+        }
+
+        $signature = $this->settings->getSignatureText();
+
+        if ($signature === null) {
+            return $text;
+        }
+
+        return $text."\n\n".$signature;
     }
 }

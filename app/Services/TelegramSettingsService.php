@@ -18,11 +18,14 @@ class TelegramSettingsService
     private const KEY_LAST_WEEKLY_PLAN_RUN_AT = 'telegram_last_weekly_plan_run_at';
     private const KEY_CHANNEL_CAPTURE_ENABLED = 'telegram_channel_capture_enabled';
     private const KEY_LAST_UPDATE_ID = 'telegram_last_update_id';
+    private const KEY_SIGNATURE_ENABLED = 'telegram_signature_enabled';
+    private const KEY_SIGNATURE_TEXT = 'telegram_signature_text';
 
     private const DEFAULT_ENABLED = false;
     private const DEFAULT_IMAGE_GENERATION_ENABLED = true;
     private const DEFAULT_POSTS_PER_DAY = 1;
     private const DEFAULT_CHANNEL_CAPTURE_ENABLED = false;
+    private const DEFAULT_SIGNATURE_ENABLED = false;
 
     // How many days ahead topUpBlogPlan() keeps scheduled - see TelegramPostGeneratorService.
     public const BLOG_PLAN_WINDOW_DAYS = 7;
@@ -286,6 +289,33 @@ class TelegramSettingsService
     public function setLastUpdateId(int $updateId): void
     {
         $this->set(self::KEY_LAST_UPDATE_ID, (string) $updateId);
+    }
+
+    // Appended to every outgoing post's text at send time (TelegramPostSenderService) - never
+    // stored back onto the post itself, so turning this off or editing the text later doesn't
+    // require touching anything already drafted.
+    public function isSignatureEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_SIGNATURE_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_SIGNATURE_ENABLED;
+    }
+
+    public function setSignatureEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_SIGNATURE_ENABLED, $enabled ? '1' : '0');
+    }
+
+    public function getSignatureText(): ?string
+    {
+        $stored = $this->get(self::KEY_SIGNATURE_TEXT);
+
+        return $stored !== null && $stored !== '' ? $stored : null;
+    }
+
+    public function setSignatureText(?string $text): void
+    {
+        $this->set(self::KEY_SIGNATURE_TEXT, trim((string) $text));
     }
 
     private function get(string $key): ?string

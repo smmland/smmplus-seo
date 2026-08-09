@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.23.0",
-    "notes": "New: configurable Telegram send times. Telegram Channel > Settings now has a 'Send time windows' section with one row per daily post - set 'From' and 'To' to the same time for an exact fixed send time, or a real range (e.g. 10:00-11:00) to have a random time picked within it independently each day. The number of rows always follows 'Blog posts per day' above it. Also, each post's own 'Edit' screen (Telegram Channel > Queue) now lets you change that specific post's scheduled send time directly, alongside its message text. No database update needed for this update."
+    "version": "1.24.0",
+    "notes": "Telegram Channel > Queue: Edit and Delete moved into each post's Details popup (the row itself now only shows Confirm/Reject/Retry, whichever apply), and each row shows a small progress bar under its scheduled time indicating how close it is to publishing. New Settings > Signature section lets you add a fixed signature to every outgoing post, with its own on/off toggle. New: personal Telegram alerts. Account menu > Alerts (top-right, next to Update) lets you add people to be DMed by the bot - after they open a one-time link and press Start in Telegram - whenever a new service is added, an existing service changes and needs translation, new content needs translation, or a post is about to be sent to the channel (configurable minutes ahead, with the same text+image preview). Requires 'Update database' after installing this update (adds one table and one column)."
 }

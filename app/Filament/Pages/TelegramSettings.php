@@ -55,6 +55,8 @@ class TelegramSettings extends Page implements HasForms
             'imageModel' => $aiSettings->getImageModel(),
             'postsPerDay' => $settings->getPostsPerDay(),
             'postSlots' => $settings->getPostSlots(),
+            'signatureEnabled' => $settings->isSignatureEnabled(),
+            'signatureText' => $settings->getSignatureText(),
             'blogSummaryPrompt' => $settings->getBlogSummaryPrompt(),
             'serviceAnnouncementPrompt' => $settings->getServiceAnnouncementPrompt(),
         ]);
@@ -145,6 +147,17 @@ class TelegramSettings extends Page implements HasForms
                             ->columns(2),
                     ]),
 
+                Section::make('Signature')
+                    ->description('Appended to every outgoing post at send time - never edited into the drafts themselves, so turning this on/off or changing the text has no effect on anything already scheduled.')
+                    ->schema([
+                        Toggle::make('signatureEnabled')
+                            ->label('Add signature to every message'),
+
+                        Textarea::make('signatureText')
+                            ->label('Signature text')
+                            ->rows(2),
+                    ]),
+
                 Section::make('Blog summary prompt')
                     ->description('Sent to the AI to write each blog-summary post. {{tokens}} are replaced with the real article title/content/URL before sending - see the list below the field.')
                     ->schema([
@@ -180,6 +193,8 @@ class TelegramSettings extends Page implements HasForms
         $aiSettings->setImageModel($data['imageModel'] ?: null);
         $settings->setPostsPerDay((int) $data['postsPerDay']);
         $settings->setPostSlots($data['postSlots'] ?? []);
+        $settings->setSignatureEnabled((bool) $data['signatureEnabled']);
+        $settings->setSignatureText($data['signatureText'] ?? null);
         $settings->setBlogSummaryPrompt($data['blogSummaryPrompt']);
         $settings->setServiceAnnouncementPrompt($data['serviceAnnouncementPrompt']);
 

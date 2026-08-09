@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Pages\AiCosts;
 use App\Filament\Pages\GeneralSettings;
 use App\Filament\Pages\PanelUpdate;
+use App\Filament\Pages\TelegramAlerts;
 use App\Filament\Resources\ActivityLogResource;
 use App\Filament\Resources\UserResource;
 use App\Services\SettingsService;
@@ -72,6 +73,11 @@ class AdminPanelProvider extends PanelProvider
                     ->icon('heroicon-o-arrow-up-tray')
                     ->url(fn () => PanelUpdate::getUrl())
                     ->visible(fn (): bool => PanelUpdate::canAccess()),
+                MenuItem::make()
+                    ->label('Alerts')
+                    ->icon('heroicon-o-bell-alert')
+                    ->url(fn () => TelegramAlerts::getUrl())
+                    ->visible(fn (): bool => TelegramAlerts::canAccess()),
                 // The former "Administration" sidebar group (Users, Activity Log) - both
                 // resources have $shouldRegisterNavigation = false, so this dropdown is now the
                 // only way to reach them (still fully routed/gated the same as before, just not

@@ -117,8 +117,13 @@
                                             {{ \Illuminate\Support\Str::limit($post->message_text, 70) }}
                                         </div>
                                     </td>
-                                    <td class="p-2 text-sm text-gray-600 dark:text-gray-300">
+                                    <td class="p-2 text-sm text-gray-600 dark:text-gray-300" style="min-width: 150px;">
                                         {{ $post->scheduled_at->diffForHumans() }}
+                                        @if (in_array($post->status, ['pending', 'confirmed']))
+                                            <div style="width: 100%; max-width: 140px; height: 5px; border-radius: 9999px; overflow: hidden; background-color: rgba(148,163,184,.25); margin-top: 6px;" title="{{ $post->publishProgressPercent() }}% of the way to its scheduled time">
+                                                <div style="width: {{ $post->publishProgressPercent() }}%; height: 100%; border-radius: 9999px; background-color: rgb(var(--primary-500)); transition: width .3s;"></div>
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="p-2">
                                         @switch($post->status)
@@ -144,37 +149,28 @@
                                         @endif
                                     </td>
                                     <td class="p-2">
-                                        <div class="flex items-center gap-2">
-                                            <x-filament::button
-                                                size="sm"
-                                                color="gray"
+                                        <div class="flex items-center gap-1">
+                                            <x-filament::icon-button
                                                 icon="heroicon-o-information-circle"
+                                                color="gray"
+                                                size="sm"
+                                                label="Details"
+                                                tooltip="Details - edit, delete, send now"
                                                 wire:click="mountAction('viewPost', {{ Illuminate\Support\Js::from(['postId' => $post->id, 'title' => $post->title]) }})"
-                                            >
-                                                Details
-                                            </x-filament::button>
+                                            />
+
+                                            @if ($post->status === 'pending')
+                                                <x-filament::icon-button
+                                                    icon="heroicon-o-check"
+                                                    color="success"
+                                                    size="sm"
+                                                    label="Confirm"
+                                                    tooltip="Confirm"
+                                                    wire:click="confirmPost({{ $post->id }})"
+                                                />
+                                            @endif
 
                                             @if (in_array($post->status, ['pending', 'confirmed']))
-                                                <x-filament::icon-button
-                                                    icon="heroicon-o-pencil-square"
-                                                    color="gray"
-                                                    size="sm"
-                                                    label="Edit"
-                                                    tooltip="Edit message text"
-                                                    wire:click="mountAction('editPost', {{ Illuminate\Support\Js::from(['postId' => $post->id]) }})"
-                                                />
-
-                                                @if ($post->status === 'pending')
-                                                    <x-filament::icon-button
-                                                        icon="heroicon-o-check"
-                                                        color="success"
-                                                        size="sm"
-                                                        label="Confirm"
-                                                        tooltip="Confirm"
-                                                        wire:click="confirmPost({{ $post->id }})"
-                                                    />
-                                                @endif
-
                                                 <x-filament::icon-button
                                                     icon="heroicon-o-x-mark"
                                                     color="danger"
@@ -187,36 +183,24 @@
                                             @endif
 
                                             @if ($post->status === 'rejected')
-                                                <x-filament::button
-                                                    size="sm"
-                                                    color="gray"
+                                                <x-filament::icon-button
                                                     icon="heroicon-o-arrow-uturn-left"
+                                                    color="gray"
+                                                    size="sm"
+                                                    label="Un-reject"
+                                                    tooltip="Un-reject"
                                                     wire:click="unrejectPost({{ $post->id }})"
-                                                >
-                                                    Un-reject
-                                                </x-filament::button>
+                                                />
                                             @endif
 
                                             @if ($post->status === 'failed')
-                                                <x-filament::button
-                                                    size="sm"
-                                                    color="gray"
-                                                    icon="heroicon-o-arrow-path"
-                                                    wire:click="retryPost({{ $post->id }})"
-                                                >
-                                                    Retry
-                                                </x-filament::button>
-                                            @endif
-
-                                            @if ($post->status !== 'sent')
                                                 <x-filament::icon-button
-                                                    icon="heroicon-o-trash"
-                                                    color="danger"
+                                                    icon="heroicon-o-arrow-path"
+                                                    color="gray"
                                                     size="sm"
-                                                    label="Delete"
-                                                    tooltip="Delete"
-                                                    wire:click="deletePost({{ $post->id }})"
-                                                    wire:confirm="Delete this draft permanently?"
+                                                    label="Retry"
+                                                    tooltip="Retry"
+                                                    wire:click="retryPost({{ $post->id }})"
                                                 />
                                             @endif
                                         </div>
@@ -302,26 +286,14 @@
                                         {{ $post->sent_at?->diffForHumans() }}
                                     </td>
                                     <td class="p-2">
-                                        <div class="flex items-center gap-2">
-                                            <x-filament::button
-                                                size="sm"
-                                                color="gray"
-                                                icon="heroicon-o-information-circle"
-                                                wire:click="mountAction('viewPost', {{ Illuminate\Support\Js::from(['postId' => $post->id, 'title' => $post->title]) }})"
-                                            >
-                                                Details
-                                            </x-filament::button>
-
-                                            <x-filament::icon-button
-                                                icon="heroicon-o-trash"
-                                                color="danger"
-                                                size="sm"
-                                                label="Delete"
-                                                tooltip="Delete from history"
-                                                wire:click="deletePost({{ $post->id }})"
-                                                wire:confirm="Delete this from history permanently? It's already been sent - this only removes the record."
-                                            />
-                                        </div>
+                                        <x-filament::icon-button
+                                            icon="heroicon-o-information-circle"
+                                            color="gray"
+                                            size="sm"
+                                            label="Details"
+                                            tooltip="Details - delete"
+                                            wire:click="mountAction('viewPost', {{ Illuminate\Support\Js::from(['postId' => $post->id, 'title' => $post->title]) }})"
+                                        />
                                     </td>
                                 </tr>
                             @endforeach

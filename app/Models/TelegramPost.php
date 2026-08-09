@@ -55,7 +55,7 @@ class TelegramPost extends Model
 
     protected $fillable = [
         'type', 'lang', 'related_key', 'title', 'message_text', 'image_path', 'image_source',
-        'image_generation_error', 'scheduled_at', 'status', 'sent_at', 'telegram_message_id', 'error_message',
+        'image_generation_error', 'scheduled_at', 'preview_alert_sent_at', 'status', 'sent_at', 'telegram_message_id', 'error_message',
         'ai_provider', 'ai_model', 'input_tokens', 'output_tokens', 'estimated_cost_usd', 'image_cost_usd',
     ];
 
@@ -63,6 +63,7 @@ class TelegramPost extends Model
     {
         return [
             'scheduled_at' => 'datetime',
+            'preview_alert_sent_at' => 'datetime',
             'sent_at' => 'datetime',
             'telegram_message_id' => 'integer',
             'input_tokens' => 'integer',
@@ -75,5 +76,29 @@ class TelegramPost extends Model
     public function isDue(): bool
     {
         return $this->scheduled_at !== null && $this->scheduled_at->isPast();
+    }
+
+    // 0-100, how far through the created_at -> scheduled_at window "now" is - purely a visual
+    // countdown for the queue list, not used for any sending decision (TelegramSendQueueCommand
+    // decides that off scheduled_at directly).
+    public function publishProgressPercent(): int
+    {
+        if (! in_array($this->status, self::SENDABLE_STATUSES, true)) {
+            return $this->status === self::STATUS_SENT ? 100 : 0;
+        }
+
+        if (! $this->created_at || ! $this->scheduled_at) {
+            return 100;
+        }
+
+        $totalSeconds = $this->scheduled_at->getTimestamp() - $this->created_at->getTimestamp();
+
+        if ($totalSeconds <= 0) {
+            return 100;
+        }
+
+        $elapsedSeconds = now()->getTimestamp() - $this->created_at->getTimestamp();
+
+        return (int) max(0, min(100, round(($elapsedSeconds / $totalSeconds) * 100)));
     }
 }

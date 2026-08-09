@@ -8,6 +8,7 @@ use App\Models\Language;
 use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
 use App\Services\ServiceCatalogService;
+use App\Services\TelegramAlertService;
 use App\Services\TelegramPostGeneratorService;
 use App\Services\TranslationSettingsService;
 use Illuminate\Console\Command;
@@ -31,8 +32,12 @@ class RefreshServiceCatalogCommand extends Command
 
     protected $description = 'Re-syncs the default-language services catalog, checks translation status per language, and queues missing/changed AI translations';
 
-    public function handle(ServiceCatalogService $catalog, TranslationSettingsService $settings, TelegramPostGeneratorService $telegramPosts): int
-    {
+    public function handle(
+        ServiceCatalogService $catalog,
+        TranslationSettingsService $settings,
+        TelegramPostGeneratorService $telegramPosts,
+        TelegramAlertService $alerts,
+    ): int {
         $sync = $catalog->syncDefaultCatalog();
 
         if (! $sync['ok']) {
@@ -48,6 +53,16 @@ class RefreshServiceCatalogCommand extends Command
             $sync['changedServices'] ?? [],
             $sync['removedServices'] ?? [],
         );
+
+        // Personal DM alerts (no-op if alerts are disabled or nobody's linked) - same detection,
+        // reused a third time.
+        foreach ($sync['addedServices'] ?? [] as $service) {
+            $alerts->notifyNewService($service['title'] ?? $service['service_key'], $service['category_title'] ?? null);
+        }
+
+        foreach ($sync['changedServices'] ?? [] as $service) {
+            $alerts->notifyServiceChanged($service['title'] ?? $service['service_key'], $service['category_title'] ?? null);
+        }
 
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
         $activeLanguages = Language::query()

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.25.1",
-    "notes": "URGENT fix for the 1.25.0 update: removes the notification bell's panel-wide hook, which was causing a full site-down HTTP 500 on every page for some hosts. Install this immediately if you installed 1.25.0. The bell icon is temporarily unavailable while this is investigated further - everything else from 1.25.0 (the notifications themselves, the Alerts page, etc.) is unaffected. Also fixes a separate, unrelated risk: updates were overwriting public/.htaccess, which can silently strip host-specific directives (like cPanel's PHP-version handler block) that this repo's own copy doesn't know about - that file is now left untouched by installs. No database change in this update - if you already ran 'Update database' for 1.25.0, nothing further is needed there."
+    "version": "1.25.2",
+    "notes": "Re-enables the notification bell from 1.25.0, now that the real cause of the earlier outage is confirmed: 1.25.0's update zip overwrote public/.htaccess, silently stripping a host-managed PHP-version directive (cPanel's 'AddHandler ea-php...' block) that this repo's own tracked copy didn't know about - not a bug in the bell's own code. 1.25.1 already stopped updates from touching public/.htaccess going forward, so this is safe to install through this Update page as normal. The bell's render hook is also now wrapped defensively, so even a future host-level hiccup there would just hide the icon rather than affect the rest of the panel. No database change in this update."
 }

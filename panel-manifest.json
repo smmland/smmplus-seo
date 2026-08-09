@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.25.2",
-    "notes": "Re-enables the notification bell from 1.25.0, now that the real cause of the earlier outage is confirmed: 1.25.0's update zip overwrote public/.htaccess, silently stripping a host-managed PHP-version directive (cPanel's 'AddHandler ea-php...' block) that this repo's own tracked copy didn't know about - not a bug in the bell's own code. 1.25.1 already stopped updates from touching public/.htaccess going forward, so this is safe to install through this Update page as normal. The bell's render hook is also now wrapped defensively, so even a future host-level hiccup there would just hide the icon rather than affect the rest of the panel. No database change in this update."
+    "version": "1.26.0",
+    "notes": "New: customizable Dashboard. Every card can now be dragged into any order, removed, and added back (via a new 'Add a card' section), independently for each admin - click 'Customize' at the top of the Dashboard. Everyone still only ever sees cards for sections they actually have access to, same as before. The 'Sign out' button that used to sit on the Dashboard's welcome card is removed (it's already in the account menu, top-right). Requires 'Update database' after installing this update (adds one column)."
 }

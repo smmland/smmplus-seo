@@ -18,7 +18,7 @@ class User extends Authenticatable implements FilamentUser
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, LogsActivity;
 
-    protected $fillable = ['name', 'email', 'password', 'is_super_admin', 'granted_sections'];
+    protected $fillable = ['name', 'email', 'password', 'is_super_admin', 'granted_sections', 'dashboard_widgets'];
 
     protected $hidden = ['password', 'remember_token', 'api_token'];
 
@@ -104,6 +104,7 @@ class User extends Authenticatable implements FilamentUser
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
             'granted_sections' => 'array',
+            'dashboard_widgets' => 'array',
         ];
     }
 }

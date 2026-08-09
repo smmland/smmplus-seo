@@ -14,12 +14,10 @@ use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\MenuItem;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
-use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -44,14 +42,13 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::hex($this->accentColorHex()),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
+            // App\Filament\Pages\Dashboard (a customizable-cards replacement for Filament's stock
+            // one - see that class's own docblock) is auto-discovered from here, same as every
+            // other page - no separate ->pages([...]) registration needed or wanted, since
+            // registering the stock Pages\Dashboard::class too would collide with it on the same
+            // "/" route.
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
-            ->pages([
-                Pages\Dashboard::class,
-            ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
-            ->widgets([
-                Widgets\AccountWidget::class,
-            ])
             // The notification bell (NotificationBell) - rendered right before the user avatar
             // in the topbar, same spot "next to the account icon" describes. A real Livewire
             // component (not a static blade partial) since it needs the dropdown open/close and

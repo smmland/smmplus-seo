@@ -18,14 +18,12 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\View\PanelsRenderHook;
 use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Support\Facades\Blade;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -52,14 +50,6 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 Widgets\AccountWidget::class,
             ])
-            // The notification bell (NotificationBell) - rendered right before the user avatar
-            // in the topbar, same spot "next to the account icon" describes. A real Livewire
-            // component (not a static blade partial) since it needs the dropdown open/close and
-            // mark-as-read interactivity - see App\Livewire\NotificationBell's own docblock.
-            ->renderHook(
-                PanelsRenderHook::USER_MENU_BEFORE,
-                fn (): string => Blade::render('<livewire:notification-bell />'),
-            )
             ->userMenuItems([
                 // Each mirrors its page's own canAccess() so a user who can't open the page
                 // never even sees the shortcut to it here - kept as a static call (not a

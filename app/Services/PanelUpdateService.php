@@ -33,6 +33,14 @@ class PanelUpdateService
     // anything an update actually needs to ship.
     private const PROTECTED_PREFIXES = ['storage/'];
 
+    // public/.htaccess is git-tracked (it's part of Laravel's own default scaffold), but on a
+    // real cPanel host it commonly carries host-managed directives this repo's own copy knows
+    // nothing about (e.g. the "php -- BEGIN cPanel-generated handler" PHP-version block cPanel
+    // appends outside of git) - overwriting it with the plain repo version on every update would
+    // silently strip those every time. Exact-match only, not a prefix, since a real path-
+    // traversal attempt with this as a directory name is already caught by assertEntriesAreSafe().
+    private const PROTECTED_EXACT_PATHS = ['public/.htaccess'];
+
     // A tracked file at the repo root (panel-manifest.json), so every `git archive` zip carries
     // it automatically with no separate build step. Its presence and "app" field are what
     // distinguish a real update package for this panel from any other random zip an admin might
@@ -201,6 +209,10 @@ class PanelUpdateService
             if ($relative === $prefix || str_starts_with($relative, $prefix)) {
                 return true;
             }
+        }
+
+        if (in_array($relative, self::PROTECTED_EXACT_PATHS, true)) {
+            return true;
         }
 
         // Exact filename match only - unlike a prefix check, this doesn't also catch harmless

@@ -48,12 +48,16 @@ class HandleGatewayCors
         }
 
         if ($this->settings->isTorBlockingEnabled() && $this->torExitNodes->isExitNode($ip)) {
-            // Not registered in GatewayBlockedIp/cPanel like the other triggers below - Tor exit
-            // IPs are a large, constantly rotating pool (a different node reused by a different
-            // person days later), so blocking this one specific IP going forward would be both
-            // pointless and would bloat that table. This check re-evaluates fresh on every
-            // request against the current exit-node list instead.
             $this->log($ip, $origin, GatewayRequestLog::STATUS_TOR_EXIT_NODE);
+
+            // Only the IPs that actually show up here get registered (in GatewayBlockedIp and,
+            // if configured, cPanel) - not the whole exit-node list, which would mean thousands
+            // of API calls to cPanel for nodes that never even hit this endpoint. A flat expiry
+            // (not the escalating one) since there's no real "repeat offender" here - a Tor exit
+            // node gets reused by a different person once it's picked up again.
+            if ($this->settings->isAutoBlockEnabled()) {
+                GatewayBlockedIp::blockForDuration($ip, 'Tor exit node', $this->settings->getTorBlockDays());
+            }
 
             return response()->json(['ok' => false, 'error' => 'Requests via Tor are not allowed.'], 403);
         }

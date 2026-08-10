@@ -47,6 +47,7 @@ class SecuritySettings extends Page implements HasForms
             'cpanelUsername' => $settings->getCpanelUsername(),
             'cpanelApiToken' => null,
             'torBlockingEnabled' => $settings->isTorBlockingEnabled(),
+            'torBlockDays' => $settings->getTorBlockDays(),
         ]);
     }
 
@@ -129,10 +130,17 @@ class SecuritySettings extends Page implements HasForms
                     ->columns(2),
 
                 Section::make('Tor exit node blocking')
-                    ->description('Rejects any gateway request coming from a known Tor exit node IP. Unlike the auto-block above, this checks a maintained list rather than escalating per-IP - abuse routed through Tor uses a different exit IP every few requests, so blocking one at a time never catches up. The list refreshes hourly on its own.')
+                    ->description('Rejects any gateway request coming from a known Tor exit node IP. Unlike the auto-block above, this checks a maintained list rather than escalating per-IP - abuse routed through Tor uses a different exit IP every few requests, so blocking one at a time never catches up. The list refreshes hourly on its own. Only IPs that actually make a request get registered in Blocked IPs / cPanel (below) - not the whole list - and clear themselves automatically once their block expires.')
                     ->schema([
                         Toggle::make('torBlockingEnabled')
                             ->label('Enabled'),
+
+                        TextInput::make('torBlockDays')
+                            ->label('Block duration (days)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->required()
+                            ->helperText('How long a Tor exit IP that actually hit the gateway stays blocked (in Blocked IPs and, if configured, cPanel) before automatically clearing - checked every 5 minutes, same sweep as the auto-block above.'),
 
                         Placeholder::make('torListStatus')
                             ->label('Current list')
@@ -170,7 +178,7 @@ class SecuritySettings extends Page implements HasForms
             $data['cpanelUsername'],
             $data['cpanelApiToken'] ?: null,
         );
-        $settings->setTorBlockingEnabled((bool) $data['torBlockingEnabled']);
+        $settings->setTorBlockingSettings((bool) $data['torBlockingEnabled'], (int) $data['torBlockDays']);
 
         $this->form->fill([...$this->form->getState(), 'cpanelApiToken' => null]);
 

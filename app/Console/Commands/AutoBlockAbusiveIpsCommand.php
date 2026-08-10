@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\GatewayBlockedIp;
 use App\Models\GatewayRequestLog;
+use App\Services\CpanelIpBlockerService;
 use App\Services\GatewaySettingsService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -14,18 +15,26 @@ class AutoBlockAbusiveIpsCommand extends Command
 
     protected $description = 'Block IPs that exceeded the daily request threshold, escalating the block duration on repeat offenses';
 
-    public function handle(GatewaySettingsService $settings): int
+    public function handle(GatewaySettingsService $settings, CpanelIpBlockerService $cpanel): int
     {
         // Lift auto-blocks whose window has passed. Manual blocks (blocked_until = null)
-        // are untouched here - only an admin can lift those.
-        $expired = GatewayBlockedIp::query()
+        // are untouched here - only an admin can lift those. Fetched as models (not a single
+        // bulk update) because each one that was synced to cPanel also needs removing there -
+        // otherwise it would stay blocked at the web-server level forever, even after our own
+        // record says it's expired.
+        $expiredRecords = GatewayBlockedIp::query()
             ->where('is_active', true)
             ->whereNotNull('blocked_until')
             ->where('blocked_until', '<=', now())
-            ->update(['is_active' => false]);
+            ->get();
 
-        if ($expired > 0) {
-            $this->info("Lifted {$expired} expired auto-block(s).");
+        foreach ($expiredRecords as $record) {
+            $cpanel->unblock($record);
+            $record->update(['is_active' => false]);
+        }
+
+        if ($expiredRecords->isNotEmpty()) {
+            $this->info("Lifted {$expiredRecords->count()} expired auto-block(s).");
         }
 
         if (! $settings->isAutoBlockEnabled()) {

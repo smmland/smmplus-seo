@@ -66,6 +66,24 @@ class GatewayBlockedIp extends Model
         return $record;
     }
 
+    // For triggers where "repeat offender" doesn't apply the way it does to a single abusive
+    // IP - a Tor exit node is used by a different person every time it's picked up again, so
+    // there's no real offender to escalate against. A flat block-and-expire instead.
+    public static function blockForDuration(string $ip, string $reason, int $days): self
+    {
+        $record = static::query()->firstOrNew(['ip' => $ip]);
+
+        $record->fill([
+            'is_active' => true,
+            'blocked_until' => now()->addDays($days),
+            'note' => "{$reason} (expires in {$days}d)",
+        ])->save();
+
+        app(CpanelIpBlockerService::class)->block($record);
+
+        return $record;
+    }
+
     public function activityLabel(): string
     {
         return $this->ip;

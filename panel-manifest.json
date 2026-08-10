@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.8",
-    "notes": "Fixes the 500 error ('__PHP_Incomplete_Class') on Security Settings after clicking 'Refresh Tor list now' - the refresh timestamp was cached as a raw object, which the real database-backed cache can't reliably restore. Now stored as plain text instead, and any leftover bad value from before this fix is handled gracefully (shows 'Not fetched yet' instead of erroring) rather than needing manual cleanup - just click Refresh again after installing. No database update needed for this update."
+    "version": "1.26.9",
+    "notes": "Tor exit IPs that actually make a request to the gateway are now also registered in Blocked IPs and (if configured) cPanel's IP Blocker - not the whole exit-node list, just the ones that hit you - with a flat block duration (default 14 days, adjustable under Security > Settings) since a Tor exit node doesn't have a 'repeat offender' the way a single abusive IP does. Also adds automatic cleanup: whenever any auto-block (Tor or otherwise) expires, it now gets removed from cPanel's IP Blocker too, not just marked inactive locally - previously it would have stayed blocked at the web-server level forever. No database update needed for this update."
 }

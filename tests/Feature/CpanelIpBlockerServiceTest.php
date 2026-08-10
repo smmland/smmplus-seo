@@ -96,4 +96,46 @@ class CpanelIpBlockerServiceTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), 'ip=5.6.7.8'));
         $this->assertNotNull($record->fresh()->cpanel_synced_at);
     }
+
+    public function test_unblock_calls_remove_ip_and_clears_the_synced_timestamp(): void
+    {
+        Http::fake(['*/add_ip*' => Http::response(['status' => 1], 200), '*/remove_ip*' => Http::response(['status' => 1], 200)]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token',
+        );
+
+        $record = $this->record();
+        app(CpanelIpBlockerService::class)->block($record);
+        $this->assertNotNull($record->fresh()->cpanel_synced_at);
+
+        app(CpanelIpBlockerService::class)->unblock($record);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://server1.example.com:2083/execute/BlockIP/remove_ip?ip=1.2.3.4';
+        });
+        $this->assertNull($record->fresh()->cpanel_synced_at);
+    }
+
+    public function test_unblock_is_a_no_op_when_the_record_was_never_synced(): void
+    {
+        Http::fake();
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token',
+        );
+
+        app(CpanelIpBlockerService::class)->unblock($this->record());
+
+        Http::assertNothingSent();
+    }
+
+    public function test_unblock_does_not_throw_when_disabled(): void
+    {
+        Http::fake();
+
+        app(CpanelIpBlockerService::class)->unblock($this->record());
+
+        Http::assertNothingSent();
+    }
 }

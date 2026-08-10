@@ -29,6 +29,11 @@ Schedule::command('gateway:prune-logs')->daily();
 // escalating cool-down (gated on Gateway Settings: auto_block_enabled).
 Schedule::command('gateway:auto-block-ips')->everyFiveMinutes()->withoutOverlapping();
 
+// Refreshes the cached Tor exit-node list HandleGatewayCors checks against (Security Settings:
+// tor_blocking_enabled) - hourly matches how often the Tor Project itself regenerates the
+// source list, so this never serves anything meaningfully stale.
+Schedule::command('security:refresh-tor-exit-list')->hourly()->withoutOverlapping();
+
 // Each blog URL is only actually re-checked once its own recheck interval has elapsed
 // (Translation Settings), so running this hourly just means newly-published or
 // newly-translated posts don't wait long to be picked up.

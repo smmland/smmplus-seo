@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.6",
-    "notes": "Splits IP blocking into its own 'Security' section in the sidebar, independent of Free Service Gateway: Blocked IPs and the auto-block/cPanel IP Blocker settings moved there, with their own independently-grantable permission (previously bundled into Free Service Gateway access). The super admin account is unaffected; any additional admin users you've created will need Security access granted explicitly on the Users page if they should keep using this. No database update needed for this update."
+    "version": "1.26.7",
+    "notes": "Adds Tor exit-node blocking to Security Settings: rejects any Free Service Gateway request coming from a known Tor exit IP, checked against a list that refreshes automatically every hour (with a manual 'Refresh Tor list now' button too). This targets abuse that rotates through a different Tor IP every few requests, which per-IP blocking alone can never catch up with - confirmed from your own request log that most of the ongoing flood is coming through Tor exit ranges. Off by default - turn it on under Security > Settings and click 'Refresh Tor list now' once after installing. No database update needed for this update."
 }

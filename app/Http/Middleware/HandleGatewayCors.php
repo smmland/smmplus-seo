@@ -6,6 +6,7 @@ use App\Models\GatewayBlockedIp;
 use App\Models\GatewayRequestLog;
 use App\Services\GatewayRateLimiter;
 use App\Services\GatewaySettingsService;
+use App\Services\TorExitNodeListService;
 use App\Support\GatewayClient;
 use Closure;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class HandleGatewayCors
     public function __construct(
         private readonly GatewaySettingsService $settings,
         private readonly GatewayRateLimiter $limiter,
+        private readonly TorExitNodeListService $torExitNodes,
     ) {}
 
     public function handle(Request $request, Closure $next): Response
@@ -43,6 +45,17 @@ class HandleGatewayCors
             $this->log($ip, $origin, GatewayRequestLog::STATUS_BLOCKED_IP);
 
             return response()->json(['ok' => false, 'error' => 'Your IP has been blocked from using this service.'], 403);
+        }
+
+        if ($this->settings->isTorBlockingEnabled() && $this->torExitNodes->isExitNode($ip)) {
+            // Not registered in GatewayBlockedIp/cPanel like the other triggers below - Tor exit
+            // IPs are a large, constantly rotating pool (a different node reused by a different
+            // person days later), so blocking this one specific IP going forward would be both
+            // pointless and would bloat that table. This check re-evaluates fresh on every
+            // request against the current exit-node list instead.
+            $this->log($ip, $origin, GatewayRequestLog::STATUS_TOR_EXIT_NODE);
+
+            return response()->json(['ok' => false, 'error' => 'Requests via Tor are not allowed.'], 403);
         }
 
         if ($this->settings->isAutoBlockEnabled() && $this->isFlooding($ip)) {

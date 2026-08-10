@@ -21,6 +21,7 @@ class GatewayRequestLog extends Model
     public const STATUS_UPSTREAM_ERROR = 'upstream_error';
     public const STATUS_UNREASONABLE_INPUT = 'unreasonable_input';
     public const STATUS_RATE_FLOOD = 'rate_flood';
+    public const STATUS_TOR_EXIT_NODE = 'tor_exit_node';
 
     public $timestamps = false;
 

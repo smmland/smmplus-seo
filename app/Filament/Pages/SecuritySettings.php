@@ -3,10 +3,12 @@
 namespace App\Filament\Pages;
 
 use App\Services\GatewaySettingsService;
+use App\Services\TorExitNodeListService;
 use App\Support\PanelSection;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -44,7 +46,20 @@ class SecuritySettings extends Page implements HasForms
             'cpanelHost' => $settings->getCpanelHost(),
             'cpanelUsername' => $settings->getCpanelUsername(),
             'cpanelApiToken' => null,
+            'torBlockingEnabled' => $settings->isTorBlockingEnabled(),
         ]);
+    }
+
+    public function refreshTorList(TorExitNodeListService $torExitNodes): void
+    {
+        $count = $torExitNodes->refresh();
+
+        $notification = Notification::make()
+            ->title($count > 0 ? "Tor exit node list refreshed: {$count} IPs." : 'Refresh failed - see the logs for details.');
+
+        $count > 0 ? $notification->success() : $notification->danger();
+
+        $notification->send();
     }
 
     public function form(Form $form): Form
@@ -112,6 +127,28 @@ class SecuritySettings extends Page implements HasForms
                                 : 'No token saved yet.'),
                     ])
                     ->columns(2),
+
+                Section::make('Tor exit node blocking')
+                    ->description('Rejects any gateway request coming from a known Tor exit node IP. Unlike the auto-block above, this checks a maintained list rather than escalating per-IP - abuse routed through Tor uses a different exit IP every few requests, so blocking one at a time never catches up. The list refreshes hourly on its own.')
+                    ->schema([
+                        Toggle::make('torBlockingEnabled')
+                            ->label('Enabled'),
+
+                        Placeholder::make('torListStatus')
+                            ->label('Current list')
+                            ->content(function (): string {
+                                $torExitNodes = app(TorExitNodeListService::class);
+                                $count = $torExitNodes->count();
+                                $refreshedAt = $torExitNodes->lastRefreshedAt();
+
+                                if ($count === 0 || ! $refreshedAt) {
+                                    return 'Not fetched yet - click "Refresh Tor list now" below.';
+                                }
+
+                                return "{$count} exit node IPs, last refreshed {$refreshedAt->diffForHumans()}.";
+                            }),
+                    ])
+                    ->columns(2),
             ])
             ->statePath('data');
     }
@@ -133,6 +170,7 @@ class SecuritySettings extends Page implements HasForms
             $data['cpanelUsername'],
             $data['cpanelApiToken'] ?: null,
         );
+        $settings->setTorBlockingEnabled((bool) $data['torBlockingEnabled']);
 
         $this->form->fill([...$this->form->getState(), 'cpanelApiToken' => null]);
 

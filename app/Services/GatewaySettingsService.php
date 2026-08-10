@@ -20,6 +20,7 @@ class GatewaySettingsService
     private const KEY_CPANEL_HOST = 'gateway_cpanel_host';
     private const KEY_CPANEL_USERNAME = 'gateway_cpanel_username';
     private const KEY_CPANEL_API_TOKEN = 'gateway_cpanel_api_token';
+    private const KEY_TOR_BLOCKING_ENABLED = 'gateway_tor_blocking_enabled';
 
     private const DEFAULT_ALLOWED_ORIGINS = ['https://smm.plus', 'https://www.smm.plus'];
     private const DEFAULT_GLOBAL_DAILY_SECONDS = 24 * 60 * 60;
@@ -31,6 +32,7 @@ class GatewaySettingsService
     private const DEFAULT_AUTO_BLOCK_MULTIPLIER = 2;
     private const DEFAULT_AUTO_BLOCK_MAX_HOURS = 168;
     private const DEFAULT_CPANEL_BLOCKER_ENABLED = false;
+    private const DEFAULT_TOR_BLOCKING_ENABLED = false;
 
     /**
      * @return array<int,string>
@@ -176,6 +178,18 @@ class GatewaySettingsService
         if ($token !== null && $token !== '') {
             $this->set(self::KEY_CPANEL_API_TOKEN, Crypt::encryptString($token));
         }
+    }
+
+    public function isTorBlockingEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_TOR_BLOCKING_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_TOR_BLOCKING_ENABLED;
+    }
+
+    public function setTorBlockingEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_TOR_BLOCKING_ENABLED, $enabled ? '1' : '0');
     }
 
     private function get(string $key): ?string

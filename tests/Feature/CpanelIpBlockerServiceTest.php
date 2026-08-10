@@ -206,4 +206,74 @@ class CpanelIpBlockerServiceTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_fetch_htaccess_block_list_parses_deny_from_lines(): void
+    {
+        $htaccess = <<<'HTACCESS'
+            <Limit GET POST>
+            order allow,deny
+            deny from 1.2.3.4
+            Deny from 5.6.7.8 9.10.11.12
+            deny from all
+            allow from all
+            </Limit>
+            HTACCESS;
+
+        Http::fake(['*' => Http::response(['status' => 1, 'data' => ['content' => $htaccess]], 200)]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->fetchHtaccessBlockList();
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(['1.2.3.4', '5.6.7.8', '9.10.11.12'], $result['ips']);
+        $this->assertNull($result['error']);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/execute/Fileman/get_file_content')
+            && $request['dir'] === 'public_html'
+            && $request['file'] === '.htaccess');
+    }
+
+    public function test_fetch_htaccess_block_list_requires_a_configured_path(): void
+    {
+        Http::fake();
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->fetchHtaccessBlockList();
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame([], $result['ips']);
+        $this->assertNotNull($result['error']);
+        Http::assertNothingSent();
+    }
+
+    public function test_fetch_htaccess_block_list_surfaces_a_cpanel_error(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 0, 'errors' => ['file not found']], 200)]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->fetchHtaccessBlockList();
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame([], $result['ips']);
+        $this->assertStringContainsString('file not found', $result['error']);
+    }
+
+    public function test_fetch_htaccess_block_list_is_a_no_op_when_cpanel_not_configured(): void
+    {
+        Http::fake();
+
+        $result = app(CpanelIpBlockerService::class)->fetchHtaccessBlockList();
+
+        $this->assertFalse($result['ok']);
+        Http::assertNothingSent();
+    }
 }

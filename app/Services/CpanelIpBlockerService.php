@@ -153,6 +153,76 @@ class CpanelIpBlockerService
         }
     }
 
+    /**
+     * Reads and parses the actual "deny from" list cPanel's IP Blocker writes to the account's
+     * .htaccess - there's no UAPI function to list what BlockIP has blocked (only add_ip /
+     * remove_ip exist), so this is the only way to see it. Uses the Fileman UAPI module (a
+     * different cPanel feature entirely) to read the configured file's raw content, which is
+     * inherently more fragile than a real listing endpoint - it breaks if the path is wrong or
+     * cPanel ever changes the format it writes, so every failure mode is surfaced as a message
+     * rather than assumed to be an empty list.
+     *
+     * @return array{ok: bool, ips: array<int, string>, error: ?string}
+     */
+    public function fetchHtaccessBlockList(): array
+    {
+        $client = $this->client();
+        $path = $this->settings->getCpanelHtaccessPath();
+
+        if (! $client) {
+            return ['ok' => false, 'ips' => [], 'error' => 'cPanel IP Blocker is not fully configured (Security Settings).'];
+        }
+
+        if (! $path) {
+            return ['ok' => false, 'ips' => [], 'error' => 'No .htaccess path configured (Security Settings).'];
+        }
+
+        $dir = dirname($path);
+        $file = basename($path);
+
+        try {
+            $response = $client->get('/execute/Fileman/get_file_content', [
+                'dir' => $dir === '.' ? '/' : $dir,
+                'file' => $file,
+                'to_charset' => 'utf-8',
+            ]);
+
+            if (! $response->successful() || $response->json('status') !== 1) {
+                $reason = $response->json('errors.0') ?? $response->body();
+
+                return ['ok' => false, 'ips' => [], 'error' => "HTTP {$response->status()}: {$reason}"];
+            }
+
+            return ['ok' => true, 'ips' => $this->parseDeniedIps((string) $response->json('data.content')), 'error' => null];
+        } catch (\Throwable $e) {
+            Log::warning('cPanel IP Blocker: fetching .htaccess block list failed', ['error' => $e->getMessage()]);
+
+            return ['ok' => false, 'ips' => [], 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function parseDeniedIps(string $content): array
+    {
+        $ips = [];
+
+        foreach (preg_split('/\r\n|\r|\n/', $content) as $line) {
+            if (! preg_match('/^\s*deny\s+from\s+(.+?)\s*$/i', $line, $matches)) {
+                continue;
+            }
+
+            foreach (preg_split('/\s+/', trim($matches[1])) as $token) {
+                if ($token !== '' && strtolower($token) !== 'all') {
+                    $ips[] = $token;
+                }
+            }
+        }
+
+        return array_values(array_unique($ips));
+    }
+
     private function client(): ?PendingRequest
     {
         $credentials = $this->credentials();

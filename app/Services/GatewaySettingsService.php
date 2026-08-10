@@ -20,6 +20,7 @@ class GatewaySettingsService
     private const KEY_CPANEL_HOST = 'gateway_cpanel_host';
     private const KEY_CPANEL_USERNAME = 'gateway_cpanel_username';
     private const KEY_CPANEL_API_TOKEN = 'gateway_cpanel_api_token';
+    private const KEY_CPANEL_HTACCESS_PATH = 'gateway_cpanel_htaccess_path';
     private const KEY_TOR_BLOCKING_ENABLED = 'gateway_tor_blocking_enabled';
     private const KEY_TOR_BLOCK_DAYS = 'gateway_tor_block_days';
 
@@ -169,17 +170,28 @@ class GatewaySettingsService
         }
     }
 
-    public function setCpanelBlockerSettings(bool $enabled, ?string $host, ?string $username, ?string $token): void
+    public function setCpanelBlockerSettings(bool $enabled, ?string $host, ?string $username, ?string $token, ?string $htaccessPath = null): void
     {
         $this->set(self::KEY_CPANEL_BLOCKER_ENABLED, $enabled ? '1' : '0');
         $this->set(self::KEY_CPANEL_HOST, trim((string) $host));
         $this->set(self::KEY_CPANEL_USERNAME, trim((string) $username));
+        $this->set(self::KEY_CPANEL_HTACCESS_PATH, trim((string) $htaccessPath));
 
         // Same "blank means keep the existing secret" rule as TelegramSettingsService::setBotToken()
         // - the form field is never pre-filled with the real token.
         if ($token !== null && $token !== '') {
             $this->set(self::KEY_CPANEL_API_TOKEN, Crypt::encryptString($token));
         }
+    }
+
+    // Where cPanel's own IP Blocker actually writes its "deny from" rules - there's no UAPI
+    // function to list what BlockIP has blocked (only add_ip/remove_ip exist), so reading this
+    // file directly is the only way to show that list. Relative to the cPanel account's home
+    // directory, e.g. "public_html/.htaccess" - admin-configurable since it depends on which
+    // domain/docroot the account's IP Blocker applies to, which this app has no way to guess.
+    public function getCpanelHtaccessPath(): ?string
+    {
+        return $this->get(self::KEY_CPANEL_HTACCESS_PATH) ?: null;
     }
 
     public function isTorBlockingEnabled(): bool

@@ -47,6 +47,7 @@ class SecuritySettings extends Page implements HasForms
             'cpanelHost' => $settings->getCpanelHost(),
             'cpanelUsername' => $settings->getCpanelUsername(),
             'cpanelApiToken' => null,
+            'cpanelHtaccessPath' => $settings->getCpanelHtaccessPath(),
             'torBlockingEnabled' => $settings->isTorBlockingEnabled(),
             'torBlockDays' => $settings->getTorBlockDays(),
         ]);
@@ -197,6 +198,11 @@ class SecuritySettings extends Page implements HasForms
                             ->helperText(fn () => app(GatewaySettingsService::class)->hasCpanelApiToken()
                                 ? 'A token is already saved - leave blank to keep it, or type a new one to replace it.'
                                 : 'No token saved yet.'),
+
+                        TextInput::make('cpanelHtaccessPath')
+                            ->label('.htaccess path')
+                            ->placeholder('public_html/.htaccess')
+                            ->helperText('Relative to your cPanel account\'s home directory. cPanel\'s API can add/remove a block but never list what\'s currently blocked - this tells the "cPanel Blocked IPs" page (Security menu) which file to read cPanel\'s own "deny from" rules from. Usually public_html/.htaccess for the account\'s main domain.'),
                     ])
                     ->columns(2),
 
@@ -248,6 +254,7 @@ class SecuritySettings extends Page implements HasForms
             $data['cpanelHost'],
             $data['cpanelUsername'],
             $data['cpanelApiToken'] ?: null,
+            $data['cpanelHtaccessPath'],
         );
         $settings->setTorBlockingSettings((bool) $data['torBlockingEnabled'], (int) $data['torBlockDays']);
 

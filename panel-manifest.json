@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.4",
-    "notes": "Adds a 'Block all Tor exit nodes now' button on Security > Settings, for shutting down Tor-routed abuse immediately instead of waiting for each IP to hit the gateway once - it queues the whole current exit-node list and registers it with cPanel 5 requests at a time in the background (usually done within a few minutes even for a large list), instead of the old one-at-a-time reactive blocking. Also fixes a gap where manually 'Unblock'-ing an IP from Blocked IPs (single or bulk) only unblocked it locally and left it rejected by cPanel forever - it now lifts the cPanel-side block too, so gradually restoring IPs after a temporary bulk block actually works. No database update needed for this update."
+    "version": "1.27.5",
+    "notes": "Adds a new 'cPanel Blocked IPs' page (Security menu) showing what cPanel's own IP Blocker actually has blocked right now, read directly from your account's .htaccess since cPanel's API can add/remove a block but never list them - set the .htaccess path once on Security Settings first. Each entry can be unblocked straight from that page, including ones blocked directly in cPanel outside this panel entirely. No database update needed for this update."
 }

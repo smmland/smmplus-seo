@@ -13,6 +13,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class FreeServiceController extends Controller
 {
@@ -196,16 +197,25 @@ class FreeServiceController extends Controller
     ): JsonResponse {
         GatewayRequestLog::create([
             'ip' => $ip,
-            'origin' => $origin,
-            'service_slug' => $serviceSlug,
+            'origin' => $this->truncateForLog($origin),
+            'service_slug' => $this->truncateForLog($serviceSlug),
             'gateway_upstream_id' => $upstreamId,
-            'target' => $target,
-            'link' => $link,
+            'target' => $this->truncateForLog($target),
+            'link' => $this->truncateForLog($link),
             'quantity_requested' => $qtyRequested,
             'quantity_allowed' => $qtyAllowed,
             'status' => $logStatus,
         ]);
 
         return response()->json($payload, $httpStatus);
+    }
+
+    // These columns are plain VARCHAR(255) - under MySQL's strict mode (the default), an insert
+    // that would overflow one fails outright instead of silently truncating, which took the
+    // whole response down with it the one time a caller sent a link/target absurdly longer than
+    // any real one ever would be. Logging a request should never be able to break answering it.
+    private function truncateForLog(?string $value): ?string
+    {
+        return $value === null ? null : Str::limit($value, 255, '');
     }
 }

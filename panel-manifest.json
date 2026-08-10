@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.0",
-    "notes": "New: customizable Dashboard. Every card can now be dragged into any order, removed, and added back (via a new 'Add a card' section), independently for each admin - click 'Customize' at the top of the Dashboard. Everyone still only ever sees cards for sections they actually have access to, same as before. The 'Sign out' button that used to sit on the Dashboard's welcome card is removed (it's already in the account menu, top-right). Requires 'Update database' after installing this update (adds one column)."
+    "version": "1.26.1",
+    "notes": "Fixes the public Free Service Gateway API (/api/...) returning a 500 error whenever a caller sent an unusually long link/target value (seen in the wild as repeated '@' padding, likely bot abuse) - the request-logging step was rejecting the insert outright once the value exceeded the log table's 255-character columns, which crashed the whole response instead of just skipping the log entry. Long values are now trimmed to fit before logging, so this can no longer happen regardless of what a caller sends. No database update needed for this update."
 }

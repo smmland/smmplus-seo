@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.9",
-    "notes": "Tor exit IPs that actually make a request to the gateway are now also registered in Blocked IPs and (if configured) cPanel's IP Blocker - not the whole exit-node list, just the ones that hit you - with a flat block duration (default 14 days, adjustable under Security > Settings) since a Tor exit node doesn't have a 'repeat offender' the way a single abusive IP does. Also adds automatic cleanup: whenever any auto-block (Tor or otherwise) expires, it now gets removed from cPanel's IP Blocker too, not just marked inactive locally - previously it would have stayed blocked at the web-server level forever. No database update needed for this update."
+    "version": "1.27.0",
+    "notes": "Adds a small CPU/RAM indicator to the panel header, next to the notification bell, refreshing every 30 seconds. Best-effort - many shared hosting accounts restrict access to this system info, in which case it just quietly stays hidden rather than showing a broken number. No database update needed for this update."
 }

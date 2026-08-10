@@ -49,23 +49,35 @@ class AdminPanelProvider extends PanelProvider
             // "/" route.
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
-            // The notification bell (NotificationBell) - rendered right before the user avatar
-            // in the topbar, same spot "next to the account icon" describes. A real Livewire
-            // component (not a static blade partial) since it needs the dropdown open/close and
-            // mark-as-read interactivity - see App\Livewire\NotificationBell's own docblock.
-            // Wrapped in a try/catch, unlike every other renderHook in this app would need to be -
-            // this one previously took the entire panel down site-wide when a botched update
-            // temporarily broke PHP execution on the host (unrelated to this code, but this hook
-            // fires on every single page, so a future host-level hiccup here should degrade to a
-            // missing bell, never a blank page).
+            // The server resource badge (ServerResourceBadge) and notification bell
+            // (NotificationBell) - rendered right before the user avatar in the topbar, same spot
+            // "next to the account icon" describes. Real Livewire components (not static blade
+            // partials) since the bell needs dropdown open/close and mark-as-read interactivity -
+            // see their own docblocks. Each gets its own Blade::render() call and its own
+            // try/catch - rendering two <livewire:.../> tags in a single Blade::render() string
+            // corrupts Blade's component stack (array_pop() on null), which took both down
+            // together during testing. Isolating them also means one failing can't take the
+            // other with it. Wrapped in try/catch, unlike every other renderHook in this app
+            // would need to be - the bell previously took the entire panel down site-wide when a
+            // botched update temporarily broke PHP execution on the host (unrelated to this
+            // code, but this hook fires on every single page, so a future host-level hiccup here
+            // should degrade to a missing badge/bell, never a blank page).
             ->renderHook(
                 PanelsRenderHook::USER_MENU_BEFORE,
                 function (): string {
                     try {
-                        return Blade::render('<livewire:notification-bell />');
+                        $badge = Blade::render('<livewire:server-resource-badge />');
                     } catch (\Throwable) {
-                        return '';
+                        $badge = '';
                     }
+
+                    try {
+                        $bell = Blade::render('<livewire:notification-bell />');
+                    } catch (\Throwable) {
+                        $bell = '';
+                    }
+
+                    return $badge.$bell;
                 },
             )
             ->userMenuItems([

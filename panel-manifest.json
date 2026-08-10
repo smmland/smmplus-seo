@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.8",
-    "notes": "Adds a new 'Auto-sync blocked IPs to .htaccess' toggle on Security Settings (off by default) - every 5 minutes, adds any actively-blocked IP (auto-block, manual, Tor) missing from cPanel's .htaccess straight into the file, one read + one write regardless of how many. Catches drift the normal per-IP sync at block time can miss, e.g. a transient cPanel failure or cPanel getting configured after IPs were already blocked. No database update needed for this update."
+    "version": "1.27.9",
+    "notes": "Adds a red badge on each sidebar item (Telegram Queue, Blog/Service/Category Translation) whenever a notification about that specific page is unread - not just the bell icon at the top - so it's obvious at a glance where a new notification came from. Opening that page marks its notification(s) read and clears both the sidebar badge and the bell's count together. No database update needed for this update."
 }

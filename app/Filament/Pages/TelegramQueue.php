@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Language;
 use App\Models\TelegramPost;
 use App\Services\ActivityLogService;
+use App\Services\PanelNotificationService;
 use App\Services\TelegramPostGeneratorService;
 use App\Services\TelegramPostSenderService;
 use App\Services\TelegramSettingsService;
@@ -49,6 +50,26 @@ class TelegramQueue extends Page implements HasActions
     public static function canAccess(): bool
     {
         return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::TELEGRAM)) ?? false;
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = app(PanelNotificationService::class)->unreadCountForUrl(static::getUrl());
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'danger';
+    }
+
+    // Visiting this page is itself the "I've seen it" signal for anything notifying about it
+    // (new service/post-preview alerts) - clears both this nav badge and the bell's own count for
+    // the same notifications together, rather than needing a separate dismiss action.
+    public function mount(PanelNotificationService $notifications): void
+    {
+        $notifications->markUrlRead(static::getUrl());
     }
 
     public string $search = '';

@@ -4,7 +4,6 @@ namespace App\Livewire;
 
 use App\Models\PanelNotification;
 use App\Models\PanelNotificationRead;
-use App\Support\PanelSection;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -33,17 +32,7 @@ class NotificationBell extends Component
     #[Computed]
     public function allowedCategories(): array
     {
-        $user = auth()->user();
-
-        if (! $user) {
-            return [];
-        }
-
-        return collect(PanelNotification::CATEGORIES)
-            ->keys()
-            ->filter(fn (string $category) => $user->hasAccess(PanelSection::key($category, PanelSection::TIER_VIEW)))
-            ->values()
-            ->all();
+        return PanelNotification::allowedCategoriesFor(auth()->user());
     }
 
     #[Computed]

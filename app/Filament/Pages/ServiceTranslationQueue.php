@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Language;
 use App\Models\ServiceTranslation;
 use App\Models\ServiceTranslationJob;
+use App\Services\PanelNotificationService;
 use App\Services\ServiceCatalogService;
 use App\Services\SettingsService;
 use App\Services\TranslationSettingsService;
@@ -50,6 +51,27 @@ class ServiceTranslationQueue extends Page implements HasActions
     public static function canAccess(): bool
     {
         return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::TRANSLATION)) ?? false;
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = app(PanelNotificationService::class)->unreadCountForUrl(static::getUrl());
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'danger';
+    }
+
+    // Visiting this page is itself the "I've seen it" signal for anything notifying about it
+    // (service changed / translation-completed alerts) - clears both this nav badge and the
+    // bell's own count for the same notifications together, rather than needing a separate
+    // dismiss action.
+    public function mount(PanelNotificationService $notifications): void
+    {
+        $notifications->markUrlRead(static::getUrl());
     }
 
     public string $search = '';

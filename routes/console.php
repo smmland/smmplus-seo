@@ -102,15 +102,6 @@ Schedule::command('telegram:send-queue')
     ->withoutOverlapping()
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
 
-// Drains the queue SecuritySettings::blockAllTorExitNodes() creates ("Block all Tor exit nodes
-// now"), registering each queued IP with cPanel five at a time - same once-a-minute,
-// drain-what-fits reasoning as translation:process-queue. A no-op query when nothing's queued,
-// so this can just always be scheduled rather than conditionally registered.
-Schedule::command('gateway:sync-tor-bulk-block-to-cpanel')
-    ->everyMinute()
-    ->withoutOverlapping(20)
-    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
-
 // Records anything posted directly to the channel outside this panel, by polling Telegram for
 // new updates - gated on its own Telegram Settings toggle (separate from the "post to Telegram"
 // one, since watching the channel is a different concern from writing to it). No-op when that

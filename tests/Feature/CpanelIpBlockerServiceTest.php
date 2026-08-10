@@ -139,74 +139,6 @@ class CpanelIpBlockerServiceTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_block_many_sends_every_record_concurrently_and_marks_each_synced(): void
-    {
-        Http::fake(['*' => Http::response(['status' => 1], 200)]);
-
-        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
-            true, 'server1.example.com:2083', 'someuser', 'secret-token',
-        );
-
-        $records = collect(range(1, 5))->map(fn ($i) => $this->record("10.0.0.{$i}"));
-
-        app(CpanelIpBlockerService::class)->blockMany($records);
-
-        Http::assertSentCount(5);
-
-        foreach ($records as $record) {
-            $this->assertNotNull($record->fresh()->cpanel_synced_at);
-            $this->assertNull($record->fresh()->cpanel_sync_error);
-        }
-    }
-
-    public function test_block_many_records_a_per_record_failure_without_affecting_the_rest_of_the_batch(): void
-    {
-        Http::fake([
-            '*ip=10.0.0.1*' => Http::response(['status' => 0, 'errors' => ['rejected']], 200),
-            '*' => Http::response(['status' => 1], 200),
-        ]);
-
-        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
-            true, 'server1.example.com:2083', 'someuser', 'secret-token',
-        );
-
-        $failing = $this->record('10.0.0.1');
-        $succeeding = $this->record('10.0.0.2');
-
-        app(CpanelIpBlockerService::class)->blockMany(collect([$failing, $succeeding]));
-
-        $failing->refresh();
-        $succeeding->refresh();
-
-        $this->assertNull($failing->cpanel_synced_at);
-        $this->assertStringContainsString('rejected', $failing->cpanel_sync_error);
-
-        $this->assertNotNull($succeeding->cpanel_synced_at);
-        $this->assertNull($succeeding->cpanel_sync_error);
-    }
-
-    public function test_block_many_is_a_no_op_when_not_configured(): void
-    {
-        Http::fake();
-
-        app(CpanelIpBlockerService::class)->blockMany(collect([$this->record()]));
-
-        Http::assertNothingSent();
-    }
-
-    public function test_block_many_does_nothing_for_an_empty_collection(): void
-    {
-        Http::fake();
-
-        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
-            true, 'server1.example.com:2083', 'someuser', 'secret-token',
-        );
-
-        app(CpanelIpBlockerService::class)->blockMany(collect());
-
-        Http::assertNothingSent();
-    }
-
     public function test_fetch_htaccess_block_list_parses_deny_from_lines(): void
     {
         $htaccess = <<<'HTACCESS'
@@ -272,6 +204,166 @@ class CpanelIpBlockerServiceTest extends TestCase
         Http::fake();
 
         $result = app(CpanelIpBlockerService::class)->fetchHtaccessBlockList();
+
+        $this->assertFalse($result['ok']);
+        Http::assertNothingSent();
+    }
+
+    public function test_add_ips_to_htaccess_reads_once_and_writes_once_for_any_number_of_ips(): void
+    {
+        $htaccess = "<Limit GET POST>\norder allow,deny\ndeny from 1.2.3.4\nallow from all\n</Limit>\n";
+
+        Http::fake([
+            '*get_file_content*' => Http::response(['status' => 1, 'data' => ['content' => $htaccess]], 200),
+            '*save_file_content*' => Http::response(['status' => 1], 200),
+        ]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        $newIps = collect(range(1, 50))->map(fn ($i) => "10.0.0.{$i}")->all();
+
+        $result = app(CpanelIpBlockerService::class)->addIpsToHtaccess($newIps);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(50, $result['added']);
+        Http::assertSentCount(2);
+    }
+
+    public function test_add_ips_to_htaccess_skips_ips_already_present(): void
+    {
+        $htaccess = "deny from 1.2.3.4\ndeny from 5.6.7.8\n";
+
+        Http::fake([
+            '*get_file_content*' => Http::response(['status' => 1, 'data' => ['content' => $htaccess]], 200),
+            '*save_file_content*' => Http::response(['status' => 1], 200),
+        ]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->addIpsToHtaccess(['1.2.3.4', '5.6.7.8', '9.9.9.9']);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(1, $result['added']);
+
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), 'save_file_content')) {
+                return true;
+            }
+
+            $content = $request['content'];
+
+            return substr_count($content, 'deny from 1.2.3.4') === 1
+                && substr_count($content, 'deny from 5.6.7.8') === 1
+                && str_contains($content, 'deny from 9.9.9.9');
+        });
+    }
+
+    public function test_add_ips_to_htaccess_inserts_new_lines_right_after_the_existing_block(): void
+    {
+        $htaccess = "RewriteEngine On\ndeny from 1.2.3.4\nallow from all\n<Limit GET>\nrequire all granted\n</Limit>\n";
+
+        Http::fake([
+            '*get_file_content*' => Http::response(['status' => 1, 'data' => ['content' => $htaccess]], 200),
+            '*save_file_content*' => Http::response(['status' => 1], 200),
+        ]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        app(CpanelIpBlockerService::class)->addIpsToHtaccess(['9.9.9.9']);
+
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), 'save_file_content')) {
+                return true;
+            }
+
+            $lines = explode("\n", $request['content']);
+
+            return $lines[1] === 'deny from 1.2.3.4'
+                && $lines[2] === 'deny from 9.9.9.9'
+                && $lines[3] === 'allow from all';
+        });
+    }
+
+    public function test_add_ips_to_htaccess_appends_at_the_end_when_nothing_is_blocked_yet(): void
+    {
+        Http::fake([
+            '*get_file_content*' => Http::response(['status' => 1, 'data' => ['content' => "RewriteEngine On\n"]], 200),
+            '*save_file_content*' => Http::response(['status' => 1], 200),
+        ]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        app(CpanelIpBlockerService::class)->addIpsToHtaccess(['1.2.3.4']);
+
+        Http::assertSent(fn ($request) => ! str_contains($request->url(), 'save_file_content')
+            || $request['content'] === "RewriteEngine On\ndeny from 1.2.3.4\n");
+    }
+
+    public function test_add_ips_to_htaccess_does_nothing_when_every_ip_is_already_blocked(): void
+    {
+        Http::fake(['*get_file_content*' => Http::response(['status' => 1, 'data' => ['content' => "deny from 1.2.3.4\n"]], 200)]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->addIpsToHtaccess(['1.2.3.4']);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(0, $result['added']);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'save_file_content'));
+    }
+
+    public function test_add_ips_to_htaccess_does_nothing_for_an_empty_list(): void
+    {
+        Http::fake();
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->addIpsToHtaccess([]);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(0, $result['added']);
+        Http::assertNothingSent();
+    }
+
+    public function test_add_ips_to_htaccess_surfaces_a_write_failure(): void
+    {
+        Http::fake([
+            '*get_file_content*' => Http::response(['status' => 1, 'data' => ['content' => '']], 200),
+            '*save_file_content*' => Http::response(['status' => 0, 'errors' => ['permission denied']], 200),
+        ]);
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token', 'public_html/.htaccess',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->addIpsToHtaccess(['1.2.3.4']);
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame(0, $result['added']);
+        $this->assertStringContainsString('permission denied', $result['error']);
+    }
+
+    public function test_add_ips_to_htaccess_requires_a_configured_path(): void
+    {
+        Http::fake();
+
+        app(GatewaySettingsService::class)->setCpanelBlockerSettings(
+            true, 'server1.example.com:2083', 'someuser', 'secret-token',
+        );
+
+        $result = app(CpanelIpBlockerService::class)->addIpsToHtaccess(['1.2.3.4']);
 
         $this->assertFalse($result['ok']);
         Http::assertNothingSent();

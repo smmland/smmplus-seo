@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.5",
-    "notes": "Adds a new 'cPanel Blocked IPs' page (Security menu) showing what cPanel's own IP Blocker actually has blocked right now, read directly from your account's .htaccess since cPanel's API can add/remove a block but never list them - set the .htaccess path once on Security Settings first. Each entry can be unblocked straight from that page, including ones blocked directly in cPanel outside this panel entirely. No database update needed for this update."
+    "version": "1.27.6",
+    "notes": "Reworks 'Block all Tor exit nodes now' (Security Settings): instead of sending cPanel one block request per IP (even batched a few at a time), it now writes the whole exit-node list straight into cPanel's .htaccess in a single read + a single write - faster and far less likely to trip cPanel's own API rate limiting than thousands of individual requests. No database update needed for this update."
 }

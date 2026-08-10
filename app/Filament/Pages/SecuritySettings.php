@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\GatewayBlockedIp;
+use App\Services\CpanelIpBlockerService;
 use App\Services\GatewaySettingsService;
 use App\Services\TorExitNodeListService;
 use App\Support\PanelSection;
@@ -66,13 +67,14 @@ class SecuritySettings extends Page implements HasForms
     }
 
     // Proactively blocks every currently-known exit-node IP, not just ones that happen to hit
-    // the gateway (the reactive per-request Tor block already handles that). Only the local
-    // GatewayBlockedIp rows are written here, synchronously and in bulk (cheap even for
-    // thousands of IPs) - the actual cPanel registration is deferred to
-    // gateway:sync-tor-bulk-block-to-cpanel, which drains this queue 5 requests at a time on the
-    // once-a-minute schedule tick, since thousands of individual cPanel calls would time out a
-    // web request.
-    public function blockAllTorExitNodes(TorExitNodeListService $torExitNodes, GatewaySettingsService $settings): void
+    // the gateway (the reactive per-request Tor block already handles that). Writes the whole
+    // list into cPanel's .htaccess directly (CpanelIpBlockerService::addIpsToHtaccess) - one read
+    // and one write total, regardless of list size - rather than one add_ip API call per IP:
+    // cPanel's own BlockIP API has no bulk/list endpoint, so calling it once per IP (even
+    // batched a few at a time) means thousands of round trips for a full exit-node list, which
+    // both takes far longer and is far more likely to trip cPanel's own API rate limiting than
+    // just rewriting the file once.
+    public function blockAllTorExitNodes(TorExitNodeListService $torExitNodes, CpanelIpBlockerService $cpanel, GatewaySettingsService $settings): void
     {
         $ips = collect($torExitNodes->all());
 
@@ -85,37 +87,42 @@ class SecuritySettings extends Page implements HasForms
             return;
         }
 
-        $now = now();
+        $result = $cpanel->addIpsToHtaccess($ips->all());
 
-        $alreadyBlocked = GatewayBlockedIp::query()
-            ->whereIn('ip', $ips)
-            ->where('is_active', true)
-            ->where(fn ($q) => $q->whereNull('blocked_until')->orWhere('blocked_until', '>', $now))
-            ->pluck('ip')
-            ->flip();
-
-        $toQueue = $ips->reject(fn (string $ip) => $alreadyBlocked->has($ip))->values();
-
-        if ($toQueue->isEmpty()) {
+        if (! $result['ok']) {
             Notification::make()
-                ->title('Every known Tor exit node IP is already blocked.')
+                ->title("Couldn't update cPanel's .htaccess")
+                ->body($result['error'])
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if ($result['added'] === 0) {
+            Notification::make()
+                ->title('Every known Tor exit node IP is already blocked in cPanel\'s .htaccess.')
                 ->success()
                 ->send();
 
             return;
         }
 
+        // Local bookkeeping so this panel's own Blocked IPs / cPanel Blocked IPs pages reflect
+        // it - the .htaccess write above already succeeded for the whole list at this point, so
+        // every one of these is confirmed blocked, not just the newly-added ones.
+        $now = now();
         $days = $settings->getTorBlockDays();
         $blockedUntil = $now->copy()->addDays($days);
 
-        $toQueue->chunk(500)->each(function ($chunk) use ($blockedUntil, $days, $now) {
+        $ips->chunk(500)->each(function ($chunk) use ($blockedUntil, $days, $now) {
             $rows = $chunk->map(fn (string $ip) => [
                 'ip' => $ip,
                 'note' => "Tor exit-node bulk block (expires in {$days}d)",
                 'is_active' => true,
                 'blocked_until' => $blockedUntil,
                 'offense_count' => 0,
-                'cpanel_synced_at' => null,
+                'cpanel_synced_at' => $now,
                 'cpanel_sync_error' => null,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -128,9 +135,11 @@ class SecuritySettings extends Page implements HasForms
             );
         });
 
+        $alreadyPresent = $ips->count() - $result['added'];
+
         Notification::make()
-            ->title("Queued {$toQueue->count()} Tor exit node IP(s) to block.")
-            ->body('Each is blocked locally right away; registering them with cPanel runs in the background, 5 at a time, and usually finishes within a few minutes.')
+            ->title("Blocked {$result['added']} new Tor exit node IP(s) directly in cPanel's .htaccess.")
+            ->body($alreadyPresent > 0 ? "{$alreadyPresent} were already blocked there." : null)
             ->success()
             ->send();
     }

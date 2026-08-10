@@ -3,10 +3,8 @@
 namespace App\Services;
 
 use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use App\Models\GatewayBlockedIp;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -43,48 +41,6 @@ class CpanelIpBlockerService
             // Never let a cPanel API hiccup break the block flow - our own GatewayBlockedIp
             // record is already saved regardless of whether this call succeeds.
             $this->applyBlockResult($record, $e);
-        }
-    }
-
-    /**
-     * Registers several already-created GatewayBlockedIp records with cPanel at once via
-     * concurrent outbound HTTP requests (Http::pool), instead of one at a time - the caller
-     * controls the batch size by how many records it passes in (e.g.
-     * gateway:sync-tor-bulk-block-to-cpanel sends 5 at a time). Same best-effort semantics as
-     * block(): a failure is written onto that record (cpanel_sync_error) rather than thrown, and
-     * never stops the rest of the batch - a per-request transport failure inside a pool comes
-     * back as the exception itself rather than aborting the pool.
-     *
-     * @param  Collection<int, GatewayBlockedIp>  $records
-     */
-    public function blockMany(Collection $records): void
-    {
-        if ($records->isEmpty()) {
-            return;
-        }
-
-        $credentials = $this->credentials();
-
-        if (! $credentials) {
-            if ($this->settings->isCpanelBlockerEnabled()) {
-                $records->each(fn (GatewayBlockedIp $record) => $record->update([
-                    'cpanel_sync_error' => 'cPanel IP Blocker is enabled but host/username/token is not fully configured.',
-                ]));
-            }
-
-            return;
-        }
-
-        $responses = Http::pool(fn (Pool $pool) => $records->map(
-            fn (GatewayBlockedIp $record) => $pool->as((string) $record->id)
-                ->baseUrl("https://{$credentials['host']}")
-                ->withHeaders(['Authorization' => "cpanel {$credentials['username']}:{$credentials['token']}"])
-                ->timeout(5)
-                ->get('/execute/BlockIP/add_ip', ['ip' => $record->ip])
-        )->all());
-
-        foreach ($records as $record) {
-            $this->applyBlockResult($record, $responses[(string) $record->id] ?? null);
         }
     }
 
@@ -199,6 +155,113 @@ class CpanelIpBlockerService
 
             return ['ok' => false, 'ips' => [], 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Adds several IPs to cPanel's block list in one shot by writing "deny from" lines straight
+     * into the .htaccess file, instead of one add_ip API call per IP (or several at a time) - a
+     * bulk block (e.g. the entire Tor exit-node list, thousands of IPs) is a single read + a
+     * single write this way instead of thousands of individual round trips. New lines are
+     * inserted right after the last existing "deny from" line so they land in whatever
+     * block/context cPanel (or an admin) already established, rather than blindly appended at
+     * the end of the file where they might fall outside it.
+     *
+     * @param  array<int, string>  $ips
+     * @return array{ok: bool, added: int, error: ?string}
+     */
+    public function addIpsToHtaccess(array $ips): array
+    {
+        $ips = array_values(array_unique($ips));
+
+        if (empty($ips)) {
+            return ['ok' => true, 'added' => 0, 'error' => null];
+        }
+
+        $client = $this->client();
+        $path = $this->settings->getCpanelHtaccessPath();
+
+        if (! $client) {
+            return ['ok' => false, 'added' => 0, 'error' => 'cPanel IP Blocker is not fully configured (Security Settings).'];
+        }
+
+        if (! $path) {
+            return ['ok' => false, 'added' => 0, 'error' => 'No .htaccess path configured (Security Settings).'];
+        }
+
+        $dir = dirname($path);
+        $file = basename($path);
+        $dirParam = $dir === '.' ? '/' : $dir;
+
+        try {
+            $readResponse = $client->get('/execute/Fileman/get_file_content', [
+                'dir' => $dirParam,
+                'file' => $file,
+                'to_charset' => 'utf-8',
+            ]);
+
+            if (! $readResponse->successful() || $readResponse->json('status') !== 1) {
+                $reason = $readResponse->json('errors.0') ?? $readResponse->body();
+
+                return ['ok' => false, 'added' => 0, 'error' => "HTTP {$readResponse->status()}: {$reason}"];
+            }
+
+            $content = (string) $readResponse->json('data.content');
+            $existing = array_flip($this->parseDeniedIps($content));
+
+            $newIps = array_values(array_filter($ips, fn (string $ip) => ! isset($existing[$ip])));
+
+            if (empty($newIps)) {
+                return ['ok' => true, 'added' => 0, 'error' => null];
+            }
+
+            // A POST, not a GET like the other calls here - the updated content can run into the
+            // tens/hundreds of KB for a large IP list, well past what fits in a URL query string.
+            $writeResponse = $client->asForm()->post('/execute/Fileman/save_file_content', [
+                'dir' => $dirParam,
+                'file' => $file,
+                'content' => $this->insertDenyLines($content, $newIps),
+                'fallback' => 0,
+            ]);
+
+            if (! $writeResponse->successful() || $writeResponse->json('status') !== 1) {
+                $reason = $writeResponse->json('errors.0') ?? $writeResponse->body();
+
+                return ['ok' => false, 'added' => 0, 'error' => "HTTP {$writeResponse->status()}: {$reason}"];
+            }
+
+            return ['ok' => true, 'added' => count($newIps), 'error' => null];
+        } catch (\Throwable $e) {
+            Log::warning('cPanel IP Blocker: writing .htaccess block list failed', ['error' => $e->getMessage()]);
+
+            return ['ok' => false, 'added' => 0, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * @param  array<int, string>  $ips
+     */
+    private function insertDenyLines(string $content, array $ips): string
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $content);
+        $newLines = array_map(fn (string $ip) => "deny from {$ip}", $ips);
+
+        $lastDenyIndex = null;
+
+        foreach ($lines as $i => $line) {
+            if (preg_match('/^\s*deny\s+from\s+/i', $line)) {
+                $lastDenyIndex = $i;
+            }
+        }
+
+        // No existing "deny from" line to anchor to - nothing has ever been blocked here before,
+        // so just append at the end of the file as a best effort.
+        if ($lastDenyIndex === null) {
+            return rtrim($content, "\n")."\n".implode("\n", $newLines)."\n";
+        }
+
+        array_splice($lines, $lastDenyIndex + 1, 0, $newLines);
+
+        return implode("\n", $lines);
     }
 
     /**

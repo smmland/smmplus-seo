@@ -20,7 +20,7 @@
                 color="danger"
                 outlined
                 wire:click="blockAllTorExitNodes"
-                wire:confirm="Block every known Tor exit node IP now? This queues the whole list (not just ones that have made a request) for blocking - registering them with cPanel happens in the background, 5 at a time."
+                wire:confirm="Block every known Tor exit node IP now? This writes the whole list (not just ones that have made a request) straight into cPanel's .htaccess."
             >
                 Block all Tor exit nodes now
             </x-filament::button>

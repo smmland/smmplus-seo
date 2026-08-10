@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Widgets\DashboardStatsWidget;
+use App\Filament\Widgets\GatewayLiveActivityWidget;
 use App\Filament\Widgets\NewBlogTopicsWidget;
 use App\Filament\Widgets\ServiceTranslationWidget;
 use App\Filament\Widgets\SitemapSyncWidget;
@@ -28,6 +29,7 @@ class Dashboard extends BaseDashboard
     // Short, stable keys - not the class names directly - so a stored layout never breaks if a
     // widget class is ever renamed; only this map needs updating in that case.
     public const WIDGET_REGISTRY = [
+        'gateway_live_activity' => GatewayLiveActivityWidget::class,
         'sitemap_sync' => SitemapSyncWidget::class,
         'new_blog_topics' => NewBlogTopicsWidget::class,
         'dashboard_stats' => DashboardStatsWidget::class,

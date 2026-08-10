@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.0",
-    "notes": "Adds a small CPU/RAM indicator to the panel header, next to the notification bell, refreshing every 30 seconds. Best-effort - many shared hosting accounts restrict access to this system info, in which case it just quietly stays hidden rather than showing a broken number. No database update needed for this update."
+    "version": "1.27.1",
+    "notes": "Adds live visibility into whether the Free Service Gateway is currently under attack: a 'Gateway requests (last minute)' card at the top of the Dashboard (with a clear Normal / Possible attack status), plus a compact version in the header next to CPU/RAM, both refreshing every 30 seconds. Status is based on how many requests were rejected/blocked in the last minute, not raw traffic volume. Only visible to admins with Free Service Gateway or Security access. No database update needed for this update."
 }

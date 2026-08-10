@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\GatewayBlockedIp;
 use App\Models\GatewayRequestLog;
+use App\Services\GatewayRateLimiter;
 use App\Services\GatewaySettingsService;
 use App\Support\GatewayClient;
 use Closure;
@@ -17,7 +18,15 @@ class HandleGatewayCors
     // padding (e.g. thousands of repeated characters) seen in the wild from abusive callers.
     private const MAX_REASONABLE_INPUT_LENGTH = 300;
 
-    public function __construct(private readonly GatewaySettingsService $settings) {}
+    // A real browser user never fires more than a couple of these in a minute - anything
+    // past this is a script hammering the endpoint (confirmed against a live flood while
+    // diagnosing 503s from the host's entry-process limit being exhausted).
+    private const MAX_REQUESTS_PER_MINUTE = 3;
+
+    public function __construct(
+        private readonly GatewaySettingsService $settings,
+        private readonly GatewayRateLimiter $limiter,
+    ) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -34,6 +43,14 @@ class HandleGatewayCors
             $this->log($ip, $origin, GatewayRequestLog::STATUS_BLOCKED_IP);
 
             return response()->json(['ok' => false, 'error' => 'Your IP has been blocked from using this service.'], 403);
+        }
+
+        if ($this->settings->isAutoBlockEnabled() && $this->isFlooding($ip)) {
+            $this->log($ip, $origin, GatewayRequestLog::STATUS_RATE_FLOOD);
+
+            GatewayBlockedIp::blockWithEscalation($ip, 'Auto-blocked: more than '.self::MAX_REQUESTS_PER_MINUTE.' requests/minute', $this->settings);
+
+            return response()->json(['ok' => false, 'error' => 'Too many requests.'], 429);
         }
 
         if ($this->hasUnreasonableInput($request)) {
@@ -75,6 +92,13 @@ class HandleGatewayCors
         $response->headers->set('Access-Control-Max-Age', '86400');
 
         return $response;
+    }
+
+    private function isFlooding(string $ip): bool
+    {
+        $key = 'gateway:rate:minute:'.md5($ip);
+
+        return $this->limiter->incrementWithTtl($key, 1, 60) > self::MAX_REQUESTS_PER_MINUTE;
     }
 
     private function hasUnreasonableInput(Request $request): bool

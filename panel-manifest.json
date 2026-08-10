@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.2",
-    "notes": "Adds automatic IP-blocking for abusive requests to the Free Service Gateway API: any request whose link/service value is absurdly long (over 300 characters - no real link is ever close to that) is now rejected immediately and, when Auto-block is enabled in Gateway Settings, the sender's IP is blocked right away instead of waiting for the existing 5-minute volume-based sweep, using the same escalating block-duration rules as repeat offenders. No database update needed for this update."
+    "version": "1.26.3",
+    "notes": "Adds a per-minute flood guard to the Free Service Gateway API: when Auto-block is enabled in Gateway Settings, an IP sending more than 3 requests in a single minute is now rejected (429) and blocked immediately, using the same escalating block-duration rules as the other auto-block triggers. This targets rapid-fire flooding/DDoS-style abuse specifically, on top of the existing daily-volume and oversized-payload triggers. Auto-block must be turned on in Gateway Settings for any of these to actually block IPs - if the panel is unreachable, it can be enabled directly via phpMyAdmin (see chat). No database update needed for this update."
 }

@@ -11,13 +11,17 @@ class GatewayBlockedIp extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['ip', 'note', 'is_active', 'blocked_until', 'offense_count'];
+    protected $fillable = [
+        'ip', 'note', 'is_active', 'blocked_until', 'offense_count',
+        'cpanel_synced_at', 'cpanel_sync_error',
+    ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
             'blocked_until' => 'datetime',
+            'cpanel_synced_at' => 'datetime',
         ];
     }
 
@@ -54,7 +58,10 @@ class GatewayBlockedIp extends Model
 
         // Best-effort - our own record above is the source of truth regardless of whether
         // this succeeds. No-ops entirely unless the cPanel IP Blocker integration is configured.
-        app(CpanelIpBlockerService::class)->block($ip);
+        // Result is written onto the record itself (cpanel_synced_at / cpanel_sync_error) so an
+        // admin can confirm from the database whether the integration is actually working,
+        // per IP, without needing to dig through log files.
+        app(CpanelIpBlockerService::class)->block($record);
 
         return $record;
     }

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.4",
-    "notes": "Adds an optional cPanel IP Blocker integration to Gateway Settings: when configured with a cPanel API token, every auto-block (daily volume, oversized payload, or the new per-minute flood guard) is also registered with cPanel's own IP Blocker, so the IP gets rejected by the web server itself instead of ever reaching PHP - this is what actually prevents a flood from exhausting the hosting account's entry-process limit (the real cause of the 503 outage). Off by default; set it up under Free Service Gateway > Settings. No database update needed for this update."
+    "version": "1.26.5",
+    "notes": "Adds visibility into whether the cPanel IP Blocker integration is actually working: the Blocked IPs page (Free Service Gateway) now has a 'cPanel' column showing, per IP, whether it was successfully registered with cPanel's IP Blocker - hover it for the exact reason if it failed (wrong token, wrong host, etc). Same info is also queryable directly from the database (gateway_blocked_ips.cpanel_synced_at / cpanel_sync_error). Requires 'Update database' (adds two nullable columns to gateway_blocked_ips)."
 }

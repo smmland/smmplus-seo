@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\GatewayBlockedIp;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -15,7 +16,10 @@ class CpanelIpBlockerService
 {
     public function __construct(private readonly GatewaySettingsService $settings) {}
 
-    public function block(string $ip): void
+    // Writes the outcome onto the record itself (cpanel_synced_at / cpanel_sync_error) so it
+    // can be confirmed straight from the database - e.g. "SELECT ... ORDER BY updated_at DESC
+    // LIMIT 50" - without needing log file access.
+    public function block(GatewayBlockedIp $record): void
     {
         if (! $this->settings->isCpanelBlockerEnabled()) {
             return;
@@ -26,6 +30,8 @@ class CpanelIpBlockerService
         $token = $this->settings->getCpanelApiToken();
 
         if (! $host || ! $username || ! $token) {
+            $record->update(['cpanel_sync_error' => 'cPanel IP Blocker is enabled but host/username/token is not fully configured.']);
+
             return;
         }
 
@@ -34,20 +40,30 @@ class CpanelIpBlockerService
                 'Authorization' => "cpanel {$username}:{$token}",
             ])
                 ->timeout(5)
-                ->get("https://{$host}/execute/BlockIP/add_ip", ['ip' => $ip]);
+                ->get("https://{$host}/execute/BlockIP/add_ip", ['ip' => $record->ip]);
 
-            if (! $response->successful() || ($response->json('status') === 0)) {
-                Log::warning('cPanel IP Blocker: failed to block IP', [
-                    'ip' => $ip,
-                    'http_status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
+            if ($response->successful() && $response->json('status') !== 0) {
+                $record->update(['cpanel_synced_at' => now(), 'cpanel_sync_error' => null]);
+
+                return;
             }
+
+            $reason = $response->json('errors.0') ?? $response->body();
+
+            $record->update(['cpanel_sync_error' => "HTTP {$response->status()}: {$reason}"]);
+
+            Log::warning('cPanel IP Blocker: failed to block IP', [
+                'ip' => $record->ip,
+                'http_status' => $response->status(),
+                'body' => $response->body(),
+            ]);
         } catch (\Throwable $e) {
             // Never let a cPanel API hiccup break the block flow - our own GatewayBlockedIp
-            // record above is already saved regardless of whether this call succeeds.
+            // record is already saved regardless of whether this call succeeds.
+            $record->update(['cpanel_sync_error' => $e->getMessage()]);
+
             Log::warning('cPanel IP Blocker: request failed', [
-                'ip' => $ip,
+                'ip' => $record->ip,
                 'error' => $e->getMessage(),
             ]);
         }

@@ -101,6 +101,14 @@ class GatewayBlockedIpResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                Tables\Columns\IconColumn::make('cpanel_synced')
+                    ->label('cPanel')
+                    ->getStateUsing(fn (GatewayBlockedIp $record) => $record->cpanel_synced_at !== null)
+                    ->boolean()
+                    ->tooltip(fn (GatewayBlockedIp $record) => $record->cpanel_sync_error
+                        ?: ($record->cpanel_synced_at ? 'Synced to cPanel IP Blocker '.$record->cpanel_synced_at->diffForHumans() : 'cPanel IP Blocker not configured or not yet attempted'))
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Added')
                     ->dateTime()

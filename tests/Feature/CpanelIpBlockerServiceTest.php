@@ -14,11 +14,16 @@ class CpanelIpBlockerServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function record(string $ip = '1.2.3.4'): GatewayBlockedIp
+    {
+        return GatewayBlockedIp::query()->create(['ip' => $ip, 'is_active' => true, 'offense_count' => 1]);
+    }
+
     public function test_does_not_call_cpanel_when_disabled(): void
     {
         Http::fake();
 
-        app(CpanelIpBlockerService::class)->block('1.2.3.4');
+        app(CpanelIpBlockerService::class)->block($this->record());
 
         Http::assertNothingSent();
     }
@@ -29,9 +34,12 @@ class CpanelIpBlockerServiceTest extends TestCase
 
         app(GatewaySettingsService::class)->setCpanelBlockerSettings(true, null, null, null);
 
-        app(CpanelIpBlockerService::class)->block('1.2.3.4');
+        $record = $this->record();
+        app(CpanelIpBlockerService::class)->block($record);
 
         Http::assertNothingSent();
+        $this->assertNull($record->fresh()->cpanel_synced_at);
+        $this->assertNotNull($record->fresh()->cpanel_sync_error);
     }
 
     public function test_calls_the_blockip_uapi_endpoint_when_fully_configured(): void
@@ -42,15 +50,20 @@ class CpanelIpBlockerServiceTest extends TestCase
             true, 'server1.example.com:2083', 'someuser', 'secret-token',
         );
 
-        app(CpanelIpBlockerService::class)->block('1.2.3.4');
+        $record = $this->record();
+        app(CpanelIpBlockerService::class)->block($record);
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://server1.example.com:2083/execute/BlockIP/add_ip?ip=1.2.3.4'
                 && $request->header('Authorization')[0] === 'cpanel someuser:secret-token';
         });
+
+        $record->refresh();
+        $this->assertNotNull($record->cpanel_synced_at);
+        $this->assertNull($record->cpanel_sync_error);
     }
 
-    public function test_a_failed_cpanel_call_does_not_throw_and_does_not_prevent_the_local_block(): void
+    public function test_a_failed_cpanel_call_records_the_error_but_does_not_throw_or_prevent_the_local_block(): void
     {
         Http::fake(['*' => Http::response(['status' => 0, 'errors' => ['bad token']], 200)]);
 
@@ -63,9 +76,13 @@ class CpanelIpBlockerServiceTest extends TestCase
 
         $this->assertTrue($record->is_active);
         $this->assertTrue(GatewayBlockedIp::isBlocked('1.2.3.4'));
+
+        $record->refresh();
+        $this->assertNull($record->cpanel_synced_at);
+        $this->assertStringContainsString('bad token', $record->cpanel_sync_error);
     }
 
-    public function test_blocking_via_escalation_triggers_the_cpanel_call_when_configured(): void
+    public function test_blocking_via_escalation_triggers_the_cpanel_call_and_records_success(): void
     {
         Http::fake(['*' => Http::response(['status' => 1], 200)]);
 
@@ -74,8 +91,9 @@ class CpanelIpBlockerServiceTest extends TestCase
             true, 'server1.example.com:2083', 'someuser', 'secret-token',
         );
 
-        GatewayBlockedIp::blockWithEscalation('5.6.7.8', 'test reason', app(GatewaySettingsService::class));
+        $record = GatewayBlockedIp::blockWithEscalation('5.6.7.8', 'test reason', app(GatewaySettingsService::class));
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'ip=5.6.7.8'));
+        $this->assertNotNull($record->fresh()->cpanel_synced_at);
     }
 }

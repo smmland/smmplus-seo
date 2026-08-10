@@ -76,4 +76,32 @@ class TelegramAlertServiceTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_notify_translation_completed_sends_when_enabled(): void
+    {
+        app(TelegramAlertSettingsService::class)->setEnabled(true);
+        app(TelegramAlertSettingsService::class)->setOnTranslationCompletedEnabled(true);
+        app(TelegramSettingsService::class)->setBotToken('test-token');
+        TelegramAlertRecipient::create(['label' => 'Ali', 'link_token' => 'tok', 'chat_id' => '123']);
+
+        Http::fake(['*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]], 200)]);
+
+        app(TelegramAlertService::class)->notifyTranslationCompleted('3 blog translation(s) completed');
+
+        Http::assertSent(fn ($request) => str_contains($request['text'] ?? '', '3 blog translation(s) completed'));
+    }
+
+    public function test_notify_translation_completed_is_off_by_default_toggle_respected(): void
+    {
+        app(TelegramAlertSettingsService::class)->setEnabled(true);
+        app(TelegramAlertSettingsService::class)->setOnTranslationCompletedEnabled(false);
+        app(TelegramSettingsService::class)->setBotToken('test-token');
+        TelegramAlertRecipient::create(['label' => 'Ali', 'link_token' => 'tok', 'chat_id' => '123']);
+
+        Http::fake();
+
+        app(TelegramAlertService::class)->notifyTranslationCompleted('3 blog translation(s) completed');
+
+        Http::assertNothingSent();
+    }
 }

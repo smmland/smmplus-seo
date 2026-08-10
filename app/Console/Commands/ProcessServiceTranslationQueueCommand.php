@@ -7,6 +7,7 @@ use App\Models\ServiceTranslationJob;
 use App\Services\AiSettingsService;
 use App\Services\PanelNotificationService;
 use App\Services\ServiceAiTranslationService;
+use App\Services\TelegramAlertService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 
@@ -25,7 +26,7 @@ class ProcessServiceTranslationQueueCommand extends Command
     // translation:process-queue's 850s budget - kept comfortably under the same cron tick.
     private const TIME_BUDGET_SECONDS = 240;
 
-    public function handle(AiSettingsService $aiSettings, ServiceAiTranslationService $translator, PanelNotificationService $notifications): int
+    public function handle(AiSettingsService $aiSettings, ServiceAiTranslationService $translator, PanelNotificationService $notifications, TelegramAlertService $alerts): int
     {
         if (! Schema::hasTable('service_translation_jobs')) {
             return self::SUCCESS;
@@ -82,6 +83,7 @@ class ProcessServiceTranslationQueueCommand extends Command
         // of jobs in a single tick, and a notification per job would flood the panel.
         if ($doneCount > 0) {
             $notifications->notify('translation', 'translation_completed', "{$doneCount} service translation(s) completed", null, ServiceTranslationQueue::getUrl());
+            $alerts->notifyTranslationCompleted("{$doneCount} service translation(s) completed");
         }
 
         $this->info("Processed {$processed} service translation job(s) at concurrency {$concurrency}.");

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.6",
-    "notes": "Reworks 'Block all Tor exit nodes now' (Security Settings): instead of sending cPanel one block request per IP (even batched a few at a time), it now writes the whole exit-node list straight into cPanel's .htaccess in a single read + a single write - faster and far less likely to trip cPanel's own API rate limiting than thousands of individual requests. No database update needed for this update."
+    "version": "1.27.7",
+    "notes": "Fixes a gap in personal Telegram alerts (Telegram Channel > Alerts): 'translation completed' notifications - blog, service, and category - showed up in the panel's notification bell but were never DMed to Telegram, unlike every other alert event. Added a new 'A translation finished' toggle there (on by default) so this actually sends now. No database update needed for this update."
 }

@@ -58,6 +58,7 @@ class TelegramAlerts extends Page implements HasForms
             'onServiceChanged' => $settings->isOnServiceChangedEnabled(),
             'onNewText' => $settings->isOnNewTextEnabled(),
             'onPostPreview' => $settings->isOnPostPreviewEnabled(),
+            'onTranslationCompleted' => $settings->isOnTranslationCompletedEnabled(),
             'previewMinutesBefore' => $settings->getPreviewMinutesBefore(),
         ]);
     }
@@ -82,6 +83,9 @@ class TelegramAlerts extends Page implements HasForms
 
                         Toggle::make('onNewText')
                             ->label('New content was added and needs translation'),
+
+                        Toggle::make('onTranslationCompleted')
+                            ->label('A translation finished (blog, service, or category)'),
 
                         Toggle::make('onPostPreview')
                             ->label('Preview a channel post before it sends')
@@ -115,6 +119,7 @@ class TelegramAlerts extends Page implements HasForms
         $settings->setOnServiceChangedEnabled((bool) $data['onServiceChanged']);
         $settings->setOnNewTextEnabled((bool) $data['onNewText']);
         $settings->setOnPostPreviewEnabled((bool) $data['onPostPreview']);
+        $settings->setOnTranslationCompletedEnabled((bool) $data['onTranslationCompleted']);
         $settings->setPreviewMinutesBefore((int) $data['previewMinutesBefore']);
 
         Notification::make()

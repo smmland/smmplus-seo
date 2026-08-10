@@ -17,6 +17,7 @@ class TelegramAlertSettingsService
     private const KEY_ON_SERVICE_CHANGED = 'telegram_alerts_on_service_changed';
     private const KEY_ON_NEW_TEXT = 'telegram_alerts_on_new_text';
     private const KEY_ON_POST_PREVIEW = 'telegram_alerts_on_post_preview';
+    private const KEY_ON_TRANSLATION_COMPLETED = 'telegram_alerts_on_translation_completed';
     private const KEY_PREVIEW_MINUTES_BEFORE = 'telegram_alerts_preview_minutes_before';
 
     private const DEFAULT_ENABLED = false;
@@ -24,6 +25,7 @@ class TelegramAlertSettingsService
     private const DEFAULT_ON_SERVICE_CHANGED = true;
     private const DEFAULT_ON_NEW_TEXT = true;
     private const DEFAULT_ON_POST_PREVIEW = true;
+    private const DEFAULT_ON_TRANSLATION_COMPLETED = true;
     private const DEFAULT_PREVIEW_MINUTES_BEFORE = 30;
 
     public function isEnabled(): bool
@@ -74,6 +76,16 @@ class TelegramAlertSettingsService
     public function setOnPostPreviewEnabled(bool $enabled): void
     {
         $this->set(self::KEY_ON_POST_PREVIEW, $enabled ? '1' : '0');
+    }
+
+    public function isOnTranslationCompletedEnabled(): bool
+    {
+        return $this->getBool(self::KEY_ON_TRANSLATION_COMPLETED, self::DEFAULT_ON_TRANSLATION_COMPLETED);
+    }
+
+    public function setOnTranslationCompletedEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_ON_TRANSLATION_COMPLETED, $enabled ? '1' : '0');
     }
 
     public function getPreviewMinutesBefore(): int

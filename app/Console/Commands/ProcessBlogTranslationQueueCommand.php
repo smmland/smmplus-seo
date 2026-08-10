@@ -7,6 +7,7 @@ use App\Models\BlogTranslationJob;
 use App\Services\AiSettingsService;
 use App\Services\BlogAiTranslationService;
 use App\Services\PanelNotificationService;
+use App\Services\TelegramAlertService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 
@@ -28,7 +29,7 @@ class ProcessBlogTranslationQueueCommand extends Command
     // withoutOverlapping() in routes/console.php never has to fight a runaway invocation.
     private const TIME_BUDGET_SECONDS = 850;
 
-    public function handle(AiSettingsService $aiSettings, BlogAiTranslationService $translator, PanelNotificationService $notifications): int
+    public function handle(AiSettingsService $aiSettings, BlogAiTranslationService $translator, PanelNotificationService $notifications, TelegramAlertService $alerts): int
     {
         if (! Schema::hasTable('blog_translation_jobs')) {
             return self::SUCCESS;
@@ -95,6 +96,7 @@ class ProcessBlogTranslationQueueCommand extends Command
 
         if ($doneCount > 0) {
             $notifications->notify('translation', 'translation_completed', "{$doneCount} blog translation(s) completed", null, BlogTranslationQueue::getUrl());
+            $alerts->notifyTranslationCompleted("{$doneCount} blog translation(s) completed");
         }
 
         $this->info("Processed {$processed} translation job(s) at concurrency {$concurrency}.");

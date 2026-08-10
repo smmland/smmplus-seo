@@ -49,6 +49,15 @@ class TelegramAlertService
         $this->broadcast("📝 New content added - needs translation:\n{$title}");
     }
 
+    public function notifyTranslationCompleted(string $message): void
+    {
+        if (! $this->settings->isOnTranslationCompletedEnabled()) {
+            return;
+        }
+
+        $this->broadcast("✅ {$message}");
+    }
+
     public function notifyPostPreview(TelegramPost $post): void
     {
         if (! $this->settings->isOnPostPreviewEnabled()) {

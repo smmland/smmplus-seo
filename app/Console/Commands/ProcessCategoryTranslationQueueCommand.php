@@ -7,6 +7,7 @@ use App\Models\CategoryTranslationJob;
 use App\Services\AiSettingsService;
 use App\Services\CategoryAiTranslationService;
 use App\Services\PanelNotificationService;
+use App\Services\TelegramAlertService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 
@@ -25,7 +26,7 @@ class ProcessCategoryTranslationQueueCommand extends Command
     // A category name is far shorter than even a service title - comfortably under one cron tick.
     private const TIME_BUDGET_SECONDS = 120;
 
-    public function handle(AiSettingsService $aiSettings, CategoryAiTranslationService $translator, PanelNotificationService $notifications): int
+    public function handle(AiSettingsService $aiSettings, CategoryAiTranslationService $translator, PanelNotificationService $notifications, TelegramAlertService $alerts): int
     {
         if (! Schema::hasTable('category_translation_jobs')) {
             return self::SUCCESS;
@@ -80,6 +81,7 @@ class ProcessCategoryTranslationQueueCommand extends Command
 
         if ($doneCount > 0) {
             $notifications->notify('translation', 'translation_completed', "{$doneCount} category translation(s) completed", null, CategoryTranslationQueue::getUrl());
+            $alerts->notifyTranslationCompleted("{$doneCount} category translation(s) completed");
         }
 
         $this->info("Processed {$processed} category translation job(s) at concurrency {$concurrency}.");

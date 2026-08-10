@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use Illuminate\Support\Facades\Crypt;
 
 class GatewaySettingsService
 {
@@ -15,6 +16,10 @@ class GatewaySettingsService
     private const KEY_AUTO_BLOCK_BASE_HOURS = 'gateway_auto_block_base_hours';
     private const KEY_AUTO_BLOCK_MULTIPLIER = 'gateway_auto_block_multiplier';
     private const KEY_AUTO_BLOCK_MAX_HOURS = 'gateway_auto_block_max_hours';
+    private const KEY_CPANEL_BLOCKER_ENABLED = 'gateway_cpanel_blocker_enabled';
+    private const KEY_CPANEL_HOST = 'gateway_cpanel_host';
+    private const KEY_CPANEL_USERNAME = 'gateway_cpanel_username';
+    private const KEY_CPANEL_API_TOKEN = 'gateway_cpanel_api_token';
 
     private const DEFAULT_ALLOWED_ORIGINS = ['https://smm.plus', 'https://www.smm.plus'];
     private const DEFAULT_GLOBAL_DAILY_SECONDS = 24 * 60 * 60;
@@ -25,6 +30,7 @@ class GatewaySettingsService
     private const DEFAULT_AUTO_BLOCK_BASE_HOURS = 1;
     private const DEFAULT_AUTO_BLOCK_MULTIPLIER = 2;
     private const DEFAULT_AUTO_BLOCK_MAX_HOURS = 168;
+    private const DEFAULT_CPANEL_BLOCKER_ENABLED = false;
 
     /**
      * @return array<int,string>
@@ -118,6 +124,58 @@ class GatewaySettingsService
         $this->set(self::KEY_AUTO_BLOCK_BASE_HOURS, (string) $baseHours);
         $this->set(self::KEY_AUTO_BLOCK_MULTIPLIER, (string) $multiplier);
         $this->set(self::KEY_AUTO_BLOCK_MAX_HOURS, (string) $maxHours);
+    }
+
+    public function isCpanelBlockerEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_CPANEL_BLOCKER_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_CPANEL_BLOCKER_ENABLED;
+    }
+
+    // host:port of the cPanel login itself (e.g. "server123.example.com:2083") - not
+    // necessarily the site's own domain, which is common on shared hosting.
+    public function getCpanelHost(): ?string
+    {
+        return $this->get(self::KEY_CPANEL_HOST);
+    }
+
+    public function getCpanelUsername(): ?string
+    {
+        return $this->get(self::KEY_CPANEL_USERNAME);
+    }
+
+    public function hasCpanelApiToken(): bool
+    {
+        return $this->get(self::KEY_CPANEL_API_TOKEN) !== null;
+    }
+
+    public function getCpanelApiToken(): ?string
+    {
+        $encrypted = $this->get(self::KEY_CPANEL_API_TOKEN);
+
+        if ($encrypted === null) {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($encrypted);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public function setCpanelBlockerSettings(bool $enabled, ?string $host, ?string $username, ?string $token): void
+    {
+        $this->set(self::KEY_CPANEL_BLOCKER_ENABLED, $enabled ? '1' : '0');
+        $this->set(self::KEY_CPANEL_HOST, trim((string) $host));
+        $this->set(self::KEY_CPANEL_USERNAME, trim((string) $username));
+
+        // Same "blank means keep the existing secret" rule as TelegramSettingsService::setBotToken()
+        // - the form field is never pre-filled with the real token.
+        if ($token !== null && $token !== '') {
+            $this->set(self::KEY_CPANEL_API_TOKEN, Crypt::encryptString($token));
+        }
     }
 
     private function get(string $key): ?string

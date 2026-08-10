@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\LogsActivity;
+use App\Services\CpanelIpBlockerService;
 use App\Support\PanelSection;
 use Illuminate\Database\Eloquent\Model;
 
@@ -50,6 +51,10 @@ class GatewayBlockedIp extends Model
             'offense_count' => $offenseNumber,
             'note' => "{$reason} (offense #{$offenseNumber}, {$hours}h)",
         ])->save();
+
+        // Best-effort - our own record above is the source of truth regardless of whether
+        // this succeeds. No-ops entirely unless the cPanel IP Blocker integration is configured.
+        app(CpanelIpBlockerService::class)->block($ip);
 
         return $record;
     }

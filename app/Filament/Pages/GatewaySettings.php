@@ -48,6 +48,10 @@ class GatewaySettings extends Page implements HasForms
             'autoBlockBaseHours' => $settings->getAutoBlockBaseHours(),
             'autoBlockMultiplier' => $settings->getAutoBlockMultiplier(),
             'autoBlockMaxHours' => $settings->getAutoBlockMaxHours(),
+            'cpanelBlockerEnabled' => $settings->isCpanelBlockerEnabled(),
+            'cpanelHost' => $settings->getCpanelHost(),
+            'cpanelUsername' => $settings->getCpanelUsername(),
+            'cpanelApiToken' => null,
         ]);
     }
 
@@ -122,6 +126,30 @@ class GatewaySettings extends Page implements HasForms
                             ->helperText('Caps how long a single auto-block can last, no matter how high the offense count climbs.'),
                     ])
                     ->columns(2),
+
+                Section::make('cPanel IP Blocker (optional)')
+                    ->description('When set, every auto-block above is also registered with cPanel\'s own IP Blocker, so the IP gets rejected by the web server itself instead of reaching PHP - this is what actually stops a flood from exhausting the account\'s process limit. Generate a token from cPanel > Security > Manage API Tokens (no root/WHM access needed).')
+                    ->schema([
+                        Toggle::make('cpanelBlockerEnabled')
+                            ->label('Enabled'),
+
+                        TextInput::make('cpanelHost')
+                            ->label('cPanel host')
+                            ->placeholder('server123.example.com:2083')
+                            ->helperText('The host:port you log into cPanel with - not necessarily this site\'s own domain.'),
+
+                        TextInput::make('cpanelUsername')
+                            ->label('cPanel username'),
+
+                        TextInput::make('cpanelApiToken')
+                            ->label('API token')
+                            ->password()
+                            ->revealable()
+                            ->helperText(fn () => app(GatewaySettingsService::class)->hasCpanelApiToken()
+                                ? 'A token is already saved - leave blank to keep it, or type a new one to replace it.'
+                                : 'No token saved yet.'),
+                    ])
+                    ->columns(2),
             ])
             ->statePath('data');
     }
@@ -143,6 +171,14 @@ class GatewaySettings extends Page implements HasForms
             (float) $data['autoBlockMultiplier'],
             (float) $data['autoBlockMaxHours'],
         );
+        $settings->setCpanelBlockerSettings(
+            (bool) $data['cpanelBlockerEnabled'],
+            $data['cpanelHost'],
+            $data['cpanelUsername'],
+            $data['cpanelApiToken'] ?: null,
+        );
+
+        $this->form->fill([...$this->form->getState(), 'cpanelApiToken' => null]);
 
         Notification::make()
             ->title('Settings saved')

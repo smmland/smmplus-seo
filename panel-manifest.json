@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.3",
-    "notes": "Adds a per-minute flood guard to the Free Service Gateway API: when Auto-block is enabled in Gateway Settings, an IP sending more than 3 requests in a single minute is now rejected (429) and blocked immediately, using the same escalating block-duration rules as the other auto-block triggers. This targets rapid-fire flooding/DDoS-style abuse specifically, on top of the existing daily-volume and oversized-payload triggers. Auto-block must be turned on in Gateway Settings for any of these to actually block IPs - if the panel is unreachable, it can be enabled directly via phpMyAdmin (see chat). No database update needed for this update."
+    "version": "1.26.4",
+    "notes": "Adds an optional cPanel IP Blocker integration to Gateway Settings: when configured with a cPanel API token, every auto-block (daily volume, oversized payload, or the new per-minute flood guard) is also registered with cPanel's own IP Blocker, so the IP gets rejected by the web server itself instead of ever reaching PHP - this is what actually prevents a flood from exhausting the hosting account's entry-process limit (the real cause of the 503 outage). Off by default; set it up under Free Service Gateway > Settings. No database update needed for this update."
 }

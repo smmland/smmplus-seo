@@ -34,6 +34,14 @@
                 <x-filament::button icon="heroicon-o-plus" wire:click="addRecipient">
                     Add recipient
                 </x-filament::button>
+
+                <x-filament::button
+                    icon="heroicon-o-paper-airplane"
+                    color="gray"
+                    wire:click="sendTestAlert"
+                >
+                    Send test alert
+                </x-filament::button>
             </div>
 
             @if (! $this->botUsername())

@@ -198,4 +198,50 @@ class TelegramAlerts extends Page implements HasForms
 
         unset($this->recipients);
     }
+
+    // Sends directly via TelegramBotService, bypassing TelegramAlertSettingsService::isEnabled()
+    // and the per-event toggles entirely - same reasoning as TelegramSettings::testConnection()
+    // bypassing "Enable Telegram posting": a manual test click is itself the intent, and the
+    // whole point is to tell a real delivery failure (bot blocked, bad token, chat not found)
+    // apart from "nothing was ever sent because a toggle is off".
+    public function sendTestAlert(TelegramBotService $bot): void
+    {
+        $connected = $this->recipients->filter(fn (TelegramAlertRecipient $r) => $r->isLinked());
+
+        if ($connected->isEmpty()) {
+            Notification::make()
+                ->title('No connected recipients yet')
+                ->body('Add one above and have them press Start on their link first.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $failures = [];
+
+        foreach ($connected as $recipient) {
+            $result = $bot->sendMessageTo($recipient->chat_id, '✅ Test alert from the panel - if you can read this, personal alerts are working.');
+
+            if (! ($result['ok'] ?? false)) {
+                $failures[] = "{$recipient->label}: ".($result['message'] ?? 'unknown error');
+            }
+        }
+
+        if (empty($failures)) {
+            Notification::make()
+                ->title('Test alert sent')
+                ->body("Delivered to all {$connected->count()} connected recipient(s).")
+                ->success()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title('Test alert failed for '.count($failures).' of '.$connected->count().' recipient(s)')
+            ->body(implode("\n", $failures))
+            ->danger()
+            ->send();
+    }
 }

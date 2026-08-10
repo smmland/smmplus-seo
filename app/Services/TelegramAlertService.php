@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\TelegramAlertRecipient;
 use App\Models\TelegramPost;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -69,10 +70,19 @@ class TelegramAlertService
         $recipients = TelegramAlertRecipient::query()->whereNotNull('chat_id')->get();
 
         foreach ($recipients as $recipient) {
-            if ($imagePath) {
-                $this->bot->sendPhotoTo($recipient->chat_id, $imagePath, $text);
-            } else {
-                $this->bot->sendMessageTo($recipient->chat_id, $text);
+            $result = $imagePath
+                ? $this->bot->sendPhotoTo($recipient->chat_id, $imagePath, $text)
+                : $this->bot->sendMessageTo($recipient->chat_id, $text);
+
+            // The previous version discarded this result entirely - a failed DM (bot blocked,
+            // chat not found, bad token, ...) left no trace anywhere, which is indistinguishable
+            // from "nothing to alert about" from the recipient's side.
+            if (! ($result['ok'] ?? false)) {
+                Log::warning('Telegram alert failed to send', [
+                    'recipient_id' => $recipient->id,
+                    'recipient_label' => $recipient->label,
+                    'error' => $result['message'] ?? 'unknown error',
+                ]);
             }
         }
     }

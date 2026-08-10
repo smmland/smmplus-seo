@@ -35,7 +35,22 @@ class TorExitNodeListService
 
     public function lastRefreshedAt(): ?Carbon
     {
-        return Cache::get(self::CACHE_UPDATED_KEY);
+        // Stored as a plain string, not a Carbon instance - the database cache store
+        // round-trips scalars fine, but an object can come back as __PHP_Incomplete_Class
+        // depending on autoload timing, which crashed this exact read in production. Guarded
+        // so a leftover value cached by that older, buggy version (or any other unexpected
+        // shape) degrades to "not fetched yet" instead of erroring again.
+        $stored = Cache::get(self::CACHE_UPDATED_KEY);
+
+        if (! is_string($stored)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($stored);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function refresh(): int
@@ -62,7 +77,7 @@ class TorExitNodeListService
             }
 
             Cache::forever(self::CACHE_KEY, $ips);
-            Cache::forever(self::CACHE_UPDATED_KEY, now());
+            Cache::forever(self::CACHE_UPDATED_KEY, now()->toIso8601String());
 
             return count($ips);
         } catch (\Throwable $e) {

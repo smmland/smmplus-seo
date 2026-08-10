@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.7",
-    "notes": "Adds Tor exit-node blocking to Security Settings: rejects any Free Service Gateway request coming from a known Tor exit IP, checked against a list that refreshes automatically every hour (with a manual 'Refresh Tor list now' button too). This targets abuse that rotates through a different Tor IP every few requests, which per-IP blocking alone can never catch up with - confirmed from your own request log that most of the ongoing flood is coming through Tor exit ranges. Off by default - turn it on under Security > Settings and click 'Refresh Tor list now' once after installing. No database update needed for this update."
+    "version": "1.26.8",
+    "notes": "Fixes the 500 error ('__PHP_Incomplete_Class') on Security Settings after clicking 'Refresh Tor list now' - the refresh timestamp was cached as a raw object, which the real database-backed cache can't reliably restore. Now stored as plain text instead, and any leftover bad value from before this fix is handled gracefully (shows 'Not fetched yet' instead of erroring) rather than needing manual cleanup - just click Refresh again after installing. No database update needed for this update."
 }

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.7",
-    "notes": "Fixes a gap in personal Telegram alerts (Telegram Channel > Alerts): 'translation completed' notifications - blog, service, and category - showed up in the panel's notification bell but were never DMed to Telegram, unlike every other alert event. Added a new 'A translation finished' toggle there (on by default) so this actually sends now. No database update needed for this update."
+    "version": "1.27.8",
+    "notes": "Adds a new 'Auto-sync blocked IPs to .htaccess' toggle on Security Settings (off by default) - every 5 minutes, adds any actively-blocked IP (auto-block, manual, Tor) missing from cPanel's .htaccess straight into the file, one read + one write regardless of how many. Catches drift the normal per-IP sync at block time can miss, e.g. a transient cPanel failure or cPanel getting configured after IPs were already blocked. No database update needed for this update."
 }

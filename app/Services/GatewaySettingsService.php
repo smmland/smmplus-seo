@@ -21,6 +21,7 @@ class GatewaySettingsService
     private const KEY_CPANEL_USERNAME = 'gateway_cpanel_username';
     private const KEY_CPANEL_API_TOKEN = 'gateway_cpanel_api_token';
     private const KEY_CPANEL_HTACCESS_PATH = 'gateway_cpanel_htaccess_path';
+    private const KEY_AUTO_SYNC_BLOCKED_IPS_ENABLED = 'gateway_auto_sync_blocked_ips_enabled';
     private const KEY_TOR_BLOCKING_ENABLED = 'gateway_tor_blocking_enabled';
     private const KEY_TOR_BLOCK_DAYS = 'gateway_tor_block_days';
 
@@ -34,6 +35,7 @@ class GatewaySettingsService
     private const DEFAULT_AUTO_BLOCK_MULTIPLIER = 2;
     private const DEFAULT_AUTO_BLOCK_MAX_HOURS = 168;
     private const DEFAULT_CPANEL_BLOCKER_ENABLED = false;
+    private const DEFAULT_AUTO_SYNC_BLOCKED_IPS_ENABLED = false;
     private const DEFAULT_TOR_BLOCKING_ENABLED = false;
     private const DEFAULT_TOR_BLOCK_DAYS = 14;
 
@@ -192,6 +194,23 @@ class GatewaySettingsService
     public function getCpanelHtaccessPath(): ?string
     {
         return $this->get(self::KEY_CPANEL_HTACCESS_PATH) ?: null;
+    }
+
+    // Gated separately from cpanelBlockerEnabled - the reactive per-IP sync
+    // (CpanelIpBlockerService::block(), called the moment an IP gets blocked) already covers the
+    // common case, so this periodic reconciliation sweep (gateway:sync-blocked-ips-to-htaccess) is
+    // an opt-in safety net for drift: a transient sync failure, or cPanel getting configured after
+    // IPs were already blocked.
+    public function isAutoSyncBlockedIpsEnabled(): bool
+    {
+        $stored = $this->get(self::KEY_AUTO_SYNC_BLOCKED_IPS_ENABLED);
+
+        return $stored !== null ? (bool) (int) $stored : self::DEFAULT_AUTO_SYNC_BLOCKED_IPS_ENABLED;
+    }
+
+    public function setAutoSyncBlockedIpsEnabled(bool $enabled): void
+    {
+        $this->set(self::KEY_AUTO_SYNC_BLOCKED_IPS_ENABLED, $enabled ? '1' : '0');
     }
 
     public function isTorBlockingEnabled(): bool

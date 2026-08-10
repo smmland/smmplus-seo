@@ -49,6 +49,7 @@ class SecuritySettings extends Page implements HasForms
             'cpanelUsername' => $settings->getCpanelUsername(),
             'cpanelApiToken' => null,
             'cpanelHtaccessPath' => $settings->getCpanelHtaccessPath(),
+            'autoSyncBlockedIps' => $settings->isAutoSyncBlockedIpsEnabled(),
             'torBlockingEnabled' => $settings->isTorBlockingEnabled(),
             'torBlockDays' => $settings->getTorBlockDays(),
         ]);
@@ -212,6 +213,11 @@ class SecuritySettings extends Page implements HasForms
                             ->label('.htaccess path')
                             ->placeholder('public_html/.htaccess')
                             ->helperText('Relative to your cPanel account\'s home directory. cPanel\'s API can add/remove a block but never list what\'s currently blocked - this tells the "cPanel Blocked IPs" page (Security menu) which file to read cPanel\'s own "deny from" rules from. Usually public_html/.htaccess for the account\'s main domain.'),
+
+                        Toggle::make('autoSyncBlockedIps')
+                            ->label('Auto-sync blocked IPs to .htaccess')
+                            ->helperText('Every 5 minutes, adds any actively-blocked IP (auto-block, manual, Tor) that\'s missing from cPanel\'s .htaccess - straight into the file, not one API call per IP. Off by default: blocking an IP already registers it with cPanel right away, so this only matters if that sync can fail and go unnoticed (e.g. cPanel was down at the time, or got configured after IPs were already blocked).')
+                            ->columnSpanFull(),
                     ])
                     ->columns(2),
 
@@ -265,6 +271,7 @@ class SecuritySettings extends Page implements HasForms
             $data['cpanelApiToken'] ?: null,
             $data['cpanelHtaccessPath'],
         );
+        $settings->setAutoSyncBlockedIpsEnabled((bool) $data['autoSyncBlockedIps']);
         $settings->setTorBlockingSettings((bool) $data['torBlockingEnabled'], (int) $data['torBlockDays']);
 
         $this->form->fill([...$this->form->getState(), 'cpanelApiToken' => null]);

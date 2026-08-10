@@ -34,6 +34,11 @@ Schedule::command('gateway:auto-block-ips')->everyFiveMinutes()->withoutOverlapp
 // source list, so this never serves anything meaningfully stale.
 Schedule::command('security:refresh-tor-exit-list')->hourly()->withoutOverlapping();
 
+// Opt-in safety net (Security Settings: "Auto-sync blocked IPs to .htaccess", off by default) -
+// the command itself no-ops immediately unless that toggle is on, so this can just always be
+// scheduled rather than conditionally registered.
+Schedule::command('gateway:sync-blocked-ips-to-htaccess')->everyFiveMinutes()->withoutOverlapping();
+
 // Each blog URL is only actually re-checked once its own recheck interval has elapsed
 // (Translation Settings), so running this hourly just means newly-published or
 // newly-translated posts don't wait long to be picked up.

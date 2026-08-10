@@ -10,6 +10,7 @@ class BlogTranslationJob extends Model
     public const RUNNING = 'running';
     public const DONE = 'done';
     public const FAILED = 'failed';
+    public const CANCELLED = 'cancelled';
 
     // Still "in progress" from the panel's point of view - queued and running are only ever
     // shown to the admin as a single "translating..." state, the distinction just helps tell

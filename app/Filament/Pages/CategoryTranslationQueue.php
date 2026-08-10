@@ -371,6 +371,40 @@ class CategoryTranslationQueue extends Page implements HasActions
         return ['ok' => true, 'message' => 'Translation queued.'];
     }
 
+    // Escape hatch for a job stuck showing "translating..." indefinitely (queued or running with
+    // nothing actually left processing it - e.g. the queue command died mid-batch) - marks it
+    // cancelled rather than deleting the row, so there's still a record of it, and immediately
+    // frees the language up to be queued again. See ProcessCategoryTranslationQueueCommand's
+    // conditional completion update for why a job already mid-flight in the same run won't get
+    // silently un-cancelled if its AI response happens to land right after this.
+    public function cancelTranslation(string $categoryId, string $targetLangCode): void
+    {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
+        if (! $this->translationTrackingAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return;
+        }
+
+        $cancelled = CategoryTranslationJob::query()
+            ->where('category_id', $categoryId)
+            ->where('target_lang', $targetLangCode)
+            ->whereIn('status', CategoryTranslationJob::PENDING_STATUSES)
+            ->update(['status' => CategoryTranslationJob::CANCELLED]);
+
+        unset($this->queue);
+
+        Notification::make()
+            ->title($cancelled > 0 ? 'Translation cancelled' : 'Nothing to cancel')
+            ->body($cancelled > 0 ? 'You can queue it again anytime.' : 'This language wasn\'t queued or running.')
+            ->success($cancelled > 0)
+            ->warning($cancelled === 0)
+            ->send();
+    }
+
     public function translateAllMissingForCategory(string $categoryId): void
     {
         if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.2",
-    "notes": "Fixes personal Telegram alerts failing silently: a failed DM (bot blocked, chat not found, bad token, ...) was previously discarded with no trace anywhere, now logged to storage/logs/laravel.log. Also adds a 'Send test alert' button on Telegram Channel > Alerts (next to Add recipient) that DMs every connected recipient immediately and reports the exact result - success, or the specific failure reason per recipient - without waiting for a real event or needing the alert toggles on. No database update needed for this update."
+    "version": "1.27.3",
+    "notes": "Adds a Cancel option to every translation queue (Blog, Service title/description, Categories) - click the spinning language badge (in the list or the Details popup) on anything stuck 'translating' for hours/days to clear it and free it up to be queued again. Fixes the root cause of those stuck jobs going forward too: if the background queue command ever dies mid-batch, the job used to stay marked 'running' forever with no way to clear it from the panel. No database update needed for this update."
 }

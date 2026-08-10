@@ -528,6 +528,53 @@ class ServiceTranslationQueue extends Page implements HasActions
         return ['ok' => true, 'message' => 'Translation queued.'];
     }
 
+    // Escape hatch for a job stuck showing "translating..." indefinitely (queued or running with
+    // nothing actually left processing it - e.g. the queue command died mid-batch) - marks it
+    // cancelled rather than deleting the row, so there's still a record of it, and immediately
+    // frees the language/field up to be queued again. See
+    // ProcessServiceTranslationQueueCommand's conditional completion update for why a job already
+    // mid-flight in the same run won't get silently un-cancelled if its AI response lands right
+    // after this.
+    public function cancelTranslation(string $serviceKey, string $targetLangCode): void
+    {
+        $this->cancelField($serviceKey, $targetLangCode, ServiceTranslationJob::FIELD_DESCRIPTION);
+    }
+
+    // The title counterpart to cancelTranslation().
+    public function cancelTitleTranslation(string $serviceKey, string $targetLangCode): void
+    {
+        $this->cancelField($serviceKey, $targetLangCode, ServiceTranslationJob::FIELD_TITLE);
+    }
+
+    private function cancelField(string $serviceKey, string $targetLangCode, string $field): void
+    {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
+        if (! $this->translationTrackingAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return;
+        }
+
+        $cancelled = ServiceTranslationJob::query()
+            ->where('service_key', $serviceKey)
+            ->where('target_lang', $targetLangCode)
+            ->where('field', $field)
+            ->whereIn('status', ServiceTranslationJob::PENDING_STATUSES)
+            ->update(['status' => ServiceTranslationJob::CANCELLED]);
+
+        unset($this->queue);
+
+        Notification::make()
+            ->title($cancelled > 0 ? 'Translation cancelled' : 'Nothing to cancel')
+            ->body($cancelled > 0 ? 'You can queue it again anytime.' : 'This wasn\'t queued or running.')
+            ->success($cancelled > 0)
+            ->warning($cancelled === 0)
+            ->send();
+    }
+
     /**
      * Queues every missing language for one service at once.
      */

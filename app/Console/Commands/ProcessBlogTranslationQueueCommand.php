@@ -76,11 +76,18 @@ class ProcessBlogTranslationQueueCommand extends Command
                     ];
                 }
 
-                $job->update($update);
+                // Conditional on still being RUNNING, not a plain $job->update() - an admin may
+                // have cancelled this exact job (Cancel button on the queue page) while the AI
+                // call was in flight, and that must stick rather than being clobbered back to
+                // done/failed once the response comes back.
+                $wasApplied = BlogTranslationJob::query()
+                    ->where('id', $job->id)
+                    ->where('status', BlogTranslationJob::RUNNING)
+                    ->update($update);
 
                 $processed++;
 
-                if ($result['ok']) {
+                if ($wasApplied && $result['ok']) {
                     $doneCount++;
                 }
             }

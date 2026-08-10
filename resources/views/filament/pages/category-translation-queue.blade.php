@@ -222,7 +222,7 @@
                                 <td class="p-2">
                                     <div class="flex flex-wrap gap-1">
                                         @foreach ($category['languages'] as $language)
-                                            @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'state'])
+                                            @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'state', 'entityKey' => $category['row']->category_id])
                                         @endforeach
                                     </div>
 

@@ -305,7 +305,7 @@
                                     @if ($service['hasDescription'])
                                         <div class="flex flex-wrap gap-1">
                                             @foreach ($service['languages'] as $language)
-                                                @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'state'])
+                                                @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'state', 'entityKey' => $service['row']->service_key])
                                             @endforeach
                                         </div>
 
@@ -321,7 +321,7 @@
                                     <p class="mb-1 mt-3 text-xs font-medium text-gray-400 dark:text-gray-500">Title</p>
                                     <div class="flex flex-wrap gap-1">
                                         @foreach ($service['languages'] as $language)
-                                            @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'titleState'])
+                                            @include('filament.pages.partials.service-language-badge', ['language' => $language, 'stateKey' => 'titleState', 'entityKey' => $service['row']->service_key])
                                         @endforeach
                                     </div>
 

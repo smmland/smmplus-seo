@@ -104,6 +104,16 @@
                                     <x-filament::loading-indicator class="h-3 w-3" />
                                     Translating…
                                 </span>
+                                <x-filament::button
+                                    size="xs"
+                                    color="danger"
+                                    outlined
+                                    icon="heroicon-o-x-mark"
+                                    wire:click="cancelTranslation({{ Illuminate\Support\Js::from($categoryId) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                    wire:confirm="Cancel translating into {{ $language['name'] }}? You can queue it again anytime."
+                                >
+                                    Cancel
+                                </x-filament::button>
                             @elseif ($language['isTranslated'] && ! $language['needsSiteUpdate'])
                                 <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium" style="background-color: rgba(var(--success-500), .1); color: rgb(var(--success-700))">
                                     <span class="inline-flex">

@@ -244,38 +244,50 @@
                                          comment for why plain text-{color}-{shade} utilities aren't used here). --}}
                                     <div class="flex flex-wrap gap-1">
                                         @foreach ($topic['languages'] as $language)
-                                            <span
-                                                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 dark:text-gray-300 dark:ring-white/10"
-                                                title="{{ $language['name'] }}: {{ match ($language['state']) {
-                                                    'default' => 'Default language',
-                                                    'pending' => 'Translating…',
-                                                    'missing' => 'Not translated',
-                                                    'needsUpdate' => 'Translated - needs a site update',
-                                                    'confirmed' => 'Confirmed live',
-                                                    'hidden' => 'Hidden - was translated, now hidden (probably by a sitemap sync) - open Details to reactivate it',
-                                                } }}"
-                                            >
-                                                {{ strtoupper($language['code']) }}
-                                                @switch($language['state'])
-                                                    @case('default')
-                                                        <x-filament::icon icon="heroicon-m-star" class="h-3 w-3" style="color: rgb(var(--warning-500))" />
-                                                        @break
-                                                    @case('pending')
-                                                        <x-filament::loading-indicator class="h-3 w-3" />
-                                                        @break
-                                                    @case('needsUpdate')
-                                                        <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
-                                                        @break
-                                                    @case('confirmed')
-                                                        <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" style="color: rgb(var(--success-600))" />
-                                                        @break
-                                                    @case('hidden')
-                                                        <x-filament::icon icon="heroicon-m-eye-slash" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
-                                                        @break
-                                                    @default
-                                                        <x-filament::icon icon="heroicon-m-x-circle" class="h-3 w-3 opacity-50" />
-                                                @endswitch
-                                            </span>
+                                            @if ($language['state'] === 'pending')
+                                                {{-- Clickable, unlike the other states - a job stuck "translating"
+                                                     for days (queue command died mid-batch, etc.) otherwise has no
+                                                     way to be cleared short of a database update. --}}
+                                                <button
+                                                    type="button"
+                                                    wire:click="cancelTranslation({{ Illuminate\Support\Js::from($topic['url']->group_key) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                                    wire:confirm="Cancel translating into {{ $language['name'] }}? You can queue it again anytime."
+                                                    title="{{ $language['name'] }}: Translating… (click to cancel)"
+                                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 dark:text-gray-300 dark:ring-white/10"
+                                                >
+                                                    {{ strtoupper($language['code']) }}
+                                                    <x-filament::loading-indicator class="h-3 w-3" />
+                                                </button>
+                                            @else
+                                                <span
+                                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-950/10 dark:text-gray-300 dark:ring-white/10"
+                                                    title="{{ $language['name'] }}: {{ match ($language['state']) {
+                                                        'default' => 'Default language',
+                                                        'missing' => 'Not translated',
+                                                        'needsUpdate' => 'Translated - needs a site update',
+                                                        'confirmed' => 'Confirmed live',
+                                                        'hidden' => 'Hidden - was translated, now hidden (probably by a sitemap sync) - open Details to reactivate it',
+                                                    } }}"
+                                                >
+                                                    {{ strtoupper($language['code']) }}
+                                                    @switch($language['state'])
+                                                        @case('default')
+                                                            <x-filament::icon icon="heroicon-m-star" class="h-3 w-3" style="color: rgb(var(--warning-500))" />
+                                                            @break
+                                                        @case('needsUpdate')
+                                                            <x-filament::icon icon="heroicon-m-arrow-up-tray" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
+                                                            @break
+                                                        @case('confirmed')
+                                                            <x-filament::icon icon="heroicon-m-check-circle" class="h-3 w-3" style="color: rgb(var(--success-600))" />
+                                                            @break
+                                                        @case('hidden')
+                                                            <x-filament::icon icon="heroicon-m-eye-slash" class="h-3 w-3" style="color: rgb(var(--warning-600))" />
+                                                            @break
+                                                        @default
+                                                            <x-filament::icon icon="heroicon-m-x-circle" class="h-3 w-3 opacity-50" />
+                                                    @endswitch
+                                                </span>
+                                            @endif
                                         @endforeach
                                     </div>
 

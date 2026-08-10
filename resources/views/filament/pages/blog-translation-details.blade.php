@@ -209,12 +209,22 @@
 
                     @if (! $language['isDefault'])
                         @if ($language['translationPending'])
-                            <div class="flex flex-col gap-1.5">
+                            <div class="flex flex-col items-center gap-1.5">
                                 <span class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
                                     <x-filament::loading-indicator class="h-4 w-4" />
                                     Translating in the background… this can take a few minutes for a long article.
                                 </span>
                                 <div class="bt-progress-track"><div class="bt-progress-bar"></div></div>
+                                <x-filament::button
+                                    size="xs"
+                                    color="danger"
+                                    outlined
+                                    icon="heroicon-o-x-mark"
+                                    wire:click="cancelTranslation({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                    wire:confirm="Cancel translating into {{ $language['name'] }}? You can queue it again anytime."
+                                >
+                                    Cancel
+                                </x-filament::button>
                             </div>
                         @else
                             @if ($language['translationError'])
@@ -283,6 +293,16 @@
                                         Translating…
                                     </span>
                                     <div class="bt-progress-track"><div class="bt-progress-bar"></div></div>
+                                    <x-filament::button
+                                        size="xs"
+                                        color="danger"
+                                        outlined
+                                        icon="heroicon-o-x-mark"
+                                        wire:click="cancelTranslation({{ Illuminate\Support\Js::from($groupKey) }}, {{ Illuminate\Support\Js::from($language['code']) }})"
+                                        wire:confirm="Cancel translating into {{ $language['name'] }}? You can queue it again anytime."
+                                    >
+                                        Cancel
+                                    </x-filament::button>
                                 @else
                                     @if ($language['translationError'])
                                         <span class="text-xs text-danger-600 dark:text-danger-400" title="{{ $language['translationError'] }}">

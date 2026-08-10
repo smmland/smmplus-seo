@@ -10,6 +10,7 @@ class CategoryTranslationJob extends Model
     public const RUNNING = 'running';
     public const DONE = 'done';
     public const FAILED = 'failed';
+    public const CANCELLED = 'cancelled';
 
     public const PENDING_STATUSES = [self::QUEUED, self::RUNNING];
 

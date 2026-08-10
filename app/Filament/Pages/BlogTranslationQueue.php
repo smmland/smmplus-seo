@@ -736,6 +736,40 @@ class BlogTranslationQueue extends Page implements HasActions
         return ['ok' => true, 'message' => 'Translation queued.'];
     }
 
+    // Escape hatch for a job stuck showing "translating..." indefinitely (queued or running with
+    // nothing actually left processing it - e.g. the queue command died mid-batch) - marks it
+    // cancelled rather than deleting the row, so there's still a record of it, and immediately
+    // frees the language up to be queued again. See ProcessBlogTranslationQueueCommand's
+    // conditional completion update for why a job already mid-flight in the same run won't get
+    // silently un-cancelled if its AI response happens to land right after this.
+    public function cancelTranslation(string $groupKey, string $targetLangCode): void
+    {
+        if (! $this->assertCanEdit(PanelSection::TRANSLATION)) {
+            return;
+        }
+
+        if (! $this->translationTrackingAvailable()) {
+            $this->notifyDatabaseUpdateNeeded();
+
+            return;
+        }
+
+        $cancelled = BlogTranslationJob::query()
+            ->where('group_key', $groupKey)
+            ->where('target_lang', $targetLangCode)
+            ->whereIn('status', BlogTranslationJob::PENDING_STATUSES)
+            ->update(['status' => BlogTranslationJob::CANCELLED]);
+
+        unset($this->queue);
+
+        Notification::make()
+            ->title($cancelled > 0 ? 'Translation cancelled' : 'Nothing to cancel')
+            ->body($cancelled > 0 ? 'You can queue it again anytime.' : 'This language wasn\'t queued or running.')
+            ->success($cancelled > 0)
+            ->warning($cancelled === 0)
+            ->send();
+    }
+
     /**
      * The quick-access version on the default-language tab: queues whichever missing language
      * comes first. Click again for the next one once it's done - same "work through the backlog

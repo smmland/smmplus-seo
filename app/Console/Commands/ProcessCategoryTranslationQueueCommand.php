@@ -54,19 +54,25 @@ class ProcessCategoryTranslationQueueCommand extends Command
             foreach ($batch as $job) {
                 $result = $results[$job->id] ?? ['ok' => false, 'message' => 'No result returned.'];
 
-                $job->update([
-                    'status' => $result['ok'] ? CategoryTranslationJob::DONE : CategoryTranslationJob::FAILED,
-                    'message' => $result['message'],
-                    'provider' => $result['provider'] ?? null,
-                    'model' => $result['model'] ?? null,
-                    'input_tokens' => $result['input_tokens'] ?? null,
-                    'output_tokens' => $result['output_tokens'] ?? null,
-                    'estimated_cost_usd' => $result['estimated_cost_usd'] ?? null,
-                ]);
+                // Conditional on still being RUNNING - an admin may have cancelled this exact job
+                // while the AI call was in flight, and that must stick rather than being
+                // clobbered back to done/failed once the response comes back.
+                $wasApplied = CategoryTranslationJob::query()
+                    ->where('id', $job->id)
+                    ->where('status', CategoryTranslationJob::RUNNING)
+                    ->update([
+                        'status' => $result['ok'] ? CategoryTranslationJob::DONE : CategoryTranslationJob::FAILED,
+                        'message' => $result['message'],
+                        'provider' => $result['provider'] ?? null,
+                        'model' => $result['model'] ?? null,
+                        'input_tokens' => $result['input_tokens'] ?? null,
+                        'output_tokens' => $result['output_tokens'] ?? null,
+                        'estimated_cost_usd' => $result['estimated_cost_usd'] ?? null,
+                    ]);
 
                 $processed++;
 
-                if ($result['ok']) {
+                if ($wasApplied && $result['ok']) {
                     $doneCount++;
                 }
             }

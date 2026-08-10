@@ -19,6 +19,7 @@ class GatewayRequestLog extends Model
     public const STATUS_TARGET_LIMIT = 'target_limit';
     public const STATUS_BELOW_MIN_QUANTITY = 'below_min_quantity';
     public const STATUS_UPSTREAM_ERROR = 'upstream_error';
+    public const STATUS_UNREASONABLE_INPUT = 'unreasonable_input';
 
     public $timestamps = false;
 

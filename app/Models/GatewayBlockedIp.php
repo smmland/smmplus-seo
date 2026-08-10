@@ -32,6 +32,28 @@ class GatewayBlockedIp extends Model
             ->exists();
     }
 
+    // Shared by the scheduled volume-based sweep (AutoBlockAbusiveIpsCommand) and any
+    // instant single-request block (e.g. an oversized payload) so both paths escalate the
+    // block duration identically on repeat offenses rather than each keeping its own copy.
+    public static function blockWithEscalation(string $ip, string $reason, \App\Services\GatewaySettingsService $settings): self
+    {
+        $record = static::query()->firstOrNew(['ip' => $ip]);
+        $offenseNumber = ($record->offense_count ?? 0) + 1;
+        $hours = min(
+            $settings->getAutoBlockMaxHours(),
+            $settings->getAutoBlockBaseHours() * ($settings->getAutoBlockMultiplier() ** ($offenseNumber - 1)),
+        );
+
+        $record->fill([
+            'is_active' => true,
+            'blocked_until' => now()->addHours($hours),
+            'offense_count' => $offenseNumber,
+            'note' => "{$reason} (offense #{$offenseNumber}, {$hours}h)",
+        ])->save();
+
+        return $record;
+    }
+
     public function activityLabel(): string
     {
         return $this->ip;

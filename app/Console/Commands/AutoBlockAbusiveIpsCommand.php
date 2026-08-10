@@ -60,27 +60,14 @@ class AutoBlockAbusiveIpsCommand extends Command
             ->pluck('ip')
             ->flip();
 
-        $baseHours = $settings->getAutoBlockBaseHours();
-        $multiplier = $settings->getAutoBlockMultiplier();
-        $maxHours = $settings->getAutoBlockMaxHours();
-
         foreach ($offenderIps as $ip) {
             if ($currentlyBlocked->has($ip)) {
                 continue;
             }
 
-            $record = GatewayBlockedIp::query()->firstOrNew(['ip' => $ip]);
-            $offenseNumber = ($record->offense_count ?? 0) + 1;
-            $hours = min($maxHours, $baseHours * ($multiplier ** ($offenseNumber - 1)));
+            $record = GatewayBlockedIp::blockWithEscalation($ip, "Auto-blocked: {$threshold}+ requests/day", $settings);
 
-            $record->fill([
-                'is_active' => true,
-                'blocked_until' => now()->addHours($hours),
-                'offense_count' => $offenseNumber,
-                'note' => "Auto-blocked: {$threshold}+ requests/day (offense #{$offenseNumber}, {$hours}h)",
-            ])->save();
-
-            $this->warn("Blocked {$ip} for {$hours}h (offense #{$offenseNumber}).");
+            $this->warn("Blocked {$ip} (offense #{$record->offense_count}): {$record->note}");
         }
 
         return self::SUCCESS;

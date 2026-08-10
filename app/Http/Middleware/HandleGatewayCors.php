@@ -12,6 +12,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 class HandleGatewayCors
 {
+    // A real link/service value from any legitimate caller is never remotely this long
+    // (typical social URLs are well under 100 chars) - this only exists to catch garbage
+    // padding (e.g. thousands of repeated characters) seen in the wild from abusive callers.
+    private const MAX_REASONABLE_INPUT_LENGTH = 300;
+
     public function __construct(private readonly GatewaySettingsService $settings) {}
 
     public function handle(Request $request, Closure $next): Response
@@ -29,6 +34,20 @@ class HandleGatewayCors
             $this->log($ip, $origin, GatewayRequestLog::STATUS_BLOCKED_IP);
 
             return response()->json(['ok' => false, 'error' => 'Your IP has been blocked from using this service.'], 403);
+        }
+
+        if ($this->hasUnreasonableInput($request)) {
+            $this->log($ip, $origin, GatewayRequestLog::STATUS_UNREASONABLE_INPUT);
+
+            // A single grossly-oversized payload is already a near-zero-false-positive abuse
+            // signal on its own, unlike the volume threshold (which needs patience to avoid
+            // flagging bursts of legitimate use) - block immediately rather than waiting for
+            // the scheduled sweep. Still respects the admin's auto-block on/off preference.
+            if ($this->settings->isAutoBlockEnabled()) {
+                GatewayBlockedIp::blockWithEscalation($ip, 'Auto-blocked: oversized request payload', $this->settings);
+            }
+
+            return response()->json(['ok' => false, 'error' => 'Invalid request.'], 400);
         }
 
         if (! $isAllowedOrigin) {
@@ -56,6 +75,19 @@ class HandleGatewayCors
         $response->headers->set('Access-Control-Max-Age', '86400');
 
         return $response;
+    }
+
+    private function hasUnreasonableInput(Request $request): bool
+    {
+        foreach (['link', 'service'] as $field) {
+            $value = $request->input($field);
+
+            if (is_string($value) && mb_strlen($value) > self::MAX_REASONABLE_INPUT_LENGTH) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function log(string $ip, string $origin, string $status): void

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.9",
-    "notes": "Adds a red badge on each sidebar item (Telegram Queue, Blog/Service/Category Translation) whenever a notification about that specific page is unread - not just the bell icon at the top - so it's obvious at a glance where a new notification came from. Opening that page marks its notification(s) read and clears both the sidebar badge and the bell's count together. No database update needed for this update."
+    "version": "1.27.10",
+    "notes": "The nav group headings (Translation, Telegram Channel) now also show a badge with the total unread count across their items - e.g. Translation shows the sum of Blog + Service + Category Translation - not just each individual page. Updates live as pages are opened and their own badges clear. No database update needed for this update."
 }

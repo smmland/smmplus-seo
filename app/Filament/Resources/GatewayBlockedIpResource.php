@@ -18,7 +18,7 @@ class GatewayBlockedIpResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-no-symbol';
 
-    protected static ?string $navigationGroup = 'Free Service Gateway';
+    protected static ?string $navigationGroup = 'Security';
 
     protected static ?string $navigationLabel = 'Blocked IPs';
 
@@ -26,12 +26,12 @@ class GatewayBlockedIpResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::FREE_SERVICE)) ?? false;
+        return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::SECURITY)) ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::FREE_SERVICE, PanelSection::TIER_EDIT)) ?? false;
+        return auth()->user()?->hasAccess(PanelSection::key(PanelSection::SECURITY, PanelSection::TIER_EDIT)) ?? false;
     }
 
     public static function canEdit(Model $record): bool

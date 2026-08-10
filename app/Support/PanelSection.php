@@ -31,6 +31,7 @@ class PanelSection
     public const TELEGRAM = 'telegram';
     public const SEO = 'seo';
     public const GENERAL = 'general';
+    public const SECURITY = 'security';
 
     public const TIER_VIEW = 'view';
     public const TIER_EDIT = 'edit';
@@ -43,6 +44,7 @@ class PanelSection
         self::TELEGRAM => 'Telegram Channel',
         self::SEO => 'SEO',
         self::GENERAL => 'General Settings',
+        self::SECURITY => 'Security',
     ];
 
     // GENERAL has no "edit" tier - see class docblock.
@@ -52,6 +54,7 @@ class PanelSection
         self::GIVEAWAY,
         self::TELEGRAM,
         self::SEO,
+        self::SECURITY,
     ];
 
     public const TIER_LABELS = [
@@ -93,7 +96,7 @@ class PanelSection
     }
 
     /**
-     * All 17 grantable keys (5 sections x 3 tiers + general's 2), grouped by section for the
+     * All 20 grantable keys (6 sections x 3 tiers + general's 2), grouped by section for the
      * Users form: ['translation' => ['translation_view' => 'View', ...], ...].
      *
      * @return array<string, array<string, string>>
@@ -128,7 +131,7 @@ class PanelSection
     }
 
     /**
-     * All 17 grantable keys as one flat list, labeled "Section — Tier" (e.g. "Giveaway — Edit"),
+     * All 20 grantable keys as one flat list, labeled "Section — Tier" (e.g. "Giveaway — Edit"),
      * for a single CheckboxList that lets an admin toggle any combination - see UserResource.
      * Ordered section-by-section, view/edit/settings within each, so a 3-column checkbox grid
      * naturally puts each section's own tiers on one row.

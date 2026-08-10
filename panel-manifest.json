@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.26.5",
-    "notes": "Adds visibility into whether the cPanel IP Blocker integration is actually working: the Blocked IPs page (Free Service Gateway) now has a 'cPanel' column showing, per IP, whether it was successfully registered with cPanel's IP Blocker - hover it for the exact reason if it failed (wrong token, wrong host, etc). Same info is also queryable directly from the database (gateway_blocked_ips.cpanel_synced_at / cpanel_sync_error). Requires 'Update database' (adds two nullable columns to gateway_blocked_ips)."
+    "version": "1.26.6",
+    "notes": "Splits IP blocking into its own 'Security' section in the sidebar, independent of Free Service Gateway: Blocked IPs and the auto-block/cPanel IP Blocker settings moved there, with their own independently-grantable permission (previously bundled into Free Service Gateway access). The super admin account is unaffected; any additional admin users you've created will need Security access granted explicitly on the Users page if they should keep using this. No database update needed for this update."
 }

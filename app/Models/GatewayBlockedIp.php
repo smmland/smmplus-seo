@@ -73,6 +73,6 @@ class GatewayBlockedIp extends Model
 
     public function activitySection(): ?string
     {
-        return PanelSection::FREE_SERVICE;
+        return PanelSection::SECURITY;
     }
 }

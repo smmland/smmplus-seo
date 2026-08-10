@@ -14,6 +14,16 @@
             >
                 Refresh Tor list now
             </x-filament::button>
+
+            <x-filament::button
+                type="button"
+                color="danger"
+                outlined
+                wire:click="blockAllTorExitNodes"
+                wire:confirm="Block every known Tor exit node IP now? This queues the whole list (not just ones that have made a request) for blocking - registering them with cPanel happens in the background, 5 at a time."
+            >
+                Block all Tor exit nodes now
+            </x-filament::button>
         </div>
     </form>
 </x-filament-panels::page>

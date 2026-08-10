@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.3",
-    "notes": "Adds a Cancel option to every translation queue (Blog, Service title/description, Categories) - click the spinning language badge (in the list or the Details popup) on anything stuck 'translating' for hours/days to clear it and free it up to be queued again. Fixes the root cause of those stuck jobs going forward too: if the background queue command ever dies mid-batch, the job used to stay marked 'running' forever with no way to clear it from the panel. No database update needed for this update."
+    "version": "1.27.4",
+    "notes": "Adds a 'Block all Tor exit nodes now' button on Security > Settings, for shutting down Tor-routed abuse immediately instead of waiting for each IP to hit the gateway once - it queues the whole current exit-node list and registers it with cPanel 5 requests at a time in the background (usually done within a few minutes even for a large list), instead of the old one-at-a-time reactive blocking. Also fixes a gap where manually 'Unblock'-ing an IP from Blocked IPs (single or bulk) only unblocked it locally and left it rejected by cPanel forever - it now lifts the cPanel-side block too, so gradually restoring IPs after a temporary bulk block actually works. No database update needed for this update."
 }

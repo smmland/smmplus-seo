@@ -89,4 +89,24 @@ class TorExitNodeListServiceTest extends TestCase
 
         $this->assertFalse($service->isExitNode('1.2.3.4'));
     }
+
+    public function test_all_returns_every_cached_ip(): void
+    {
+        $ips = collect(range(1, 150))->map(fn ($i) => "10.0.0.{$i}")->implode("\n");
+        Http::fake(['*' => Http::response($ips, 200)]);
+
+        $service = app(TorExitNodeListService::class);
+        $service->refresh();
+
+        $this->assertCount(150, $service->all());
+        $this->assertContains('10.0.0.1', $service->all());
+        $this->assertContains('10.0.0.150', $service->all());
+    }
+
+    public function test_all_is_empty_when_list_was_never_fetched(): void
+    {
+        Cache::flush();
+
+        $this->assertSame([], app(TorExitNodeListService::class)->all());
+    }
 }

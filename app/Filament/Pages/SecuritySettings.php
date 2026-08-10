@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\GatewayBlockedIp;
 use App\Services\GatewaySettingsService;
 use App\Services\TorExitNodeListService;
 use App\Support\PanelSection;
@@ -61,6 +62,76 @@ class SecuritySettings extends Page implements HasForms
         $count > 0 ? $notification->success() : $notification->danger();
 
         $notification->send();
+    }
+
+    // Proactively blocks every currently-known exit-node IP, not just ones that happen to hit
+    // the gateway (the reactive per-request Tor block already handles that). Only the local
+    // GatewayBlockedIp rows are written here, synchronously and in bulk (cheap even for
+    // thousands of IPs) - the actual cPanel registration is deferred to
+    // gateway:sync-tor-bulk-block-to-cpanel, which drains this queue 5 requests at a time on the
+    // once-a-minute schedule tick, since thousands of individual cPanel calls would time out a
+    // web request.
+    public function blockAllTorExitNodes(TorExitNodeListService $torExitNodes, GatewaySettingsService $settings): void
+    {
+        $ips = collect($torExitNodes->all());
+
+        if ($ips->isEmpty()) {
+            Notification::make()
+                ->title('The Tor exit node list is empty - click "Refresh Tor list now" first.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $now = now();
+
+        $alreadyBlocked = GatewayBlockedIp::query()
+            ->whereIn('ip', $ips)
+            ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('blocked_until')->orWhere('blocked_until', '>', $now))
+            ->pluck('ip')
+            ->flip();
+
+        $toQueue = $ips->reject(fn (string $ip) => $alreadyBlocked->has($ip))->values();
+
+        if ($toQueue->isEmpty()) {
+            Notification::make()
+                ->title('Every known Tor exit node IP is already blocked.')
+                ->success()
+                ->send();
+
+            return;
+        }
+
+        $days = $settings->getTorBlockDays();
+        $blockedUntil = $now->copy()->addDays($days);
+
+        $toQueue->chunk(500)->each(function ($chunk) use ($blockedUntil, $days, $now) {
+            $rows = $chunk->map(fn (string $ip) => [
+                'ip' => $ip,
+                'note' => "Tor exit-node bulk block (expires in {$days}d)",
+                'is_active' => true,
+                'blocked_until' => $blockedUntil,
+                'offense_count' => 0,
+                'cpanel_synced_at' => null,
+                'cpanel_sync_error' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all();
+
+            GatewayBlockedIp::query()->upsert(
+                $rows,
+                ['ip'],
+                ['note', 'is_active', 'blocked_until', 'cpanel_synced_at', 'cpanel_sync_error', 'updated_at'],
+            );
+        });
+
+        Notification::make()
+            ->title("Queued {$toQueue->count()} Tor exit node IP(s) to block.")
+            ->body('Each is blocked locally right away; registering them with cPanel runs in the background, 5 at a time, and usually finishes within a few minutes.')
+            ->success()
+            ->send();
     }
 
     public function form(Form $form): Form

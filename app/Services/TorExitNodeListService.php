@@ -33,6 +33,14 @@ class TorExitNodeListService
         return count(Cache::get(self::CACHE_KEY, []));
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function all(): array
+    {
+        return array_keys(Cache::get(self::CACHE_KEY, []));
+    }
+
     public function lastRefreshedAt(): ?Carbon
     {
         // Stored as a plain string, not a Carbon instance - the database cache store

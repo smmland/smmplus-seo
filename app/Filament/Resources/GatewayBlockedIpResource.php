@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\GatewayBlockedIpResource\Pages;
 use App\Models\GatewayBlockedIp;
+use App\Services\CpanelIpBlockerService;
 use App\Support\PanelSection;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -127,11 +128,22 @@ class GatewayBlockedIpResource extends Resource
                     ->icon(fn (GatewayBlockedIp $record) => $record->is_active ? 'heroicon-o-lock-open' : 'heroicon-o-lock-closed')
                     ->color(fn (GatewayBlockedIp $record) => $record->is_active ? 'success' : 'danger')
                     ->visible(fn (): bool => static::canCreate())
-                    ->action(fn (GatewayBlockedIp $record) => $record->update(
+                    ->action(function (GatewayBlockedIp $record) {
+                        if ($record->is_active) {
+                            // Also lifts it at the web-server level, not just locally - a manual
+                            // unblock here that skipped this would leave the IP rejected by
+                            // cPanel forever, since AutoBlockAbusiveIpsCommand's expiry sweep
+                            // only looks at records still marked is_active.
+                            app(CpanelIpBlockerService::class)->unblock($record);
+                            $record->update(['is_active' => false]);
+
+                            return;
+                        }
+
                         // Re-blocking manually from here is a permanent block, not a timed
                         // auto-block, so clear any leftover expiry from a past auto-block.
-                        $record->is_active ? ['is_active' => false] : ['is_active' => true, 'blocked_until' => null],
-                    )),
+                        $record->update(['is_active' => true, 'blocked_until' => null]);
+                    }),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
@@ -148,7 +160,16 @@ class GatewayBlockedIpResource extends Resource
                         ->label('Unblock')
                         ->icon('heroicon-o-lock-open')
                         ->visible(fn (): bool => static::canCreate())
-                        ->action(fn ($records) => GatewayBlockedIp::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => false]))
+                        ->action(function ($records) {
+                            // Same reasoning as the single-row toggle action: lift the cPanel
+                            // side too, per record, before flipping is_active - otherwise a
+                            // gradual restore (e.g. unblocking a batch of the Tor bulk-block a
+                            // week later) would look successful here but leave every one of
+                            // them still rejected by the web server.
+                            $records->each(fn (GatewayBlockedIp $record) => app(CpanelIpBlockerService::class)->unblock($record));
+
+                            GatewayBlockedIp::query()->whereIn('id', $records->pluck('id'))->update(['is_active' => false]);
+                        })
                         ->deselectRecordsAfterCompletion(),
 
                     Tables\Actions\DeleteBulkAction::make(),

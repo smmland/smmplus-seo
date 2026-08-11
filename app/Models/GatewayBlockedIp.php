@@ -6,6 +6,7 @@ use App\Models\Concerns\LogsActivity;
 use App\Services\CpanelIpBlockerService;
 use App\Support\PanelSection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class GatewayBlockedIp extends Model
 {
@@ -42,19 +43,20 @@ class GatewayBlockedIp extends Model
     // block duration identically on repeat offenses rather than each keeping its own copy.
     public static function blockWithEscalation(string $ip, string $reason, \App\Services\GatewaySettingsService $settings): self
     {
-        $record = static::query()->firstOrNew(['ip' => $ip]);
-        $offenseNumber = ($record->offense_count ?? 0) + 1;
-        $hours = min(
-            $settings->getAutoBlockMaxHours(),
-            $settings->getAutoBlockBaseHours() * ($settings->getAutoBlockMultiplier() ** ($offenseNumber - 1)),
-        );
+        $record = static::upsertByIp($ip, function (self $record) use ($reason, $settings) {
+            $offenseNumber = ($record->offense_count ?? 0) + 1;
+            $hours = min(
+                $settings->getAutoBlockMaxHours(),
+                $settings->getAutoBlockBaseHours() * ($settings->getAutoBlockMultiplier() ** ($offenseNumber - 1)),
+            );
 
-        $record->fill([
-            'is_active' => true,
-            'blocked_until' => now()->addHours($hours),
-            'offense_count' => $offenseNumber,
-            'note' => "{$reason} (offense #{$offenseNumber}, {$hours}h)",
-        ])->save();
+            $record->fill([
+                'is_active' => true,
+                'blocked_until' => now()->addHours($hours),
+                'offense_count' => $offenseNumber,
+                'note' => "{$reason} (offense #{$offenseNumber}, {$hours}h)",
+            ]);
+        });
 
         // Best-effort - our own record above is the source of truth regardless of whether
         // this succeeds. No-ops entirely unless the cPanel IP Blocker integration is configured.
@@ -71,15 +73,40 @@ class GatewayBlockedIp extends Model
     // there's no real offender to escalate against. A flat block-and-expire instead.
     public static function blockForDuration(string $ip, string $reason, int $days): self
     {
-        $record = static::query()->firstOrNew(['ip' => $ip]);
-
-        $record->fill([
-            'is_active' => true,
-            'blocked_until' => now()->addDays($days),
-            'note' => "{$reason} (expires in {$days}d)",
-        ])->save();
+        $record = static::upsertByIp($ip, function (self $record) use ($reason, $days) {
+            $record->fill([
+                'is_active' => true,
+                'blocked_until' => now()->addDays($days),
+                'note' => "{$reason} (expires in {$days}d)",
+            ]);
+        });
 
         app(CpanelIpBlockerService::class)->block($record);
+
+        return $record;
+    }
+
+    // firstOrNew()->save() has a window between the "does this IP already have a row" read and
+    // the save's INSERT where a second, near-simultaneous block attempt for the same IP (e.g.
+    // two requests from the same abusive script landing in the same millisecond) can slip in and
+    // insert its own row first - the `ip` column is unique, so whichever of the two saves second
+    // hits a UniqueConstraintViolationException instead of a clean update, which used to bubble
+    // up as an uncaught 500. If that happens here, the record we're holding is stale (someone
+    // else's insert just won the race) - re-fetch the row that actually landed and re-apply the
+    // same field logic against it as an update instead, so the second attempt still records its
+    // offense/expiry rather than crashing.
+    private static function upsertByIp(string $ip, \Closure $fill): self
+    {
+        $record = static::query()->firstOrNew(['ip' => $ip]);
+        $fill($record);
+
+        try {
+            $record->save();
+        } catch (UniqueConstraintViolationException) {
+            $record = static::query()->where('ip', $ip)->firstOrFail();
+            $fill($record);
+            $record->save();
+        }
 
         return $record;
     }

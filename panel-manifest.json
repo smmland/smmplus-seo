@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.13",
-    "notes": "Adds automatic post views: as soon as a Telegram post actually sends, the panel can now order views for it from one of your Free Service Gateway upstream providers - point it at a drip-feed views service on the provider's side and it delivers gradually on its own (e.g. ~1000 views over about a day). Configure it on Telegram Channel > Settings > 'Automatic post views' - pick the upstream provider and type its service id directly there. Deliberately separate from the Free Service Gateway's public catalog, so it's never reachable through the public free-service API. Requires 'Update database' (adds two tracking columns to telegram_posts)."
+    "version": "1.27.14",
+    "notes": "Fixes the real cause of the category/service auto-retranslation loop (e.g. 'Twitch' stuck re-translating and re-notifying forever): the live-site check used to treat a translation that came back identical to the default text (brand names, etc. that legitimately don't change between languages) as 'not translated', so it kept getting wiped and re-queued every hourly sync even though nothing was ever actually wrong. Now a real, fresh translation that matches the default is recognized and confirmed immediately instead of looping. Applies to category names and both service titles/descriptions. No database changes."
 }

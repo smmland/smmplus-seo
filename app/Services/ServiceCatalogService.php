@@ -372,47 +372,63 @@ class ServiceCatalogService
 
             // Whether we already have real translated content stashed on this row, worth
             // protecting from being wiped out just because the live site hasn't picked it up
-            // yet - based on comparing the actual stored text against the current default,
-            // not a timestamp column. A timestamp-based check would wrongly treat any row
-            // translated before that column existed (or reset to null by
-            // syncDefaultCatalog()'s "source changed, please re-check" signal below) as having
-            // nothing worth keeping, silently discarding a real translation.
+            // yet. Keyed off translated_at (only ever set by ServiceAiTranslationService when it
+            // actually saves a translation) rather than "does the stored text differ from the
+            // default" - some words genuinely translate to themselves (brand names, etc.), and a
+            // text-difference check would treat those as "not translated" forever, which is what
+            // caused an actual infinite retranslation loop: queueMissing() sees !looksTranslated()
+            // -> requeues -> AI translates it (correctly, identically to the default) -> next
+            // sync's text comparison still says "no difference" -> is_translated reset back to
+            // false -> requeued again, forever.
             //
             // The trailing hash check is what actually lets a *stale* translation (default
             // description changed since this row was translated) fall through to the "else"
-            // branch below instead of being protected forever: a real translation almost always
-            // differs from the default text regardless of whether the source has since changed
-            // (it's in a different language, after all), so the content comparison alone can
-            // never detect staleness on its own. description_translated_from_hash records what
-            // the default's hash was at translation time (ServiceAiTranslationService) -
+            // branch below instead of being protected forever: description_translated_from_hash
+            // records what the default's hash was at translation time (ServiceAiTranslationService) -
             // null for rows translated before that column existed, which keeps their existing
             // (already-verified) protection rather than reinterpreting them as stale.
             $hasOwnTranslation = $row->exists
                 && filled($row->description_text)
-                && $default->description_text !== null
-                && $this->normalize($row->description_text) !== $this->normalize($default->description_text)
+                && $row->translated_at !== null
                 && ($row->description_translated_from_hash === null || $row->description_translated_from_hash === $default->source_description_hash);
+
+            // A translation that comes back identical to the default text isn't a bug (brand
+            // names, numbers, etc. often don't change between languages) - and there's no way to
+            // tell that apart from "not translated yet" by scraping the live site, since both
+            // cases show the exact same text there. Once we have a real, fresh translation
+            // attempt on record, treat an identical match as confirmed immediately rather than
+            // waiting forever for a live-site difference that, by definition, will never appear.
+            $translationMatchesDefault = $hasOwnTranslation
+                && $default->description_text !== null
+                && $this->normalize($row->description_text) === $this->normalize($default->description_text);
 
             // Same idea, independent of the description one above - the title and description
             // of a row can each be in a different state (title uploaded already, description
             // still waiting, or vice versa).
             $hasOwnTitleTranslation = $row->exists
                 && filled($row->title)
-                && $default->title !== null
-                && $this->normalize($row->title) !== $this->normalize($default->title)
+                && $row->title_translated_at !== null
                 && ($row->title_translated_from_hash === null || $row->title_translated_from_hash === $default->source_title_hash);
+
+            $titleTranslationMatchesDefault = $hasOwnTitleTranslation
+                && $default->title !== null
+                && $this->normalize($row->title) === $this->normalize($default->title);
 
             $category_id = $service['categoryId'] ?? $default->category_id;
             $category_title = $default->category_title;
 
-            if ($liveDiffersFromDefault) {
+            if ($liveDiffersFromDefault || $translationMatchesDefault) {
                 $row->category_id = $category_id;
                 $row->category_title = $category_title;
-                $row->description = $service['descriptionHtml'];
-                $row->description_text = $service['descriptionText'];
+                if ($liveDiffersFromDefault) {
+                    $row->description = $service['descriptionHtml'];
+                    $row->description_text = $service['descriptionText'];
+                }
                 $row->is_translated = true;
                 $row->live_confirmed_at = now();
-                $row->check_note = 'Confirmed live - description differs from the default language.';
+                $row->check_note = $liveDiffersFromDefault
+                    ? 'Confirmed live - description differs from the default language.'
+                    : 'Confirmed - the translation genuinely matches the default language description (e.g. a brand/product name).';
             } elseif ($hasOwnTranslation) {
                 // We have a translation saved, but the live site still shows the default text -
                 // keep it intact rather than overwriting it with what's still just the default
@@ -434,11 +450,15 @@ class ServiceCatalogService
             // Same three-way branch as the description one above, applied to the title
             // independently - see AiSettingsService::SERVICE_TITLE_TRANSLATION_PLACEHOLDERS for
             // the AI side of this.
-            if ($titleLiveDiffersFromDefault) {
-                $row->title = $service['title'];
+            if ($titleLiveDiffersFromDefault || $titleTranslationMatchesDefault) {
+                if ($titleLiveDiffersFromDefault) {
+                    $row->title = $service['title'];
+                }
                 $row->is_title_translated = true;
                 $row->title_live_confirmed_at = now();
-                $row->title_check_note = 'Confirmed live - title differs from the default language.';
+                $row->title_check_note = $titleLiveDiffersFromDefault
+                    ? 'Confirmed live - title differs from the default language.'
+                    : 'Confirmed - the translation genuinely matches the default language title (e.g. a brand/product name).';
             } elseif ($hasOwnTitleTranslation) {
                 $row->is_title_translated = true;
                 $row->title_check_note = 'Translated here, but the live site still shows the default-language title.';
@@ -508,17 +528,35 @@ class ServiceCatalogService
                 'lang' => $langCode,
             ]);
 
+            // Keyed off translated_at (only ever set by CategoryAiTranslationService when it
+            // actually saves a translation), not "does the stored text differ from the default" -
+            // some category names genuinely translate to themselves (brand names, etc.), and a
+            // text-difference check would treat those as "not translated" forever. See the
+            // matching comment on the per-service description check in refreshLanguage() above
+            // for the exact infinite-retranslation-loop this caused.
             $hasOwnTranslation = $row->exists
                 && filled($row->title)
-                && $default->title !== null
-                && $this->normalize($row->title) !== $this->normalize($default->title)
+                && $row->translated_at !== null
                 && ($row->title_translated_from_hash === null || $row->title_translated_from_hash === $default->source_title_hash);
 
-            if ($liveDiffersFromDefault) {
-                $row->title = $label;
+            // A translation identical to the default is still a real translation (e.g. a brand
+            // name that correctly stays the same across languages) - there's no way to tell that
+            // apart from "not translated yet" by scraping the live site, since both show the same
+            // text there. Treat a fresh, real translation that matches as confirmed immediately
+            // rather than waiting forever for a live-site difference that will never appear.
+            $translationMatchesDefault = $hasOwnTranslation
+                && $default->title !== null
+                && $this->normalize($row->title) === $this->normalize($default->title);
+
+            if ($liveDiffersFromDefault || $translationMatchesDefault) {
+                if ($liveDiffersFromDefault) {
+                    $row->title = $label;
+                }
                 $row->is_translated = true;
                 $row->live_confirmed_at = now();
-                $row->check_note = 'Confirmed live - name differs from the default language.';
+                $row->check_note = $liveDiffersFromDefault
+                    ? 'Confirmed live - name differs from the default language.'
+                    : 'Confirmed - the translation genuinely matches the default language name (e.g. a brand name).';
             } elseif ($hasOwnTranslation) {
                 $row->is_translated = true;
                 $row->check_note = 'Translated here, but the live site still shows the default-language name.';

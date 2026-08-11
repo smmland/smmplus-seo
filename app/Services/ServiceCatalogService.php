@@ -6,6 +6,7 @@ use App\Models\CategoryTranslation;
 use App\Models\Language;
 use App\Models\ServiceTranslation;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class ServiceCatalogService
@@ -268,6 +269,12 @@ class ServiceCatalogService
                 continue;
             }
 
+            // PHP silently casts a purely-numeric string array key (e.g. "7") to an int, so a
+            // digit-only category id would otherwise be compared/bound against the
+            // string-typed category_id column as an int from here on. Cast back explicitly
+            // rather than relying on whichever DB driver happens to coerce it correctly.
+            $categoryId = (string) $categoryId;
+
             $hash = $label !== null ? md5($label) : null;
 
             $row = CategoryTranslation::query()->firstOrNew([
@@ -276,6 +283,7 @@ class ServiceCatalogService
             ]);
 
             $changed = $row->exists && $hash !== null && $row->source_title_hash !== $hash;
+            $previousTitle = $row->title;
 
             $row->title = $label;
             $row->source_title_hash = $hash;
@@ -285,6 +293,20 @@ class ServiceCatalogService
             $row->save();
 
             if ($changed) {
+                // Temporary diagnostic: an admin reported categories getting auto-re-translated
+                // over and over even though nothing looked different on the site. If the label
+                // text genuinely isn't changing, something invisible in it is (whitespace variant,
+                // stray markup caught by textContent, a value that's technically live but not a
+                // real rename) - logging both raw strings here, byte for byte, is the fastest way
+                // to actually see what differs instead of guessing at it blind.
+                Log::info('Category translation: source name hash changed, resetting other-language translations', [
+                    'category_id' => $categoryId,
+                    'previous_title' => $previousTitle,
+                    'previous_title_bytes' => $previousTitle !== null ? bin2hex($previousTitle) : null,
+                    'new_title' => $label,
+                    'new_title_bytes' => $label !== null ? bin2hex($label) : null,
+                ]);
+
                 CategoryTranslation::query()
                     ->where('category_id', $categoryId)
                     ->where('lang', '!=', $defaultLang)
@@ -468,6 +490,9 @@ class ServiceCatalogService
                 continue;
             }
 
+            // Same PHP numeric-string-array-key gotcha as syncDefaultCategories() above.
+            $categoryId = (string) $categoryId;
+
             $default = $defaultRows->get($categoryId);
 
             if (! $default) {
@@ -548,7 +573,17 @@ class ServiceCatalogService
     // case, just collapses whitespace and drops any stray tags.
     private function cleanText(string $text): string
     {
-        return trim(preg_replace('/\s+/', ' ', strip_tags($text)));
+        $text = strip_tags($text);
+
+        // A non-breaking space (U+00A0, e.g. from a rendered &nbsp;) collapses to a regular space
+        // like any other whitespace - PCRE's \s without the /u modifier only matches single-byte
+        // ASCII whitespace, so a UTF-8 NBSP would otherwise survive untouched and make two
+        // visually-identical strings (e.g. a category name with a regular space one sync, an NBSP
+        // the next) hash differently, which reads as "the source changed" and wipes every other
+        // language's translation for nothing.
+        $text = str_replace("\xC2\xA0", ' ', $text);
+
+        return trim(preg_replace('/\s+/u', ' ', $text));
     }
 
     // For comparisons only (is-this-translated? / did-the-source-change?) - case-insensitive on

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.10",
-    "notes": "The nav group headings (Translation, Telegram Channel) now also show a badge with the total unread count across their items - e.g. Translation shows the sum of Blog + Service + Category Translation - not just each individual page. Updates live as pages are opened and their own badges clear. No database update needed for this update."
+    "version": "1.27.11",
+    "notes": "Fixes categories (and services) getting auto-re-translated over and over even when their name/text genuinely hadn't changed: the hourly catalog sync compared raw text byte-for-byte to decide if something changed, so an invisible difference like a non-breaking space vs a regular space in the same spot looked like a real edit and wiped every language's translation to force a redo. Text is now normalized before comparing. Also logs the exact before/after text whenever a real change is detected, so any future case like this is easy to diagnose from the logs instead of guessing. No database update needed for this update."
 }

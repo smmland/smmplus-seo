@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.12",
-    "notes": "Adds automatic attack detection to the Free Service Gateway: when rejected/blocked requests spike (the same 'possible attack' signal the dashboard widget already showed), you now get a Telegram DM and an in-panel notification the moment it starts - plus another once it subsides, summarizing how many IPs got auto-blocked during the incident. Both show up as a badge on Blocked IPs and the Security menu, and a new toggle on Telegram Channel > Alerts controls the Telegram side (on by default). No database update needed for this update."
+    "version": "1.27.13",
+    "notes": "Adds automatic post views: as soon as a Telegram post actually sends, the panel can now order views for it from one of your Free Service Gateway upstream providers - point it at a drip-feed views service on the provider's side and it delivers gradually on its own (e.g. ~1000 views over about a day). Configure it on Telegram Channel > Settings > 'Automatic post views' - pick the upstream provider and type its service id directly there. Deliberately separate from the Free Service Gateway's public catalog, so it's never reachable through the public free-service API. Requires 'Update database' (adds two tracking columns to telegram_posts)."
 }

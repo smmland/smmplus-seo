@@ -2,10 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\GatewayUpstream;
 use App\Services\AiSettingsService;
+use App\Services\TelegramAutoViewsSettingsService;
 use App\Services\TelegramBotService;
 use App\Services\TelegramSettingsService;
 use App\Support\PanelSection;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Textarea;
@@ -44,7 +47,7 @@ class TelegramSettings extends Page implements HasForms
 
     public ?array $testResult = null;
 
-    public function mount(TelegramSettingsService $settings, AiSettingsService $aiSettings): void
+    public function mount(TelegramSettingsService $settings, AiSettingsService $aiSettings, TelegramAutoViewsSettingsService $autoViews): void
     {
         $this->form->fill([
             'enabled' => $settings->isEnabled(),
@@ -59,6 +62,10 @@ class TelegramSettings extends Page implements HasForms
             'signatureText' => $settings->getSignatureText(),
             'blogSummaryPrompt' => $settings->getBlogSummaryPrompt(),
             'serviceAnnouncementPrompt' => $settings->getServiceAnnouncementPrompt(),
+            'autoViewsEnabled' => $autoViews->isEnabled(),
+            'autoViewsUpstreamId' => $autoViews->getUpstreamId(),
+            'autoViewsServiceId' => $autoViews->getServiceId(),
+            'autoViewsQuantity' => $autoViews->getQuantity(),
         ]);
     }
 
@@ -177,11 +184,37 @@ class TelegramSettings extends Page implements HasForms
                             ->rows(10)
                             ->extraInputAttributes(['class' => 'font-mono text-xs']),
                     ]),
+
+                Section::make('Automatic post views (optional)')
+                    ->description('Orders views from one of your Free Service Gateway upstream providers for every post as soon as it\'s actually sent to the channel. Uses its own service id entered directly below - not a Free Service Gateway catalog entry, so this is never reachable through the public free-service API. Point it at a drip-feed views service on the provider\'s side (one that paces delivery gradually on its own) rather than an instant one, since this places a single order for the full quantity each time.')
+                    ->schema([
+                        Toggle::make('autoViewsEnabled')
+                            ->label('Enabled'),
+
+                        Select::make('autoViewsUpstreamId')
+                            ->label('Upstream provider')
+                            ->options(fn () => GatewayUpstream::query()->where('is_active', true)->pluck('name', 'id'))
+                            ->placeholder('Select an upstream provider')
+                            ->helperText('Managed on Free Service Gateway > API Servers.'),
+
+                        TextInput::make('autoViewsServiceId')
+                            ->label('Service id')
+                            ->placeholder('e.g. 4512')
+                            ->helperText('The upstream provider\'s own id for the views service to order - ideally a drip-feed variant.'),
+
+                        TextInput::make('autoViewsQuantity')
+                            ->label('Quantity per post')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(1)
+                            ->required(),
+                    ])
+                    ->columns(2),
             ])
             ->statePath('data');
     }
 
-    public function save(TelegramSettingsService $settings, AiSettingsService $aiSettings): void
+    public function save(TelegramSettingsService $settings, AiSettingsService $aiSettings, TelegramAutoViewsSettingsService $autoViews): void
     {
         $data = $this->form->getState();
 
@@ -197,6 +230,12 @@ class TelegramSettings extends Page implements HasForms
         $settings->setSignatureText($data['signatureText'] ?? null);
         $settings->setBlogSummaryPrompt($data['blogSummaryPrompt']);
         $settings->setServiceAnnouncementPrompt($data['serviceAnnouncementPrompt']);
+        $autoViews->setSettings(
+            (bool) $data['autoViewsEnabled'],
+            $data['autoViewsUpstreamId'] !== null && $data['autoViewsUpstreamId'] !== '' ? (int) $data['autoViewsUpstreamId'] : null,
+            $data['autoViewsServiceId'] ?: null,
+            (int) ($data['autoViewsQuantity'] ?: 1000),
+        );
 
         // The typed token was only ever meant to reach storage (encrypted) - don't leave it
         // sitting in the live form state after a successful save.

@@ -39,6 +39,10 @@ Schedule::command('security:refresh-tor-exit-list')->hourly()->withoutOverlappin
 // scheduled rather than conditionally registered.
 Schedule::command('gateway:sync-blocked-ips-to-htaccess')->everyFiveMinutes()->withoutOverlapping();
 
+// Notifies (in-panel + Telegram) when the gateway looks under attack and again once it subsides -
+// every minute so the "last minute" window this checks never goes stale for long.
+Schedule::command('gateway:detect-attacks')->everyMinute()->withoutOverlapping();
+
 // Each blog URL is only actually re-checked once its own recheck interval has elapsed
 // (Translation Settings), so running this hourly just means newly-published or
 // newly-translated posts don't wait long to be picked up.

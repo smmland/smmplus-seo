@@ -104,4 +104,32 @@ class TelegramAlertServiceTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_notify_attack_detected_sends_when_enabled(): void
+    {
+        app(TelegramAlertSettingsService::class)->setEnabled(true);
+        app(TelegramAlertSettingsService::class)->setOnAttackDetectedEnabled(true);
+        app(TelegramSettingsService::class)->setBotToken('test-token');
+        TelegramAlertRecipient::create(['label' => 'Ali', 'link_token' => 'tok', 'chat_id' => '123']);
+
+        Http::fake(['*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]], 200)]);
+
+        app(TelegramAlertService::class)->notifyAttackDetected(15);
+
+        Http::assertSent(fn ($request) => str_contains($request['text'] ?? '', '15+ requests blocked'));
+    }
+
+    public function test_notify_attack_subsided_toggle_respected(): void
+    {
+        app(TelegramAlertSettingsService::class)->setEnabled(true);
+        app(TelegramAlertSettingsService::class)->setOnAttackDetectedEnabled(false);
+        app(TelegramSettingsService::class)->setBotToken('test-token');
+        TelegramAlertRecipient::create(['label' => 'Ali', 'link_token' => 'tok', 'chat_id' => '123']);
+
+        Http::fake();
+
+        app(TelegramAlertService::class)->notifyAttackSubsided(5, 3);
+
+        Http::assertNothingSent();
+    }
 }

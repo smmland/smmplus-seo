@@ -18,6 +18,7 @@ class PanelNotification extends Model
     public const CATEGORIES = [
         'telegram' => 'Telegram',
         'translation' => 'Translation',
+        'security' => 'Security',
     ];
 
     public function reads(): HasMany

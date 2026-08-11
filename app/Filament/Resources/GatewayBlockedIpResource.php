@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\GatewayBlockedIpResource\Pages;
 use App\Models\GatewayBlockedIp;
 use App\Services\CpanelIpBlockerService;
+use App\Services\PanelNotificationService;
 use App\Support\PanelSection;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -28,6 +29,18 @@ class GatewayBlockedIpResource extends Resource
     public static function canViewAny(): bool
     {
         return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::SECURITY)) ?? false;
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = app(PanelNotificationService::class)->unreadCountForUrl(static::getUrl());
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'danger';
     }
 
     public static function canCreate(): bool

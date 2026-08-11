@@ -58,6 +58,25 @@ class TelegramAlertService
         $this->broadcast("✅ {$message}");
     }
 
+    public function notifyAttackDetected(int $blockedCount): void
+    {
+        if (! $this->settings->isOnAttackDetectedEnabled()) {
+            return;
+        }
+
+        $this->broadcast("🚨 Possible attack detected on the Free Service Gateway:\n{$blockedCount}+ requests blocked in the last minute. The gateway's own defenses (auto-block, Tor blocking, rate limiting) are actively rejecting them.");
+    }
+
+    public function notifyAttackSubsided(int $minutes, int $blockedIpsDuringIncident): void
+    {
+        if (! $this->settings->isOnAttackDetectedEnabled()) {
+            return;
+        }
+
+        $ips = $blockedIpsDuringIncident === 1 ? '1 IP was' : "{$blockedIpsDuringIncident} IPs were";
+        $this->broadcast("✅ The gateway attack appears to have subsided after {$minutes} minute(s).\n{$ips} auto-blocked during the incident.");
+    }
+
     public function notifyPostPreview(TelegramPost $post): void
     {
         if (! $this->settings->isOnPostPreviewEnabled()) {

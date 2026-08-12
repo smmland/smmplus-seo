@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.18",
-    "notes": "Adds 20 starter reviews for each of 17 more languages (English, Arabic, Turkish, Russian, Spanish, French, German, Italian, Brazilian Portuguese, Indonesian, Korean, Chinese, Japanese, Thai, Vietnamese, Polish, Ukrainian) - written specifically for this site and its services (followers/views/members orders), not translations of the Persian set, so /api/reviews?lang=... now has real content in every language the panel already translates into instead of falling back to Persian. If any language's code here doesn't match what's configured on the Languages page, just bulk-update the mismatched rows' 'lang' value in the Reviews section. Requires 'Update database' (seeds ~340 new review rows)."
+    "version": "1.27.19",
+    "notes": "The public reviews API (GET /api/reviews - params: ?lang=, ?limit=) now automatically rotates which approved reviews it shows: the selection changes every 6 hours on its own (no cron/settings needed), staying stable for repeat requests within that window so a page that loads once renders consistently. The response includes a new 'rotates_at' timestamp so the frontend can know when the next change happens. No database changes."
 }

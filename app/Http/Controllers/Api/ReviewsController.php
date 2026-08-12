@@ -14,6 +14,12 @@ class ReviewsController extends Controller
 
     private const MAX_LIMIT = 50;
 
+    // How often the visible selection changes on its own - a request during the same window
+    // always gets the same picks/order (so a page that fetches once and renders is stable, and
+    // repeat visitors within a few hours see a consistent set), but the next window reshuffles
+    // which approved reviews surface without needing a scheduled command or any stored state.
+    private const ROTATION_HOURS = 6;
+
     // Read-only, non-sensitive marketing content - unlike the free-service gateway this has
     // nothing worth abusing (no upstream calls, no per-caller state to exhaust), so it skips
     // that endpoint's CORS-origin-allowlist/rate-limiting stack entirely and is just open to any
@@ -29,27 +35,17 @@ class ReviewsController extends Controller
         // reviews.
         $lang = trim((string) $request->query('lang', '')) ?: $this->defaultLang();
 
-        $reviews = Review::query()
-            ->where('lang', $lang)
-            ->where('is_approved', true)
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->limit($limit)
-            ->get();
+        $reviews = $this->rotatedSelection($lang, $limit);
 
         if ($reviews->isEmpty() && $lang !== $this->defaultLang()) {
-            $reviews = Review::query()
-                ->where('lang', $this->defaultLang())
-                ->where('is_approved', true)
-                ->orderBy('sort_order')
-                ->orderBy('id')
-                ->limit($limit)
-                ->get();
+            $lang = $this->defaultLang();
+            $reviews = $this->rotatedSelection($lang, $limit);
         }
 
         return response()->json([
             'ok' => true,
             'lang' => $reviews->first()->lang ?? $lang,
+            'rotates_at' => $this->windowEnd()->toIso8601String(),
             'reviews' => $reviews->map(fn (Review $review) => [
                 'author_name' => $review->author_name,
                 'rating' => $review->rating,
@@ -60,6 +56,38 @@ class ReviewsController extends Controller
                 'country_flag' => $review->countryFlag(),
             ]),
         ])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Review>
+     */
+    private function rotatedSelection(string $lang, int $limit)
+    {
+        // A deterministic hash-sort keyed by the current rotation window instead of true
+        // randomness: same lang + same window always produces the same order (so it's stable
+        // for the whole window without caching anything), and it's a different order once the
+        // window rolls over - all without a scheduled job.
+        $seed = $lang.'|'.$this->windowStart()->timestamp;
+
+        return Review::query()
+            ->where('lang', $lang)
+            ->where('is_approved', true)
+            ->get()
+            ->sortBy(fn (Review $review) => md5($review->id.$seed))
+            ->take($limit)
+            ->values();
+    }
+
+    private function windowStart(): \Illuminate\Support\Carbon
+    {
+        $seconds = self::ROTATION_HOURS * 3600;
+
+        return \Illuminate\Support\Carbon::createFromTimestamp(intdiv(now()->timestamp, $seconds) * $seconds);
+    }
+
+    private function windowEnd(): \Illuminate\Support\Carbon
+    {
+        return $this->windowStart()->addHours(self::ROTATION_HOURS);
     }
 
     private function defaultLang(): string

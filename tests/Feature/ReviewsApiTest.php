@@ -46,18 +46,40 @@ class ReviewsApiTest extends TestCase
         $this->assertFalse($names->contains('Pending One'));
     }
 
-    public function test_reviews_are_returned_in_manual_sort_order(): void
+    public function test_the_order_is_stable_within_the_same_rotation_window(): void
     {
         $this->makeReview(['author_name' => 'Third', 'sort_order' => 2]);
         $this->makeReview(['author_name' => 'First', 'sort_order' => 0]);
         $this->makeReview(['author_name' => 'Second', 'sort_order' => 1]);
 
+        $first = collect($this->getJson('/api/reviews')->json('reviews'))->pluck('author_name')->all();
+        $second = collect($this->getJson('/api/reviews')->json('reviews'))->pluck('author_name')->all();
+
+        $this->assertSame($first, $second, 'Repeated requests inside the same rotation window must return the same order.');
+        $this->assertEqualsCanonicalizing(['First', 'Second', 'Third'], $first);
+    }
+
+    public function test_the_selection_changes_once_the_rotation_window_rolls_over(): void
+    {
+        Review::factory()->count(10)->create(['is_approved' => true]);
+
+        $before = collect($this->getJson('/api/reviews?limit=3')->json('reviews'))->pluck('author_name')->all();
+
+        $this->travel(7)->hours();
+
+        $after = collect($this->getJson('/api/reviews?limit=3')->json('reviews'))->pluck('author_name')->all();
+
+        $this->assertNotSame($before, $after, 'The visible selection should change after a rotation window passes.');
+    }
+
+    public function test_response_includes_the_next_rotation_time(): void
+    {
+        $this->makeReview();
+
         $response = $this->getJson('/api/reviews');
 
-        $this->assertSame(
-            ['First', 'Second', 'Third'],
-            collect($response->json('reviews'))->pluck('author_name')->all(),
-        );
+        $this->assertNotNull($response->json('rotates_at'));
+        $this->assertTrue(\Illuminate\Support\Carbon::parse($response->json('rotates_at'))->isFuture());
     }
 
     public function test_limit_defaults_to_twenty_and_is_capped_at_fifty(): void

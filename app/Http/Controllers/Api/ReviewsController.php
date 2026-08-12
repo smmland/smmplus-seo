@@ -100,6 +100,18 @@ class ReviewsController extends Controller
             // The site account submitting this - required for moderation/accountability (see
             // Review::submitted_username), not shown publicly.
             'username' => ['required', 'string', 'max:255'],
+            // Everything below is optional and not currently validated against anything - stored
+            // as-is for a future check (does this user_id really own this order_id/ticket_id?).
+            // 'ip' is the frontend's own claim about the visitor's IP, kept only for reference -
+            // GatewayClient::resolveIp() below (not this field) is what's actually trusted for
+            // rate-limiting/geolocation. 'user_agent' isn't accepted from the body at all - the
+            // real User-Agent header (read further down) is strictly more reliable than a value
+            // the frontend would have to type in by hand.
+            'user_id' => ['nullable', 'string', 'max:255'],
+            'order_id' => ['nullable', 'string', 'max:255'],
+            'ticket_id' => ['nullable', 'string', 'max:255'],
+            'csrf_token' => ['nullable', 'string', 'max:1000'],
+            'ip' => ['nullable', 'string', 'max:64'],
         ]);
 
         if ($validator->fails()) {
@@ -118,7 +130,11 @@ class ReviewsController extends Controller
             ], 429)->header('Access-Control-Allow-Origin', '*');
         }
 
-        $review = $submissions->submit($validator->validated(), $ip);
+        $data = $validator->validated();
+        $data['reported_ip'] = $data['ip'] ?? null;
+        $data['user_agent'] = $request->userAgent();
+
+        $review = $submissions->submit($data, $ip);
 
         $this->limiter->incrementWithTtl($key, 1, self::SUBMIT_LIMIT_SECONDS);
 

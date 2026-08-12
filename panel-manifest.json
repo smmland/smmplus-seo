@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.22",
-    "notes": "POST /api/reviews now requires a 'username' field (the submitter's site account) alongside the existing author_name/rating/body - stored together with their auto-detected IP as moderation-only metadata (Reviews > edit a submitted review > 'Submission info'), never returned by the public GET endpoint. Lets you see who submitted a review and spot one account/IP submitting many. Requires 'Update database' (adds submitted_username/submitted_ip columns to reviews)."
+    "version": "1.27.23",
+    "notes": "POST /api/reviews accepts several new optional fields from the frontend context - user_id, order_id (or ticket_id on the ticket page), csrf_token, and ip - captured as-is and shown in the panel's 'Submission info' (never returned publicly), for a future check confirming a review really belongs to the order/ticket it claims. Nothing validates them yet. The real User-Agent header is also captured automatically (more reliable than a body field, so none is needed for it). The frontend's reported 'ip' is stored separately from - and never replaces - the server-detected IP already used for rate-limiting/geolocation. Requires 'Update database' (adds 6 new columns to reviews, all nullable)."
 }

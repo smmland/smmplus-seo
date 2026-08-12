@@ -48,7 +48,7 @@ class ReviewSubmissionService
     ) {}
 
     /**
-     * @param  array{author_name: string, rating: int, body: string, related_service: ?string, username: string}  $data
+     * @param  array{author_name: string, rating: int, body: string, related_service: ?string, username: string, user_id: ?string, order_id: ?string, ticket_id: ?string, csrf_token: ?string, reported_ip: ?string, user_agent: ?string}  $data
      */
     public function submit(array $data, string $ip): Review
     {
@@ -70,9 +70,18 @@ class ReviewSubmissionService
             'is_approved' => false,
             'sort_order' => $nextSortOrder,
             // Panel-only moderation metadata - never returned by the public GET endpoint (see
-            // ReviewsController::index()'s response mapping, which doesn't include either field).
+            // ReviewsController::index()'s response mapping, which doesn't include any of these).
             'submitted_username' => $data['username'],
             'submitted_ip' => $ip,
+            // Captured as-is, not currently validated against anything - see the migration's
+            // comment for why (no shared session with the site to check the csrf_token against,
+            // no order/ticket-ownership check wired up yet).
+            'frontend_user_id' => $data['user_id'] ?? null,
+            'frontend_order_id' => $data['order_id'] ?? null,
+            'frontend_ticket_id' => $data['ticket_id'] ?? null,
+            'frontend_csrf_token' => $data['csrf_token'] ?? null,
+            'reported_ip' => $data['reported_ip'] ?? null,
+            'user_agent' => $data['user_agent'] ?? null,
         ]);
     }
 

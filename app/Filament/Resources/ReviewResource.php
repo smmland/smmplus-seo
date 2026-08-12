@@ -120,7 +120,7 @@ class ReviewResource extends Resource
                 ->columns(2),
 
             Forms\Components\Section::make('Submission info')
-                ->description('Set automatically for reviews sent through POST /api/reviews - never shown publicly, for moderation only.')
+                ->description('Set automatically for reviews sent through POST /api/reviews - never shown publicly, for moderation only. The user_id/order_id/ticket_id/csrf_token fields are captured as-is and not currently checked against anything.')
                 ->visible(fn (?Review $record) => $record?->submitted_username !== null)
                 ->schema([
                     Forms\Components\Placeholder::make('submitted_username')
@@ -128,8 +128,33 @@ class ReviewResource extends Resource
                         ->content(fn (?Review $record) => $record?->submitted_username ?? '—'),
 
                     Forms\Components\Placeholder::make('submitted_ip')
-                        ->label('Submitted from IP')
+                        ->label('Submitted from IP (server-detected)')
                         ->content(fn (?Review $record) => $record?->submitted_ip ?? '—'),
+
+                    Forms\Components\Placeholder::make('reported_ip')
+                        ->label('IP reported by the frontend')
+                        ->content(fn (?Review $record) => $record?->reported_ip ?? '—'),
+
+                    Forms\Components\Placeholder::make('user_agent')
+                        ->label('User agent')
+                        ->content(fn (?Review $record) => $record?->user_agent ?? '—'),
+
+                    Forms\Components\Placeholder::make('frontend_user_id')
+                        ->label('User ID')
+                        ->content(fn (?Review $record) => $record?->frontend_user_id ?? '—'),
+
+                    Forms\Components\Placeholder::make('frontend_order_id')
+                        ->label('Order ID')
+                        ->content(fn (?Review $record) => $record?->frontend_order_id ?? '—'),
+
+                    Forms\Components\Placeholder::make('frontend_ticket_id')
+                        ->label('Ticket ID')
+                        ->content(fn (?Review $record) => $record?->frontend_ticket_id ?? '—'),
+
+                    Forms\Components\Placeholder::make('frontend_csrf_token')
+                        ->label('CSRF token')
+                        ->content(fn (?Review $record) => $record?->frontend_csrf_token ?? '—')
+                        ->columnSpanFull(),
                 ])
                 ->columns(2),
         ]);

@@ -154,6 +154,78 @@ class ReviewSubmissionApiTest extends TestCase
         $this->assertArrayNotHasKey('username', $review);
     }
 
+    public function test_frontend_context_fields_are_stored_when_present(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $this->submit([
+            'author_name' => 'Order Reviewer',
+            'user_id' => '4821',
+            'order_id' => '99310',
+            'csrf_token' => 'abc123tokenvalue',
+            'ip' => '203.0.113.9',
+        ]);
+
+        $review = Review::query()->where('author_name', 'Order Reviewer')->first();
+        $this->assertSame('4821', $review->frontend_user_id);
+        $this->assertSame('99310', $review->frontend_order_id);
+        $this->assertNull($review->frontend_ticket_id);
+        $this->assertSame('abc123tokenvalue', $review->frontend_csrf_token);
+        $this->assertSame('203.0.113.9', $review->reported_ip, 'The frontend-reported IP must be stored separately from the server-detected one.');
+        $this->assertSame('8.8.8.8', $review->submitted_ip, 'The server-resolved IP must stay authoritative regardless of what the frontend reports.');
+    }
+
+    public function test_ticket_id_is_stored_for_the_ticket_page(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $this->submit(['author_name' => 'Ticket Reviewer', 'ticket_id' => '7710']);
+
+        $review = Review::query()->where('author_name', 'Ticket Reviewer')->first();
+        $this->assertSame('7710', $review->frontend_ticket_id);
+        $this->assertNull($review->frontend_order_id);
+    }
+
+    public function test_the_real_user_agent_header_is_captured_regardless_of_any_body_field(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $this->postJson('/api/reviews', [
+            'author_name' => 'Agent Test', 'rating' => 5, 'body' => 'Nice.', 'username' => 'agent_tester',
+        ], [
+            'Origin' => 'https://smm.plus', 'CF-Connecting-IP' => '8.8.8.8', 'User-Agent' => 'TestBrowser/1.0',
+        ]);
+
+        $review = Review::query()->where('author_name', 'Agent Test')->first();
+        $this->assertSame('TestBrowser/1.0', $review->user_agent);
+    }
+
+    public function test_frontend_context_fields_are_optional(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $response = $this->submit(['author_name' => 'Minimal Submitter']);
+
+        $response->assertOk();
+        $this->assertNotNull(Review::query()->where('author_name', 'Minimal Submitter')->first());
+    }
+
+    public function test_frontend_context_fields_are_never_exposed_by_the_public_list(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $this->submit(['author_name' => 'Context Hidden', 'user_id' => '1', 'order_id' => '2', 'csrf_token' => 'secret']);
+        Review::query()->where('author_name', 'Context Hidden')->update(['is_approved' => true]);
+
+        $response = $this->getJson('/api/reviews?lang=en');
+        $review = collect($response->json('reviews'))->firstWhere('author_name', 'Context Hidden');
+
+        $this->assertNotNull($review);
+        foreach (['user_id', 'order_id', 'ticket_id', 'csrf_token', 'reported_ip', 'user_agent', 'frontend_user_id', 'frontend_order_id', 'frontend_ticket_id', 'frontend_csrf_token'] as $key) {
+            $this->assertArrayNotHasKey($key, $review);
+        }
+    }
+
     public function test_rating_out_of_range_is_rejected(): void
     {
         $this->fakeGeolocation('US', 'United States');

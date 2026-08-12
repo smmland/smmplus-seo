@@ -13,6 +13,8 @@ class Review extends Model
         'lang', 'author_name', 'rating', 'body', 'avatar_path', 'related_service',
         'country_name', 'country_code', 'is_approved', 'sort_order',
         'submitted_username', 'submitted_ip',
+        'frontend_user_id', 'frontend_order_id', 'frontend_ticket_id',
+        'frontend_csrf_token', 'reported_ip', 'user_agent',
     ];
 
     protected function casts(): array

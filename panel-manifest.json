@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.17",
-    "notes": "Reviews are now per-language: each review has a Language field (Reviews section), and GET /api/reviews takes a ?lang= parameter (e.g. ?lang=en) returning only that language's approved reviews in their manual order - falls back to the site's default language automatically when a language has no reviews yet, so the homepage never shows an empty section while you're still building out translations. Existing reviews were tagged Persian. Requires 'Update database' (adds a lang column to reviews)."
+    "version": "1.27.18",
+    "notes": "Adds 20 starter reviews for each of 17 more languages (English, Arabic, Turkish, Russian, Spanish, French, German, Italian, Brazilian Portuguese, Indonesian, Korean, Chinese, Japanese, Thai, Vietnamese, Polish, Ukrainian) - written specifically for this site and its services (followers/views/members orders), not translations of the Persian set, so /api/reviews?lang=... now has real content in every language the panel already translates into instead of falling back to Persian. If any language's code here doesn't match what's configured on the Languages page, just bulk-update the mismatched rows' 'lang' value in the Reviews section. Requires 'Update database' (seeds ~340 new review rows)."
 }

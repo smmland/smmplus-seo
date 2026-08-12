@@ -15,6 +15,10 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 // gateway.cors stack the mutating public endpoints below use.
 Route::get('/reviews', [ReviewsController::class, 'index']);
 
+// Whether to show the "leave a review" prompt on one specific page (?page=ticket_reply, etc.) -
+// same read-only/open-to-any-origin reasoning as the GET above.
+Route::get('/reviews/status', [ReviewsController::class, 'status']);
+
 // Submitting a review is a mutating public write, unlike the GET above - same CORS-allowlist +
 // abuse-protection stack as the other public POST endpoints below.
 Route::match(['POST', 'OPTIONS'], '/reviews', [ReviewsController::class, 'store'])

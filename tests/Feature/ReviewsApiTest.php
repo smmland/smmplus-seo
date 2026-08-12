@@ -197,4 +197,47 @@ class ReviewsApiTest extends TestCase
         $this->assertFalse($response->json('enabled'));
         $this->assertSame([], $response->json('reviews'));
     }
+
+    public function test_status_reports_the_prompt_as_shown_by_default(): void
+    {
+        $response = $this->getJson('/api/reviews/status?page=ticket_reply');
+
+        $response->assertOk();
+        $this->assertTrue($response->json('ok'));
+        $this->assertSame('ticket_reply', $response->json('page'));
+        $this->assertTrue($response->json('show_prompt'));
+    }
+
+    public function test_status_respects_a_disabled_page(): void
+    {
+        app(ReviewsSettingsService::class)->setPromptEnabledFor('dashboard', false);
+
+        $response = $this->getJson('/api/reviews/status?page=dashboard');
+
+        $this->assertFalse($response->json('show_prompt'));
+    }
+
+    public function test_status_is_false_for_every_page_when_reviews_are_globally_disabled(): void
+    {
+        app(ReviewsSettingsService::class)->setEnabled(false);
+
+        $response = $this->getJson('/api/reviews/status?page=refill');
+
+        $this->assertFalse($response->json('show_prompt'));
+    }
+
+    public function test_status_rejects_an_unknown_page(): void
+    {
+        $response = $this->getJson('/api/reviews/status?page=some_random_page');
+
+        $response->assertStatus(400);
+        $this->assertFalse($response->json('ok'));
+    }
+
+    public function test_status_rejects_a_missing_page(): void
+    {
+        $response = $this->getJson('/api/reviews/status');
+
+        $response->assertStatus(400);
+    }
 }

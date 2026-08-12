@@ -127,6 +127,28 @@ class ReviewsController extends Controller
         ])->header('Access-Control-Allow-Origin', '*');
     }
 
+    // Whether the "leave a review" prompt should show on one specific page of the live site -
+    // the server has no way to know what page a caller is on by itself, so the frontend passes
+    // it explicitly via ?page=. Combines the global on/off switch with that page's own toggle
+    // (Reviews > Settings) into the single answer a frontend actually needs to act on.
+    public function status(Request $request): JsonResponse
+    {
+        $page = (string) $request->query('page', '');
+
+        if (! array_key_exists($page, ReviewsSettingsService::PROMPT_PAGES)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Unknown or missing "page" parameter. Valid values: '.implode(', ', array_keys(ReviewsSettingsService::PROMPT_PAGES)).'.',
+            ], 400)->header('Access-Control-Allow-Origin', '*');
+        }
+
+        return response()->json([
+            'ok' => true,
+            'page' => $page,
+            'show_prompt' => $this->settings->isEnabled() && $this->settings->isPromptEnabledFor($page),
+        ])->header('Access-Control-Allow-Origin', '*');
+    }
+
     /**
      * @return \Illuminate\Support\Collection<int, Review>
      */

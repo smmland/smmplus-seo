@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.25",
-    "notes": "Better language detection on POST /api/reviews: instead of guessing the language purely from the submitter's IP-derived country, it now checks (in order) an explicit 'lang' field from the frontend (trusted since only the frontend knows which language page the visitor is actually on - ignored if it doesn't name a real active language), then the browser's Accept-Language header, then falls back to IP-derived country same as before. Country itself is still always geolocated, never taken from the caller. No database changes."
+    "version": "1.27.26",
+    "notes": "Adds a Reviews > Moderation page: a fast triage queue for reviews submitted through the public API, newest first, with one-click Approve/Reject per row - the moment you act on one it drops off the list and the next pending review takes its place, no page reload needed. Rejected reviews stay rejected permanently and never resurface (previously there was no way to tell 'never looked at yet' apart from 'looked at and turned down' - both just read as not-approved). The main Reviews list is unaffected and still works exactly as before; it now also shows each review's status (pending/approved/rejected) as an optional column. Requires 'Update database' (adds a status column to reviews, backfilled automatically from existing approval state)."
 }

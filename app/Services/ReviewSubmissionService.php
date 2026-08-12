@@ -66,6 +66,7 @@ class ReviewSubmissionService
             'country_name' => $geo['countryName'],
             'country_code' => $geo['countryCode'],
             'is_approved' => false,
+            'status' => Review::STATUS_PENDING,
             'sort_order' => $nextSortOrder,
             // Panel-only moderation metadata - never returned by the public GET endpoint (see
             // ReviewsController::index()'s response mapping, which doesn't include any of these).

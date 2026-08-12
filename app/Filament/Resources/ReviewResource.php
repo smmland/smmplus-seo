@@ -205,6 +205,15 @@ class ReviewResource extends Resource
                     ->boolean()
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->color(fn (string $state) => match ($state) {
+                        Review::STATUS_APPROVED => 'success',
+                        Review::STATUS_REJECTED => 'danger',
+                        default => 'warning',
+                    })
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('submitted_username')
                     ->label('Submitted by')
                     ->placeholder('— (added in panel)')

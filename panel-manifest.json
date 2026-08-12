@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.16",
-    "notes": "Adds a new Reviews section for showing customer reviews on the main site's homepage. Manage reviews (reviewer name, star rating, text, optional avatar/service/country) in a new 'Reviews' panel section, drag-reorder them to control display order, and only reviews toggled 'Approved' are ever shown publicly. A new public, read-only endpoint GET /api/reviews (optional ?limit=, up to 50) returns the approved reviews in that order for the site's frontend to fetch and display - the frontend side (fetching/rendering on smm.plus itself) still needs to be wired up separately, it lives outside this repo. Ships with 20 starter Persian reviews so the homepage has real content immediately. Requires 'Update database' (adds the reviews table)."
+    "version": "1.27.17",
+    "notes": "Reviews are now per-language: each review has a Language field (Reviews section), and GET /api/reviews takes a ?lang= parameter (e.g. ?lang=en) returning only that language's approved reviews in their manual order - falls back to the site's default language automatically when a language has no reviews yet, so the homepage never shows an empty section while you're still building out translations. Existing reviews were tagged Persian. Requires 'Update database' (adds a lang column to reviews)."
 }

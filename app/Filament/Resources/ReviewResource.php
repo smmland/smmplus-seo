@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ReviewResource\Pages;
+use App\Models\Language;
 use App\Models\Review;
 use App\Support\PanelSection;
 use Filament\Forms;
@@ -54,6 +55,14 @@ class ReviewResource extends Resource
         return $form->schema([
             Forms\Components\Section::make()
                 ->schema([
+                    Forms\Components\Select::make('lang')
+                        ->label('Language')
+                        ->options(fn () => Language::query()->where('is_active', true)->orderByRaw('is_default desc')->orderBy('sort_order')->pluck('name', 'code'))
+                        ->default(fn () => Language::query()->where('is_default', true)->value('code'))
+                        ->searchable()
+                        ->required()
+                        ->helperText('Which language this review is written in - only shown to visitors browsing the site in this language.'),
+
                     Forms\Components\TextInput::make('author_name')
                         ->label('Reviewer name')
                         ->required()
@@ -122,6 +131,12 @@ class ReviewResource extends Resource
                     ->circular()
                     ->defaultImageUrl(fn (Review $record) => 'https://ui-avatars.com/api/?name='.urlencode($record->author_name).'&background=random'),
 
+                Tables\Columns\TextColumn::make('lang')
+                    ->label('Lang')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => strtoupper($state))
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('author_name')
                     ->label('Reviewer')
                     ->searchable()
@@ -151,9 +166,16 @@ class ReviewResource extends Resource
                     ->boolean()
                     ->sortable(),
             ])
-            ->defaultSort('sort_order')
+            ->defaultSort(fn ($query) => $query->orderBy('lang')->orderBy('sort_order'))
             ->reorderable('sort_order')
             ->filters([
+                // Filter to one language before drag-reordering - display order is set per
+                // language, so reordering across an unfiltered, multi-language list would mix
+                // their sort_order values together.
+                Tables\Filters\SelectFilter::make('lang')
+                    ->label('Language')
+                    ->options(fn () => Language::query()->where('is_active', true)->orderByRaw('is_default desc')->orderBy('sort_order')->pluck('name', 'code')),
+
                 Tables\Filters\TernaryFilter::make('is_approved')
                     ->label('Approved'),
             ])

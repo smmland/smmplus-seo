@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Language;
 use App\Models\Review;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -105,5 +106,60 @@ class ReviewsApiTest extends TestCase
         $response = $this->getJson('/api/reviews');
 
         $this->assertNull($response->json('reviews.0.country_flag'));
+    }
+
+    private function seedLanguages(): void
+    {
+        Language::create(['code' => 'fa', 'name' => 'Persian', 'is_default' => true, 'is_active' => true]);
+        Language::create(['code' => 'en', 'name' => 'English', 'is_default' => false, 'is_active' => true]);
+    }
+
+    public function test_reviews_are_scoped_to_the_requested_language(): void
+    {
+        $this->seedLanguages();
+        $this->makeReview(['author_name' => 'Persian Review', 'lang' => 'fa']);
+        $this->makeReview(['author_name' => 'English Review', 'lang' => 'en']);
+
+        $response = $this->getJson('/api/reviews?lang=en');
+
+        $names = collect($response->json('reviews'))->pluck('author_name');
+        $this->assertTrue($names->contains('English Review'));
+        $this->assertFalse($names->contains('Persian Review'));
+        $this->assertSame('en', $response->json('lang'));
+    }
+
+    public function test_lang_defaults_to_the_sites_default_language_when_not_specified(): void
+    {
+        $this->seedLanguages();
+        $this->makeReview(['author_name' => 'Persian Review', 'lang' => 'fa']);
+        $this->makeReview(['author_name' => 'English Review', 'lang' => 'en']);
+
+        $response = $this->getJson('/api/reviews');
+
+        $names = collect($response->json('reviews'))->pluck('author_name');
+        $this->assertTrue($names->contains('Persian Review'));
+        $this->assertFalse($names->contains('English Review'));
+    }
+
+    public function test_falls_back_to_the_default_language_when_the_requested_language_has_no_reviews_yet(): void
+    {
+        $this->seedLanguages();
+        Language::create(['code' => 'de', 'name' => 'German', 'is_default' => false, 'is_active' => true]);
+        $this->makeReview(['author_name' => 'Persian Review', 'lang' => 'fa']);
+
+        $response = $this->getJson('/api/reviews?lang=de');
+
+        $names = collect($response->json('reviews'))->pluck('author_name');
+        $this->assertTrue($names->contains('Persian Review'), 'A language with no reviews yet should fall back to the default language rather than showing nothing.');
+        $this->assertSame('fa', $response->json('lang'));
+    }
+
+    public function test_does_not_fall_back_when_the_default_language_itself_has_no_reviews(): void
+    {
+        $this->seedLanguages();
+
+        $response = $this->getJson('/api/reviews');
+
+        $this->assertSame([], $response->json('reviews'));
     }
 }

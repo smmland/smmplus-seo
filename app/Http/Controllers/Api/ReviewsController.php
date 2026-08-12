@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Language;
 use App\Models\Review;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,13 +23,34 @@ class ReviewsController extends Controller
         $limit = (int) $request->query('limit', self::DEFAULT_LIMIT);
         $limit = max(1, min(self::MAX_LIMIT, $limit ?: self::DEFAULT_LIMIT));
 
+        // No requested language, or one nobody's written reviews for yet, just falls through to
+        // whatever's approved for the site's default language rather than showing an empty
+        // section - the caller doesn't need to know in advance which languages already have
+        // reviews.
+        $lang = trim((string) $request->query('lang', '')) ?: $this->defaultLang();
+
         $reviews = Review::query()
+            ->where('lang', $lang)
             ->where('is_approved', true)
             ->orderBy('sort_order')
             ->orderBy('id')
             ->limit($limit)
-            ->get()
-            ->map(fn (Review $review) => [
+            ->get();
+
+        if ($reviews->isEmpty() && $lang !== $this->defaultLang()) {
+            $reviews = Review::query()
+                ->where('lang', $this->defaultLang())
+                ->where('is_approved', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->limit($limit)
+                ->get();
+        }
+
+        return response()->json([
+            'ok' => true,
+            'lang' => $reviews->first()->lang ?? $lang,
+            'reviews' => $reviews->map(fn (Review $review) => [
                 'author_name' => $review->author_name,
                 'rating' => $review->rating,
                 'body' => $review->body,
@@ -36,9 +58,12 @@ class ReviewsController extends Controller
                 'related_service' => $review->related_service,
                 'country_name' => $review->country_name,
                 'country_flag' => $review->countryFlag(),
-            ]);
+            ]),
+        ])->header('Access-Control-Allow-Origin', '*');
+    }
 
-        return response()->json(['ok' => true, 'reviews' => $reviews])
-            ->header('Access-Control-Allow-Origin', '*');
+    private function defaultLang(): string
+    {
+        return Language::query()->where('is_default', true)->value('code') ?? 'fa';
     }
 }

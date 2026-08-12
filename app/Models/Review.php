@@ -10,7 +10,7 @@ class Review extends Model
     use HasFactory;
 
     protected $fillable = [
-        'author_name', 'rating', 'body', 'avatar_path', 'related_service',
+        'lang', 'author_name', 'rating', 'body', 'avatar_path', 'related_service',
         'country_name', 'country_code', 'is_approved', 'sort_order',
     ];
 

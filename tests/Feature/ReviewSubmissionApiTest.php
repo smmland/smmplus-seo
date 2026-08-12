@@ -175,6 +175,27 @@ class ReviewSubmissionApiTest extends TestCase
         $this->assertSame('8.8.8.8', $review->submitted_ip, 'The server-resolved IP must stay authoritative regardless of what the frontend reports.');
     }
 
+    public function test_a_numeric_json_user_id_is_accepted_not_just_a_string(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        // The site's own templating sends user_id as a raw JSON number on at least one page
+        // (reported by the user directly: {"user_id": 29, ...}) - must not 422.
+        $response = $this->postJson('/api/reviews', [
+            'author_name' => 'Numeric Id User',
+            'rating' => 3,
+            'body' => 'Great.',
+            'username' => 'design',
+            'user_id' => 29,
+            'order_id' => '5908959',
+        ], ['Origin' => 'https://smm.plus', 'CF-Connecting-IP' => '8.8.8.8']);
+
+        $response->assertOk();
+        $review = Review::query()->where('author_name', 'Numeric Id User')->first();
+        $this->assertSame('29', $review->frontend_user_id);
+        $this->assertSame('5908959', $review->frontend_order_id);
+    }
+
     public function test_ticket_id_is_stored_for_the_ticket_page(): void
     {
         $this->fakeGeolocation('US', 'United States');

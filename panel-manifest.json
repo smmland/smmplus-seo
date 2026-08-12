@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.23",
-    "notes": "POST /api/reviews accepts several new optional fields from the frontend context - user_id, order_id (or ticket_id on the ticket page), csrf_token, and ip - captured as-is and shown in the panel's 'Submission info' (never returned publicly), for a future check confirming a review really belongs to the order/ticket it claims. Nothing validates them yet. The real User-Agent header is also captured automatically (more reliable than a body field, so none is needed for it). The frontend's reported 'ip' is stored separately from - and never replaces - the server-detected IP already used for rate-limiting/geolocation. Requires 'Update database' (adds 6 new columns to reviews, all nullable)."
+    "version": "1.27.24",
+    "notes": "Fixes a bug from the previous release: POST /api/reviews rejected a numeric user_id (e.g. {\"user_id\": 29}) with 'The user id field must be a string' - the site's own templating sends it as a raw JSON number on at least one page. user_id/order_id/ticket_id now accept either a number or a string. No database changes."
 }

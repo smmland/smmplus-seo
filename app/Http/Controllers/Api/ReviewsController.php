@@ -92,7 +92,19 @@ class ReviewsController extends Controller
                 ->header('Access-Control-Allow-Origin', '*');
         }
 
-        $validator = Validator::make($request->all(), [
+        // Normalized before validation, not as a rule: these three are opaque identifiers we
+        // only ever store, and the site's own templating can hand them over as either a raw
+        // JSON number (`"user_id": 29`) or a string depending on the page - a strict `string`
+        // rule would otherwise reject the numeric form. Only non-scalar junk (arrays, objects)
+        // gets rejected; everything else is coerced to a string before the rules below run.
+        $input = $request->all();
+        foreach (['user_id', 'order_id', 'ticket_id'] as $field) {
+            if (array_key_exists($field, $input) && $input[$field] !== null) {
+                $input[$field] = is_scalar($input[$field]) ? (string) $input[$field] : $input[$field];
+            }
+        }
+
+        $validator = Validator::make($input, [
             'author_name' => ['required', 'string', 'max:255'],
             'rating' => ['required', 'integer', 'between:1,5'],
             'body' => ['required', 'string', 'max:2000'],

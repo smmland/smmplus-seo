@@ -5,8 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Language;
 use App\Models\Review;
+use App\Services\GatewayRateLimiter;
+use App\Services\ReviewsSettingsService;
+use App\Services\ReviewSubmissionService;
+use App\Support\GatewayClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class ReviewsController extends Controller
 {
@@ -20,12 +25,27 @@ class ReviewsController extends Controller
     // which approved reviews surface without needing a scheduled command or any stored state.
     private const ROTATION_HOURS = 6;
 
+    // Separate from HandleGatewayCors's shared 3-req/minute flood limit (which still applies on
+    // top of this, since /reviews POST goes through gateway.cors too) - this one specifically
+    // caps genuine submissions, not just abuse bursts.
+    private const SUBMIT_LIMIT_SECONDS = 7200;
+
+    public function __construct(
+        private readonly ReviewsSettingsService $settings,
+        private readonly GatewayRateLimiter $limiter,
+    ) {}
+
     // Read-only, non-sensitive marketing content - unlike the free-service gateway this has
     // nothing worth abusing (no upstream calls, no per-caller state to exhaust), so it skips
     // that endpoint's CORS-origin-allowlist/rate-limiting stack entirely and is just open to any
     // origin.
     public function index(Request $request): JsonResponse
     {
+        if (! $this->settings->isEnabled()) {
+            return response()->json(['ok' => true, 'enabled' => false, 'reviews' => []])
+                ->header('Access-Control-Allow-Origin', '*');
+        }
+
         $limit = (int) $request->query('limit', self::DEFAULT_LIMIT);
         $limit = max(1, min(self::MAX_LIMIT, $limit ?: self::DEFAULT_LIMIT));
 
@@ -44,6 +64,7 @@ class ReviewsController extends Controller
 
         return response()->json([
             'ok' => true,
+            'enabled' => true,
             'lang' => $reviews->first()->lang ?? $lang,
             'rotates_at' => $this->windowEnd()->toIso8601String(),
             'reviews' => $reviews->map(fn (Review $review) => [
@@ -55,6 +76,54 @@ class ReviewsController extends Controller
                 'country_name' => $review->country_name,
                 'country_flag' => $review->countryFlag(),
             ]),
+        ])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    // Public submission endpoint - lang/country are never taken from the caller, only
+    // auto-detected server-side from their IP (ReviewSubmissionService), so there's nothing here
+    // for a client to spoof. Lands as unapproved (Review::is_approved defaults to false) so it
+    // only reaches index() above once an admin approves it in the panel. Routed behind
+    // 'gateway.cors' (CORS origin allowlist, IP/Tor blocking, shared flood limit) same as every
+    // other public mutating endpoint - the one-per-IP-per-2-hours check below is on top of that.
+    public function store(Request $request, ReviewSubmissionService $submissions): JsonResponse
+    {
+        if (! $this->settings->isEnabled()) {
+            return response()->json(['ok' => false, 'error' => 'Reviews are currently disabled.'], 403)
+                ->header('Access-Control-Allow-Origin', '*');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'author_name' => ['required', 'string', 'max:255'],
+            'rating' => ['required', 'integer', 'between:1,5'],
+            'body' => ['required', 'string', 'max:2000'],
+            'related_service' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['ok' => false, 'error' => $validator->errors()->first()], 422)
+                ->header('Access-Control-Allow-Origin', '*');
+        }
+
+        $ip = GatewayClient::resolveIp($request);
+        $key = 'reviews:submit:ip:'.md5($ip);
+
+        if ($this->limiter->get($key) >= 1) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Only one review is allowed per 2 hours.',
+                'retry_after_seconds' => $this->limiter->secondsRemaining($key),
+            ], 429)->header('Access-Control-Allow-Origin', '*');
+        }
+
+        $review = $submissions->submit($validator->validated(), $ip);
+
+        $this->limiter->incrementWithTtl($key, 1, self::SUBMIT_LIMIT_SECONDS);
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Thanks! Your review will be shown once approved.',
+            'lang' => $review->lang,
+            'country_name' => $review->country_name,
         ])->header('Access-Control-Allow-Origin', '*');
     }
 

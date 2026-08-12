@@ -15,6 +15,11 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 // gateway.cors stack the mutating public endpoints below use.
 Route::get('/reviews', [ReviewsController::class, 'index']);
 
+// Submitting a review is a mutating public write, unlike the GET above - same CORS-allowlist +
+// abuse-protection stack as the other public POST endpoints below.
+Route::match(['POST', 'OPTIONS'], '/reviews', [ReviewsController::class, 'store'])
+    ->middleware('gateway.cors');
+
 // Public gateway called directly from browser JS on smm.plus - protected by CORS origin
 // allowlist and per-IP/per-target rate limiting instead of a bearer token, since a secret
 // token can't be kept safe in client-side code.

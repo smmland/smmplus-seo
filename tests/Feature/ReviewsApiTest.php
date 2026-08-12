@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Language;
 use App\Models\Review;
+use App\Services\ReviewsSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -182,6 +183,18 @@ class ReviewsApiTest extends TestCase
 
         $response = $this->getJson('/api/reviews');
 
+        $this->assertSame([], $response->json('reviews'));
+    }
+
+    public function test_returns_an_empty_list_when_disabled(): void
+    {
+        $this->makeReview();
+        app(ReviewsSettingsService::class)->setEnabled(false);
+
+        $response = $this->getJson('/api/reviews');
+
+        $response->assertOk();
+        $this->assertFalse($response->json('enabled'));
         $this->assertSame([], $response->json('reviews'));
     }
 }

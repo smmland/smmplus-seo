@@ -41,6 +41,7 @@ class ReviewSubmissionApiTest extends TestCase
             'author_name' => 'Jane Doe',
             'rating' => 5,
             'body' => 'Great service, fast delivery.',
+            'username' => 'jane_doe123',
         ], $overrides), array_merge(['Origin' => 'https://smm.plus', 'CF-Connecting-IP' => '8.8.8.8'], $headers));
     }
 
@@ -115,6 +116,42 @@ class ReviewSubmissionApiTest extends TestCase
 
         $response->assertStatus(422);
         $this->assertFalse($response->json('ok'));
+    }
+
+    public function test_username_is_required(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $response = $this->submit(['username' => '']);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_the_submitters_username_and_ip_are_stored(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $this->submit(['author_name' => 'Tracked User', 'username' => 'tracked_account']);
+
+        $review = Review::query()->where('author_name', 'Tracked User')->first();
+        $this->assertSame('tracked_account', $review->submitted_username);
+        $this->assertSame('8.8.8.8', $review->submitted_ip);
+    }
+
+    public function test_username_and_ip_are_never_exposed_by_the_public_list(): void
+    {
+        $this->fakeGeolocation('US', 'United States');
+
+        $this->submit(['author_name' => 'Tracked User', 'username' => 'tracked_account']);
+        Review::query()->where('author_name', 'Tracked User')->update(['is_approved' => true]);
+
+        $response = $this->getJson('/api/reviews?lang=en');
+        $review = collect($response->json('reviews'))->firstWhere('author_name', 'Tracked User');
+
+        $this->assertNotNull($review);
+        $this->assertArrayNotHasKey('submitted_username', $review);
+        $this->assertArrayNotHasKey('submitted_ip', $review);
+        $this->assertArrayNotHasKey('username', $review);
     }
 
     public function test_rating_out_of_range_is_rejected(): void

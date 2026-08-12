@@ -12,6 +12,7 @@ class Review extends Model
     protected $fillable = [
         'lang', 'author_name', 'rating', 'body', 'avatar_path', 'related_service',
         'country_name', 'country_code', 'is_approved', 'sort_order',
+        'submitted_username', 'submitted_ip',
     ];
 
     protected function casts(): array

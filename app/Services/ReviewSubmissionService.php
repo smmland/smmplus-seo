@@ -48,7 +48,7 @@ class ReviewSubmissionService
     ) {}
 
     /**
-     * @param  array{author_name: string, rating: int, body: string, related_service: ?string}  $data
+     * @param  array{author_name: string, rating: int, body: string, related_service: ?string, username: string}  $data
      */
     public function submit(array $data, string $ip): Review
     {
@@ -69,6 +69,10 @@ class ReviewSubmissionService
             'country_code' => $geo['countryCode'],
             'is_approved' => false,
             'sort_order' => $nextSortOrder,
+            // Panel-only moderation metadata - never returned by the public GET endpoint (see
+            // ReviewsController::index()'s response mapping, which doesn't include either field).
+            'submitted_username' => $data['username'],
+            'submitted_ip' => $ip,
         ]);
     }
 

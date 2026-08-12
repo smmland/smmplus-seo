@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.21",
-    "notes": "Adds GET /api/reviews/status?page=... - a new public endpoint the site calls to decide whether to show the 'leave a review' prompt on one specific page, since the server can't otherwise know what page a caller is on. Recognizes 4 pages for now: ticket_reply, order_status, refill, dashboard (unknown values are rejected). Each page has its own on/off toggle on Reviews > Settings, on top of the existing master switch - turning the master switch off overrides every page's toggle. All 4 pages default to enabled. Response: {ok, page, show_prompt}. No database changes."
+    "version": "1.27.22",
+    "notes": "POST /api/reviews now requires a 'username' field (the submitter's site account) alongside the existing author_name/rating/body - stored together with their auto-detected IP as moderation-only metadata (Reviews > edit a submitted review > 'Submission info'), never returned by the public GET endpoint. Lets you see who submitted a review and spot one account/IP submitting many. Requires 'Update database' (adds submitted_username/submitted_ip columns to reviews)."
 }

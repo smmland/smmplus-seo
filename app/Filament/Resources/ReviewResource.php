@@ -118,6 +118,20 @@ class ReviewResource extends Resource
                         ->helperText('Only approved reviews are ever returned by the public reviews API.'),
                 ])
                 ->columns(2),
+
+            Forms\Components\Section::make('Submission info')
+                ->description('Set automatically for reviews sent through POST /api/reviews - never shown publicly, for moderation only.')
+                ->visible(fn (?Review $record) => $record?->submitted_username !== null)
+                ->schema([
+                    Forms\Components\Placeholder::make('submitted_username')
+                        ->label('Submitted by (site username)')
+                        ->content(fn (?Review $record) => $record?->submitted_username ?? '—'),
+
+                    Forms\Components\Placeholder::make('submitted_ip')
+                        ->label('Submitted from IP')
+                        ->content(fn (?Review $record) => $record?->submitted_ip ?? '—'),
+                ])
+                ->columns(2),
         ]);
     }
 
@@ -165,6 +179,18 @@ class ReviewResource extends Resource
                     ->label('Approved')
                     ->boolean()
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('submitted_username')
+                    ->label('Submitted by')
+                    ->placeholder('— (added in panel)')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('submitted_ip')
+                    ->label('IP')
+                    ->placeholder('—')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort(fn ($query) => $query->orderBy('lang')->orderBy('sort_order'))
             ->reorderable('sort_order')

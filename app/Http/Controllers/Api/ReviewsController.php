@@ -97,6 +97,9 @@ class ReviewsController extends Controller
             'rating' => ['required', 'integer', 'between:1,5'],
             'body' => ['required', 'string', 'max:2000'],
             'related_service' => ['nullable', 'string', 'max:255'],
+            // The site account submitting this - required for moderation/accountability (see
+            // Review::submitted_username), not shown publicly.
+            'username' => ['required', 'string', 'max:255'],
         ]);
 
         if ($validator->fails()) {

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.24",
-    "notes": "Fixes a bug from the previous release: POST /api/reviews rejected a numeric user_id (e.g. {\"user_id\": 29}) with 'The user id field must be a string' - the site's own templating sends it as a raw JSON number on at least one page. user_id/order_id/ticket_id now accept either a number or a string. No database changes."
+    "version": "1.27.25",
+    "notes": "Better language detection on POST /api/reviews: instead of guessing the language purely from the submitter's IP-derived country, it now checks (in order) an explicit 'lang' field from the frontend (trusted since only the frontend knows which language page the visitor is actually on - ignored if it doesn't name a real active language), then the browser's Accept-Language header, then falls back to IP-derived country same as before. Country itself is still always geolocated, never taken from the caller. No database changes."
 }

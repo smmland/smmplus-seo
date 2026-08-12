@@ -79,12 +79,14 @@ class ReviewsController extends Controller
         ])->header('Access-Control-Allow-Origin', '*');
     }
 
-    // Public submission endpoint - lang/country are never taken from the caller, only
-    // auto-detected server-side from their IP (ReviewSubmissionService), so there's nothing here
-    // for a client to spoof. Lands as unapproved (Review::is_approved defaults to false) so it
-    // only reaches index() above once an admin approves it in the panel. Routed behind
-    // 'gateway.cors' (CORS origin allowlist, IP/Tor blocking, shared flood limit) same as every
-    // other public mutating endpoint - the one-per-IP-per-2-hours check below is on top of that.
+    // Public submission endpoint - country is never taken from the caller, only auto-detected
+    // server-side from their IP. lang is layered: an explicit, recognized `lang` from the
+    // caller wins (see ReviewSubmissionService::resolveLang() for why that one field is trusted),
+    // then Accept-Language, then the IP-derived country as a last resort. Lands as unapproved
+    // (Review::is_approved defaults to false) so it only reaches index() above once an admin
+    // approves it in the panel. Routed behind 'gateway.cors' (CORS origin allowlist, IP/Tor
+    // blocking, shared flood limit) same as every other public mutating endpoint - the
+    // one-per-IP-per-2-hours check below is on top of that.
     public function store(Request $request, ReviewSubmissionService $submissions): JsonResponse
     {
         if (! $this->settings->isEnabled()) {
@@ -124,6 +126,10 @@ class ReviewsController extends Controller
             'ticket_id' => ['nullable', 'string', 'max:255'],
             'csrf_token' => ['nullable', 'string', 'max:1000'],
             'ip' => ['nullable', 'string', 'max:64'],
+            // Which language page the visitor is actually on - trusted (unlike country, which
+            // stays geolocation-only) since only the frontend can know this for certain; ignored
+            // if it doesn't name a real active language (ReviewSubmissionService::resolveLang()).
+            'lang' => ['nullable', 'string', 'max:10'],
         ]);
 
         if ($validator->fails()) {
@@ -146,7 +152,7 @@ class ReviewsController extends Controller
         $data['reported_ip'] = $data['ip'] ?? null;
         $data['user_agent'] = $request->userAgent();
 
-        $review = $submissions->submit($data, $ip);
+        $review = $submissions->submit($data, $ip, $request->header('Accept-Language'));
 
         $this->limiter->incrementWithTtl($key, 1, self::SUBMIT_LIMIT_SECONDS);
 

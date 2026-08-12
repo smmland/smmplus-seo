@@ -72,16 +72,88 @@ class ReviewSubmissionApiTest extends TestCase
         $this->assertFalse($names->contains('Camille'));
     }
 
-    public function test_country_and_language_are_auto_detected_from_ip_not_the_caller(): void
+    public function test_country_is_always_geolocated_never_taken_from_the_caller(): void
     {
         $this->fakeGeolocation('DE', 'Germany');
 
-        $response = $this->submit(['author_name' => 'Klaus', 'lang' => 'zh', 'country_name' => 'Spoofed']);
+        $this->submit(['author_name' => 'Klaus', 'country_name' => 'Spoofed']);
 
         $review = Review::query()->where('author_name', 'Klaus')->first();
-        $this->assertSame('de', $review->lang, 'lang must come from the IP lookup, never a client-supplied field.');
         $this->assertSame('Germany', $review->country_name);
         $this->assertSame('DE', $review->country_code);
+    }
+
+    public function test_lang_falls_back_to_ip_derived_country_when_nothing_more_direct_is_given(): void
+    {
+        $this->fakeGeolocation('DE', 'Germany');
+
+        $response = $this->submit(['author_name' => 'Klaus']);
+
+        $review = Review::query()->where('author_name', 'Klaus')->first();
+        $this->assertSame('de', $review->lang);
+        $this->assertSame('de', $response->json('lang'));
+    }
+
+    public function test_an_unrecognized_explicit_lang_is_ignored_in_favor_of_ip_derived_country(): void
+    {
+        $this->fakeGeolocation('DE', 'Germany');
+
+        // 'zh' isn't configured as an active language in this test, so it must not be trusted -
+        // falls through to the next signal instead of landing the review under a language
+        // nobody actually serves.
+        $response = $this->submit(['author_name' => 'Klaus', 'lang' => 'zh']);
+
+        $review = Review::query()->where('author_name', 'Klaus')->first();
+        $this->assertSame('de', $review->lang);
+        $this->assertSame('de', $response->json('lang'));
+    }
+
+    public function test_an_explicit_recognized_lang_wins_over_ip_derived_country(): void
+    {
+        Language::create(['code' => 'zh', 'name' => 'Chinese', 'is_default' => false, 'is_active' => true]);
+        $this->fakeGeolocation('DE', 'Germany'); // would otherwise resolve to 'de'
+
+        $response = $this->submit(['author_name' => 'Zhang', 'lang' => 'zh']);
+
+        $review = Review::query()->where('author_name', 'Zhang')->first();
+        $this->assertSame('zh', $review->lang, 'The frontend already knows which language page the visitor is on - that beats guessing from IP.');
+        $this->assertSame('zh', $response->json('lang'));
+    }
+
+    public function test_accept_language_header_wins_over_ip_derived_country_when_no_explicit_lang_is_given(): void
+    {
+        Language::create(['code' => 'fr', 'name' => 'French', 'is_default' => false, 'is_active' => true]);
+        $this->fakeGeolocation('DE', 'Germany'); // would otherwise resolve to 'de'
+
+        $response = $this->submit([], ['Accept-Language' => 'fr-FR,fr;q=0.9,en;q=0.5']);
+
+        $review = Review::query()->where('author_name', 'Jane Doe')->first();
+        $this->assertSame('fr', $review->lang);
+        $this->assertSame('fr', $response->json('lang'));
+    }
+
+    public function test_explicit_lang_beats_accept_language_which_beats_ip(): void
+    {
+        Language::create(['code' => 'fr', 'name' => 'French', 'is_default' => false, 'is_active' => true]);
+        Language::create(['code' => 'pl', 'name' => 'Polish', 'is_default' => false, 'is_active' => true]);
+        $this->fakeGeolocation('DE', 'Germany'); // lowest priority here
+
+        $response = $this->submit(
+            ['lang' => 'pl'],
+            ['Accept-Language' => 'fr-FR,fr;q=0.9'], // middle priority - should lose to explicit lang
+        );
+
+        $review = Review::query()->where('author_name', 'Jane Doe')->first();
+        $this->assertSame('pl', $review->lang);
+    }
+
+    public function test_an_unrecognized_accept_language_falls_through_to_ip_derived_country(): void
+    {
+        $this->fakeGeolocation('DE', 'Germany');
+
+        // None of these are configured as active languages, so Accept-Language must be skipped.
+        $response = $this->submit([], ['Accept-Language' => 'xx-XX,yy;q=0.5']);
+
         $this->assertSame('de', $response->json('lang'));
     }
 

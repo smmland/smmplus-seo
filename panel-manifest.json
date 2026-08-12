@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.15",
-    "notes": "Fixes an uncaught 500 error when two near-simultaneous requests from the same IP both trigger an auto-block at once (e.g. two rapid abusive requests, or a Tor exit node hit from two directions together) - the second attempt used to crash on a database duplicate-entry error instead of recording its block cleanly. It now recovers and still escalates the block correctly. No database changes."
+    "version": "1.27.16",
+    "notes": "Adds a new Reviews section for showing customer reviews on the main site's homepage. Manage reviews (reviewer name, star rating, text, optional avatar/service/country) in a new 'Reviews' panel section, drag-reorder them to control display order, and only reviews toggled 'Approved' are ever shown publicly. A new public, read-only endpoint GET /api/reviews (optional ?limit=, up to 50) returns the approved reviews in that order for the site's frontend to fetch and display - the frontend side (fetching/rendering on smm.plus itself) still needs to be wired up separately, it lives outside this repo. Ships with 20 starter Persian reviews so the homepage has real content immediately. Requires 'Update database' (adds the reviews table)."
 }

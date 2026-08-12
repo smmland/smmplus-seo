@@ -18,3 +18,6 @@ Route::get('/editor-assets/{path}', [EditorAssetController::class, 'show'])->whe
 // TelegramPostGeneratorService, TelegramQueue's "New message" upload), for the same no-symlink
 // reason documented on that controller.
 Route::get('/telegram-images/{path}', [BlogContentAssetController::class, 'show'])->where('path', '.*');
+
+// Same reuse, for review avatars (ReviewResource, Review::avatarUrl()).
+Route::get('/review-avatars/{path}', [BlogContentAssetController::class, 'show'])->where('path', '.*');

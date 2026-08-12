@@ -32,6 +32,7 @@ class PanelSection
     public const SEO = 'seo';
     public const GENERAL = 'general';
     public const SECURITY = 'security';
+    public const REVIEWS = 'reviews';
 
     public const TIER_VIEW = 'view';
     public const TIER_EDIT = 'edit';
@@ -45,6 +46,7 @@ class PanelSection
         self::SEO => 'SEO',
         self::GENERAL => 'General Settings',
         self::SECURITY => 'Security',
+        self::REVIEWS => 'Reviews',
     ];
 
     // GENERAL has no "edit" tier - see class docblock.
@@ -55,6 +57,7 @@ class PanelSection
         self::TELEGRAM,
         self::SEO,
         self::SECURITY,
+        self::REVIEWS,
     ];
 
     public const TIER_LABELS = [

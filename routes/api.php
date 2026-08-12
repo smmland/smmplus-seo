@@ -3,12 +3,17 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FreeServiceController;
 use App\Http\Controllers\Api\GiveawayController;
+use App\Http\Controllers\Api\ReviewsController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SyncController;
 use App\Http\Controllers\Api\UrlsController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+
+// Public, read-only, open to any origin - see ReviewsController for why it skips the
+// gateway.cors stack the mutating public endpoints below use.
+Route::get('/reviews', [ReviewsController::class, 'index']);
 
 // Public gateway called directly from browser JS on smm.plus - protected by CORS origin
 // allowlist and per-IP/per-target rate limiting instead of a bearer token, since a secret

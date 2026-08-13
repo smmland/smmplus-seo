@@ -19,6 +19,11 @@ Route::get('/reviews', [ReviewsController::class, 'index']);
 // same read-only/open-to-any-origin reasoning as the GET above.
 Route::get('/reviews/status', [ReviewsController::class, 'status']);
 
+// schema.org aggregateRating (ratingValue + reviewCount) for pages that want the star rating in
+// Google without fetching/rendering any review text - same numbers as index()'s "aggregate" key,
+// just without the review list. Same read-only/open-to-any-origin reasoning as the GET above.
+Route::get('/reviews/summary', [ReviewsController::class, 'summary']);
+
 // Submitting a review is a mutating public write, unlike the GET above - same CORS-allowlist +
 // abuse-protection stack as the other public POST endpoints below.
 Route::match(['POST', 'OPTIONS'], '/reviews', [ReviewsController::class, 'store'])

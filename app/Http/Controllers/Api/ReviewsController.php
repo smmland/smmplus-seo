@@ -67,6 +67,11 @@ class ReviewsController extends Controller
             'enabled' => true,
             'lang' => $reviews->first()->lang ?? $lang,
             'rotates_at' => $this->windowEnd()->toIso8601String(),
+            // Across every approved review for this language, not just the up-to-$limit shown
+            // below - see aggregateFor()'s docblock for why that distinction matters for
+            // schema.org's aggregateRating (the whole point of a Rich Snippet star rating is that
+            // it's the real total, not a sample).
+            'aggregate' => $this->aggregateFor($reviews->first()->lang ?? $lang),
             'reviews' => $reviews->map(fn (Review $review) => [
                 'author_name' => $review->author_name,
                 'rating' => $review->rating,
@@ -76,6 +81,32 @@ class ReviewsController extends Controller
                 'country_name' => $review->country_name,
                 'country_flag' => $review->countryFlag(),
             ]),
+        ])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    // A lightweight counterpart to index() for pages that only need schema.org's aggregateRating
+    // (ratingValue + reviewCount) and don't render a review carousel at all - e.g. a service page
+    // that wants the star rating in Google without fetching/displaying any review text. Same
+    // numbers index() reports under "aggregate" for the same language, just without the review
+    // list attached.
+    public function summary(Request $request): JsonResponse
+    {
+        if (! $this->settings->isEnabled()) {
+            return response()->json([
+                'ok' => true,
+                'enabled' => false,
+                'lang' => null,
+                ...$this->emptyAggregate(),
+            ])->header('Access-Control-Allow-Origin', '*');
+        }
+
+        $lang = trim((string) $request->query('lang', '')) ?: $this->defaultLang();
+
+        return response()->json([
+            'ok' => true,
+            'enabled' => true,
+            'lang' => $lang,
+            ...$this->aggregateFor($lang),
         ])->header('Access-Control-Allow-Origin', '*');
     }
 
@@ -184,6 +215,40 @@ class ReviewsController extends Controller
             'page' => $page,
             'show_prompt' => $this->settings->isEnabled() && $this->settings->isPromptEnabledFor($page),
         ])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    /**
+     * schema.org's aggregateRating (what actually makes Google show stars in search results)
+     * requires the REAL total across every review, not a sample - faking it from whatever subset
+     * a page happens to display is exactly the kind of thing Google's structured-data guidelines
+     * prohibit. This always queries every approved review for the language, independent of
+     * index()'s $limit/rotation, and reports null/0 honestly (never a guessed number) when there
+     * simply aren't any yet - unlike index(), it does NOT fall back to the default language when
+     * the requested one has none, since borrowing another language's rating for a page that has
+     * zero reviews of its own would itself be an inaccurate claim about that page.
+     *
+     * @return array{rating_value: ?float, review_count: int, best_rating: int, worst_rating: int}
+     */
+    private function aggregateFor(string $lang): array
+    {
+        $approved = Review::query()->where('lang', $lang)->where('is_approved', true);
+
+        $count = (clone $approved)->count();
+
+        return [
+            'rating_value' => $count > 0 ? round((clone $approved)->avg('rating'), 1) : null,
+            'review_count' => $count,
+            'best_rating' => 5,
+            'worst_rating' => 1,
+        ];
+    }
+
+    /**
+     * @return array{rating_value: null, review_count: int, best_rating: int, worst_rating: int}
+     */
+    private function emptyAggregate(): array
+    {
+        return ['rating_value' => null, 'review_count' => 0, 'best_rating' => 5, 'worst_rating' => 1];
     }
 
     /**

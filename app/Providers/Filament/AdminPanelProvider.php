@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\AiCosts;
 use App\Filament\Pages\GeneralSettings;
+use App\Filament\Pages\Auth\Login;
 use App\Filament\Pages\PanelUpdate;
 use App\Filament\Pages\TelegramAlerts;
 use App\Filament\Resources\ActivityLogResource;
@@ -34,7 +35,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->login()
+            ->login(Login::class)
             ->colors([
                 // Admin-configurable (General Settings > Appearance) rather than fixed - falls
                 // back to the default preset's hex if the settings table isn't reachable yet

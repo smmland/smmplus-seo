@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.27",
-    "notes": "Adds real aggregateRating support for Google Rich Snippets: GET /api/reviews now includes an 'aggregate' object (rating_value, review_count, best_rating, worst_rating) computed across every approved review for that language - not just the ones actually shown on the page - and a new lightweight GET /api/reviews/summary?lang=... returns the same numbers on their own for pages that want the star rating without fetching any review text. Both report null/0 honestly (never a guessed number) when a language genuinely has no reviews yet, and summary deliberately does NOT fall back to the default language's rating in that case, since borrowing another language's number would itself be an inaccurate claim about that page. No database changes."
+    "version": "1.27.29",
+    "notes": "Adds configurable Google reCAPTCHA v2 protection to panel and API login after repeated failures, with encrypted secret storage and IP/email-based failure tracking. Also extends Reviews search to include the full review description in both the main list and moderation queue. No database migration is required."
 }

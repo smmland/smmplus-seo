@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\GatewayBlockedIp;
 use App\Services\CpanelIpBlockerService;
 use App\Services\GatewaySettingsService;
+use App\Services\LoginSecuritySettingsService;
 use App\Services\TorExitNodeListService;
 use App\Support\PanelSection;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -14,6 +15,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 
@@ -36,7 +38,7 @@ class SecuritySettings extends Page implements HasForms
 
     public ?array $data = [];
 
-    public function mount(GatewaySettingsService $settings): void
+    public function mount(GatewaySettingsService $settings, LoginSecuritySettingsService $loginSecurity): void
     {
         $this->form->fill([
             'autoBlockEnabled' => $settings->isAutoBlockEnabled(),
@@ -52,6 +54,11 @@ class SecuritySettings extends Page implements HasForms
             'autoSyncBlockedIps' => $settings->isAutoSyncBlockedIpsEnabled(),
             'torBlockingEnabled' => $settings->isTorBlockingEnabled(),
             'torBlockDays' => $settings->getTorBlockDays(),
+            'recaptchaEnabled' => $loginSecurity->isRecaptchaEnabled(),
+            'recaptchaSiteKey' => $loginSecurity->getRecaptchaSiteKey(),
+            'recaptchaSecretKey' => null,
+            'recaptchaFailureThreshold' => $loginSecurity->getFailureThreshold(),
+            'recaptchaFailureWindowMinutes' => $loginSecurity->getFailureWindowMinutes(),
         ]);
     }
 
@@ -149,6 +156,45 @@ class SecuritySettings extends Page implements HasForms
     {
         return $form
             ->schema([
+                Section::make('Panel login reCAPTCHA')
+                    ->description('Shows Google reCAPTCHA v2 only after repeated failed panel login attempts. Failed attempts are tracked by both IP address and email, then expire automatically after the configured window.')
+                    ->schema([
+                        Toggle::make('recaptchaEnabled')
+                            ->label('Enabled')
+                            ->live()
+                            ->helperText('Create a reCAPTCHA v2 Checkbox key for the panel domain in Google reCAPTCHA Admin, then enter both keys below.'),
+
+                        TextInput::make('recaptchaSiteKey')
+                            ->label('Site key')
+                            ->required(fn (Get $get): bool => (bool) $get('recaptchaEnabled'))
+                            ->maxLength(255),
+
+                        TextInput::make('recaptchaSecretKey')
+                            ->label('Secret key')
+                            ->password()
+                            ->revealable()
+                            ->required(fn (Get $get): bool => (bool) $get('recaptchaEnabled') && ! app(LoginSecuritySettingsService::class)->hasRecaptchaSecretKey())
+                            ->helperText(fn () => app(LoginSecuritySettingsService::class)->hasRecaptchaSecretKey()
+                                ? 'A secret key is already saved securely - leave blank to keep it, or type a new one to replace it.'
+                                : 'No secret key saved yet.'),
+
+                        TextInput::make('recaptchaFailureThreshold')
+                            ->label('Failed attempts before reCAPTCHA')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(20)
+                            ->required(),
+
+                        TextInput::make('recaptchaFailureWindowMinutes')
+                            ->label('Failure tracking window (minutes)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(1440)
+                            ->required()
+                            ->helperText('A successful login clears the counters immediately.'),
+                    ])
+                    ->columns(2),
+
                 Section::make('Automatic IP blocking')
                     ->description('Blocks an IP once it exceeds the daily request threshold, sends more than 3 requests in a minute, or sends an absurdly oversized request - with the block duration doubling (or your chosen multiplier) each time the IP offends again. Applies to the Free Service Gateway API.')
                     ->schema([
@@ -253,7 +299,7 @@ class SecuritySettings extends Page implements HasForms
             ->statePath('data');
     }
 
-    public function save(GatewaySettingsService $settings): void
+    public function save(GatewaySettingsService $settings, LoginSecuritySettingsService $loginSecurity): void
     {
         $data = $this->form->getState();
 
@@ -273,8 +319,19 @@ class SecuritySettings extends Page implements HasForms
         );
         $settings->setAutoSyncBlockedIpsEnabled((bool) $data['autoSyncBlockedIps']);
         $settings->setTorBlockingSettings((bool) $data['torBlockingEnabled'], (int) $data['torBlockDays']);
+        $loginSecurity->setRecaptchaSettings(
+            (bool) $data['recaptchaEnabled'],
+            $data['recaptchaSiteKey'],
+            $data['recaptchaSecretKey'] ?: null,
+            (int) $data['recaptchaFailureThreshold'],
+            (int) $data['recaptchaFailureWindowMinutes'],
+        );
 
-        $this->form->fill([...$this->form->getState(), 'cpanelApiToken' => null]);
+        $this->form->fill([
+            ...$this->form->getState(),
+            'cpanelApiToken' => null,
+            'recaptchaSecretKey' => null,
+        ]);
 
         Notification::make()
             ->title('Settings saved')

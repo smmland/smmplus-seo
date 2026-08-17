@@ -188,6 +188,7 @@ class ReviewResource extends Resource
 
                 Tables\Columns\TextColumn::make('body')
                     ->label('Review')
+                    ->searchable()
                     ->limit(60)
                     ->wrap(),
 

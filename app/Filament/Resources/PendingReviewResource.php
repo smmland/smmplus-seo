@@ -81,6 +81,7 @@ class PendingReviewResource extends Resource
 
                 Tables\Columns\TextColumn::make('body')
                     ->label('Review')
+                    ->searchable()
                     ->wrap()
                     ->limit(500),
 

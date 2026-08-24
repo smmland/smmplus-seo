@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.28.0",
-    "notes": "Adds first-party SEO analytics: a privacy-conscious browser tracker, event ingestion API, Website Statistics dashboard with traffic/content/language/conversion/404/Core Web Vitals reporting, and automatic 180-day raw-event retention. Run Update database after installation."
+    "version": "1.28.1",
+    "notes": "Serves the SEO analytics tracker through Laravel as well as the public directory, fixing tracker.js 404 responses on cPanel deployments whose document root does not point directly to the app's public folder."
 }

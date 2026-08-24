@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\FreeServiceController;
 use App\Http\Controllers\Api\GiveawayController;
 use App\Http\Controllers\Api\ReviewsController;
@@ -10,6 +11,12 @@ use App\Http\Controllers\Api\UrlsController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+
+// Lightweight first-party, SEO-focused analytics endpoint used by the global smm.plus layout.
+// Browser code cannot safely hold a bearer token, so origin validation, payload limits and a
+// dedicated high-enough analytics rate limit protect it instead.
+Route::match(['POST', 'OPTIONS'], '/analytics/collect', [AnalyticsController::class, 'store'])
+    ->middleware('analytics.cors');
 
 // Public, read-only, open to any origin - see ReviewsController for why it skips the
 // gateway.cors stack the mutating public endpoints below use.

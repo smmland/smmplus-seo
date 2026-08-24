@@ -25,6 +25,11 @@ Schedule::command('sitemap:sync')->everyFifteenMinutes()->withoutOverlapping();
 // unbounded on a busy gateway.
 Schedule::command('gateway:prune-logs')->daily();
 
+// Raw visitor events are useful for detailed SEO analysis, but retaining them forever would
+// make dashboard queries and backups needlessly expensive. Aggregated insight over the most
+// recent six months is the useful window for this first-party dashboard.
+Schedule::command('analytics:prune --days=180')->daily()->withoutOverlapping();
+
 // Detects IPs over the configurable daily request threshold and blocks them with an
 // escalating cool-down (gated on Gateway Settings: auto_block_enabled).
 Schedule::command('gateway:auto-block-ips')->everyFiveMinutes()->withoutOverlapping();

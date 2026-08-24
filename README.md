@@ -48,6 +48,15 @@ Public, unauthenticated (what Google actually fetches):
 
 - `GET /sitemap_index.xml`
 - `GET /sitemap-pages.xml`, `/sitemap-blog.xml`, `/sitemap-landing.xml`, `/sitemap-other.xml`
+- `POST /api/analytics/collect` — origin-checked, rate-limited first-party analytics beacon
+
+## First-party SEO analytics
+
+Load `/analytics/tracker.js` from the shared website layout. It records page views, sessions,
+active engagement, scroll depth, landing attribution, internal/outbound clicks, key conversions,
+404 visits, browser errors and Core Web Vitals without storing raw IP addresses. The Filament
+**Analytics → Website Statistics** page provides time/language/device filters and actionable SEO
+tables. Raw events are pruned after 180 days by the scheduler.
 
 ## Notes
 

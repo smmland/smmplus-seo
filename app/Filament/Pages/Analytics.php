@@ -145,6 +145,11 @@ class Analytics extends Page
             ->when($this->currency !== 'all', fn (Builder $query) => $query->where('currency', $this->currency));
     }
 
+    public function isPurchaseWebhookConfigured(): bool
+    {
+        return strlen((string) config('analytics.purchase_webhook_secret')) >= 32;
+    }
+
     public function baseQuery(bool $includeUserState = true): Builder
     {
         $start = AnalyticsPeriod::start($this->period);

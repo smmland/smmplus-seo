@@ -89,6 +89,12 @@
         heading="Purchases and revenue"
         description="Verified server-to-server order data. Revenue is never accepted from tracker.js; refunds reduce net revenue and repeated order updates are idempotent."
     >
+        @if (! $this->isPurchaseWebhookConfigured())
+            <div class="mb-4 rounded-xl border border-warning-300 bg-warning-50 p-4 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-200">
+                Purchase collection is paused. Add a random 32+ character <code>ANALYTICS_PURCHASE_WEBHOOK_SECRET</code> to Core's <code>.env</code>, clear the config cache, and configure the same secret only in the trusted ordering backend.
+            </div>
+        @endif
+
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             @foreach ([
                 ['Purchases', number_format($this->purchaseSummary['purchases']), 'Paid orders, including later refunds'],

@@ -3,7 +3,9 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Pages\Analytics\TrafficOverTimeChart;
+use App\Filament\Pages\Analytics\RevenueOverTimeChart;
 use App\Models\AnalyticsEvent;
+use App\Models\AnalyticsPurchase;
 use App\Support\AnalyticsPeriod;
 use App\Support\PanelSection;
 use Filament\Pages\Page;
@@ -36,6 +38,12 @@ class Analytics extends Page
     #[Url]
     public string $country = 'all';
 
+    #[Url]
+    public string $userState = 'all';
+
+    #[Url]
+    public string $currency = 'all';
+
     public static function canAccess(): bool
     {
         return auth()->user()?->hasAnyAccess(PanelSection::viewOrEditKeys(PanelSection::ANALYTICS)) ?? false;
@@ -43,7 +51,7 @@ class Analytics extends Page
 
     protected function getHeaderWidgets(): array
     {
-        return [TrafficOverTimeChart::class];
+        return [TrafficOverTimeChart::class, RevenueOverTimeChart::class];
     }
 
     public function getHeaderWidgetsColumns(): int | string | array
@@ -58,6 +66,8 @@ class Analytics extends Page
             'language' => $this->language,
             'device' => $this->device,
             'country' => $this->country,
+            'userState' => $this->userState,
+            'currency' => $this->currency,
         ];
     }
 
@@ -81,10 +91,21 @@ class Analytics extends Page
         $this->refreshData();
     }
 
+    public function updatedUserState(): void
+    {
+        $this->refreshData();
+    }
+
+    public function updatedCurrency(): void
+    {
+        $this->refreshData();
+    }
+
     private function refreshData(): void
     {
         unset(
             $this->summary,
+            $this->audienceBreakdown,
             $this->topPages,
             $this->topSources,
             $this->languageBreakdown,
@@ -92,6 +113,10 @@ class Analytics extends Page
             $this->conversions,
             $this->webVitals,
             $this->notFoundPages,
+            $this->purchaseSummary,
+            $this->purchaseSources,
+            $this->purchaseLandingPages,
+            $this->recentPurchases,
         );
 
         $this->dispatch(
@@ -100,10 +125,27 @@ class Analytics extends Page
             language: $this->language,
             device: $this->device,
             country: $this->country,
+            userState: $this->userState,
+            currency: $this->currency,
         );
     }
 
-    public function baseQuery(): Builder
+    public function purchaseQuery(): Builder
+    {
+        $start = AnalyticsPeriod::start($this->period);
+
+        return AnalyticsPurchase::query()
+            ->where('site_id', 'smm-plus')
+            ->whereIn('status', AnalyticsPurchase::REVENUE_STATUSES)
+            ->when($start, fn (Builder $query) => $query->where('paid_at', '>=', $start))
+            ->when($this->language !== 'all', fn (Builder $query) => $query->where('language', $this->language))
+            ->when($this->device !== 'all', fn (Builder $query) => $query->where('device_type', $this->device))
+            ->when($this->userState !== 'all', fn (Builder $query) => $query->where('user_state', $this->userState))
+            ->when($this->country !== 'all', fn (Builder $query) => $query->where('country_code', $this->country))
+            ->when($this->currency !== 'all', fn (Builder $query) => $query->where('currency', $this->currency));
+    }
+
+    public function baseQuery(bool $includeUserState = true): Builder
     {
         $start = AnalyticsPeriod::start($this->period);
 
@@ -112,7 +154,24 @@ class Analytics extends Page
             ->when($start, fn (Builder $query) => $query->where('occurred_at', '>=', $start))
             ->when($this->language !== 'all', fn (Builder $query) => $query->where('language', $this->language))
             ->when($this->device !== 'all', fn (Builder $query) => $query->where('device_type', $this->device))
+            ->when($includeUserState && $this->userState !== 'all', fn (Builder $query) => $query->where('user_state', $this->userState))
             ->when($this->country !== 'all', fn (Builder $query) => $query->where('country_code', $this->country));
+    }
+
+    #[Computed]
+    public function audienceBreakdown()
+    {
+        return $this->baseQuery(includeUserState: false)
+            ->where('event_name', 'page_view')
+            ->select(
+                'user_state',
+                DB::raw('count(*) as views'),
+                DB::raw('count(distinct visitor_id) as visitors'),
+                DB::raw('count(distinct session_id) as sessions'),
+            )
+            ->groupBy('user_state')
+            ->get()
+            ->keyBy('user_state');
     }
 
     #[Computed]
@@ -135,6 +194,94 @@ class Analytics extends Page
             ->orderBy('country_code')
             ->pluck('country_code', 'country_code')
             ->all();
+    }
+
+    #[Computed]
+    public function currencyOptions(): array
+    {
+        return ['all' => 'All currencies'] + AnalyticsPurchase::query()
+            ->distinct()
+            ->orderBy('currency')
+            ->pluck('currency', 'currency')
+            ->all();
+    }
+
+    #[Computed]
+    public function purchaseSummary(): array
+    {
+        $rows = (clone $this->purchaseQuery())
+            ->select(
+                'currency',
+                DB::raw('count(*) as purchases'),
+                DB::raw('sum(gross_amount) as gross'),
+                DB::raw('sum(refunded_amount) as refunds'),
+                DB::raw('sum(gross_amount - refunded_amount) as net'),
+            )
+            ->groupBy('currency')
+            ->get();
+        $purchases = (int) $rows->sum('purchases');
+        $sessions = (int) $this->summary['sessions'];
+
+        return [
+            'purchases' => $purchases,
+            'gross' => $this->formatMoneyRows($rows, 'gross'),
+            'refunds' => $this->formatMoneyRows($rows, 'refunds'),
+            'net' => $this->formatMoneyRows($rows, 'net'),
+            'average' => $this->formatMoneyRows($rows->map(function ($row) {
+                $row->average = $row->purchases > 0 ? (float) $row->net / (int) $row->purchases : 0;
+
+                return $row;
+            }), 'average'),
+            'conversion_rate' => $sessions > 0 ? round(($purchases / $sessions) * 100, 2) : 0,
+        ];
+    }
+
+    #[Computed]
+    public function purchaseSources()
+    {
+        return (clone $this->purchaseQuery())
+            ->select(
+                'source',
+                'medium',
+                'currency',
+                DB::raw('count(*) as purchases'),
+                DB::raw('sum(gross_amount - refunded_amount) as net'),
+            )
+            ->groupBy('source', 'medium', 'currency')
+            ->orderByDesc('purchases')
+            ->limit(20)
+            ->get();
+    }
+
+    #[Computed]
+    public function purchaseLandingPages()
+    {
+        return (clone $this->purchaseQuery())
+            ->select(
+                'landing_page',
+                'currency',
+                DB::raw('count(*) as purchases'),
+                DB::raw('sum(gross_amount - refunded_amount) as net'),
+            )
+            ->groupBy('landing_page', 'currency')
+            ->orderByDesc('purchases')
+            ->limit(20)
+            ->get();
+    }
+
+    #[Computed]
+    public function recentPurchases()
+    {
+        return (clone $this->purchaseQuery())->orderByDesc('paid_at')->limit(20)->get();
+    }
+
+    private function formatMoneyRows($rows, string $column): string
+    {
+        if ($rows->isEmpty()) {
+            return '—';
+        }
+
+        return $rows->map(fn ($row) => number_format((float) $row->{$column}, 2).' '.$row->currency)->implode(' · ');
     }
 
     #[Computed]

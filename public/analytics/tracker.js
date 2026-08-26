@@ -7,6 +7,10 @@
   var script = document.currentScript;
   var endpoint = (script && script.dataset.endpoint) || 'https://core.smm.plus/api/analytics/collect';
   var siteId = (script && script.dataset.site) || 'smm-plus';
+  var requestedUserState = (script && script.dataset.userState) || 'guest';
+  var userState = ['guest', 'authenticated', 'internal'].indexOf(requestedUserState) !== -1
+    ? requestedUserState
+    : 'guest';
   var queue = [];
   var flushTimer = null;
   var maxScroll = 0;
@@ -44,11 +48,36 @@
     return String(value).replace(/\s+/g, ' ').trim().slice(0, limit || 255) || null;
   }
 
+  function safePath(value) {
+    var path = String(value || '/').split('?')[0].split('#')[0];
+    var redactRemainder = false;
+    var segments = path.split('/').map(function (segment) {
+      if (!segment) return segment;
+      if (redactRemainder) return ':redacted';
+      if (/^(resetpassword|confirmemail|2fa)$/i.test(segment)) {
+        redactRemainder = true;
+        return segment.toLowerCase();
+      }
+      if (/^\d{4,}$/.test(segment) || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(segment) || segment.length > 48) {
+        return ':id';
+      }
+      return segment;
+    }).join('/');
+
+    return clean(path.charAt(0) === '/' ? segments : '/' + segments, 500) || '/';
+  }
+
   function language() {
     var value = (document.documentElement.lang || '').toLowerCase().split('-')[0];
     if (value) return value.slice(0, 12);
     var match = location.pathname.match(/^\/(ru|tr|bp|ko|ar|es|th|vi|fr|zh|de|id|it|ja|pl|uk|fa)(?:\/|$)/i);
     return match ? match[1].toLowerCase() : 'en';
+  }
+
+  function campaignValue(value, limit) {
+    var result = clean(value, limit);
+    if (!result || /@/.test(result) || /(?:^|\D)\+?\d[\d\s().-]{7,}\d(?:\D|$)/.test(result)) return null;
+    return result;
   }
 
   function pageType() {
@@ -65,9 +94,9 @@
 
   function traffic() {
     var params = new URLSearchParams(location.search);
-    var campaign = clean(params.get('utm_campaign'), 255);
-    var source = clean(params.get('utm_source'), 100);
-    var medium = clean(params.get('utm_medium'), 100);
+    var campaign = campaignValue(params.get('utm_campaign'), 255);
+    var source = campaignValue(params.get('utm_source'), 100);
+    var medium = campaignValue(params.get('utm_medium'), 100);
     var referrerHost = null;
 
     if (document.referrer) {
@@ -120,8 +149,8 @@
       visitor_id: visitorId,
       session_id: sessionId,
       event_name: name,
-      page_path: location.pathname.slice(0, 500) || '/',
-      page_title: clean(document.title, 255),
+      page_path: safePath(location.pathname),
+      page_title: userState === 'guest' ? clean(document.title, 255) : null,
       page_type: pageType(),
       language: language(),
       referrer_host: attribution.referrer_host,
@@ -129,6 +158,7 @@
       medium: attribution.medium,
       campaign: attribution.campaign,
       device_type: innerWidth < 768 ? 'mobile' : (innerWidth < 1024 ? 'tablet' : 'desktop'),
+      user_state: userState,
       viewport_width: Math.min(65535, Math.max(0, innerWidth || 0)),
       occurred_at: new Date().toISOString()
     };
@@ -185,7 +215,9 @@
   }
 
   function clickTarget(element) {
-    return clean(element.getAttribute('data-analytics-label') || element.getAttribute('aria-label') || element.textContent || element.href, 160);
+    // Never capture arbitrary visible text: authenticated pages can render names, balances,
+    // ticket subjects, or other personal data inside a clicked element.
+    return clean(element.getAttribute('data-analytics-label') || element.id || element.tagName, 160);
   }
 
   function classifyConversion(element, href, label) {
@@ -214,8 +246,8 @@
     if (!href) return;
     try {
       var url = new URL(href, location.href);
-      if (url.origin === location.origin) track('internal_click', { target: clean(url.pathname, 500), metadata: { label: label } });
-      else track('outbound_click', { target: clean(url.hostname + url.pathname, 500), metadata: { label: label } });
+      if (url.origin === location.origin) track('internal_click', { target: safePath(url.pathname), metadata: { label: label } });
+      else track('outbound_click', { target: clean(url.hostname, 255), metadata: { label: label } });
     } catch (_) {}
   }, { passive: true });
 
@@ -224,7 +256,9 @@
     try { if (event.filename) errorPath = new URL(event.filename, location.href).pathname; } catch (_) {}
     track('js_error', {
       target: clean(errorPath, 500),
-      metadata: { message: clean(event.message, 255), line: event.lineno || null }
+      // Error messages can echo user input or tokens. The asset path and line are enough to
+      // group failures without sending the message itself.
+      metadata: { line: event.lineno || null }
     });
   });
 
@@ -287,6 +321,11 @@
   });
 
   window.smmAnalytics = {
+    // The checkout backend may receive these anonymous IDs and include them in its signed
+    // server-to-server purchase webhook. Amounts/statuses must never be reported by the browser.
+    context: function () {
+      return { visitor_id: visitorId, session_id: sessionId };
+    },
     track: function (name, data) { track(name, data || {}); },
     conversion: function (name, data) {
       data = data || {};

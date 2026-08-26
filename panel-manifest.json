@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.28.1",
-    "notes": "Serves the SEO analytics tracker through Laravel as well as the public directory, fixing tracker.js 404 responses on cPanel deployments whose document root does not point directly to the app's public folder."
+    "version": "1.30.0",
+    "notes": "Adds verified purchase and revenue analytics: paid-order counts, gross/refund/net revenue, average order value, purchase rate, currency-safe trends, acquisition-source and landing-page attribution, plus recent orders. Financial data is accepted only through an HMAC-signed server webhook with permanent event deduplication and stale-update protection. Run Update database after installation."
 }

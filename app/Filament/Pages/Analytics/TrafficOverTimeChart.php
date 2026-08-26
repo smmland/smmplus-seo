@@ -23,13 +23,16 @@ class TrafficOverTimeChart extends ChartWidget
 
     public string $country = 'all';
 
+    public string $userState = 'all';
+
     #[On('analytics-filters-updated')]
-    public function onFiltersUpdated(string $period, string $language, string $device, string $country): void
+    public function onFiltersUpdated(string $period, string $language, string $device, string $country, string $userState, string $currency = 'all'): void
     {
         $this->period = $period;
         $this->language = $language;
         $this->device = $device;
         $this->country = $country;
+        $this->userState = $userState;
     }
 
     protected function getType(): string
@@ -54,6 +57,7 @@ class TrafficOverTimeChart extends ChartWidget
             ->where('occurred_at', '>=', $start)
             ->when($this->language !== 'all', fn (Builder $query) => $query->where('language', $this->language))
             ->when($this->device !== 'all', fn (Builder $query) => $query->where('device_type', $this->device))
+            ->when($this->userState !== 'all', fn (Builder $query) => $query->where('user_state', $this->userState))
             ->when($this->country !== 'all', fn (Builder $query) => $query->where('country_code', $this->country))
             ->select(
                 DB::raw("{$bucket} as bucket"),

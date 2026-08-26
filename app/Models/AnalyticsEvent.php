@@ -24,6 +24,7 @@ class AnalyticsEvent extends Model
         'medium',
         'campaign',
         'device_type',
+        'user_state',
         'viewport_width',
         'country_code',
         'duration_ms',

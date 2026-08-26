@@ -24,4 +24,16 @@ class AnalyticsTrackerTest extends TestCase
         $this->assertStringContainsString('context: function', $contents);
         $this->assertStringContainsString('Amounts/statuses must never be reported by the browser', $contents);
     }
+
+    public function test_previous_sri_pinned_tracker_remains_available_during_deployment(): void
+    {
+        $response = $this->get('/analytics/tracker.js?v=1.29.0');
+        $response->assertOk();
+
+        $contents = file_get_contents($response->baseResponse->getFile()->getPathname());
+        $hash = base64_encode(hash('sha384', $contents, true));
+
+        $this->assertSame('mkqDT/47AOyPj1Nf6I77WYCGrjtXDyGs/rHArqg+40DmBIge7ugx/474uFYhZyAr', $hash);
+        $this->assertStringNotContainsString('context: function', $contents);
+    }
 }

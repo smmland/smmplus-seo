@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AnalyticsTrackerController extends Controller
 {
-    public function __invoke(): BinaryFileResponse
+    public function __invoke(Request $request): BinaryFileResponse
     {
-        $path = public_path('analytics/tracker.js');
+        // Keep the previously pinned build available during deployment. This lets the old layout
+        // continue passing SRI after Core updates, until the website switches to v1.30.0.
+        $file = $request->query('v') === '1.29.0' ? 'tracker-1.29.0.js' : 'tracker.js';
+        $path = public_path('analytics/'.$file);
 
         abort_unless(is_file($path), 404);
 

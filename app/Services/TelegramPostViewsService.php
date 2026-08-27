@@ -8,26 +8,25 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Automatically orders views for a Telegram post once it's actually sent, via one of the same
- * upstream SMM providers the Free Service Gateway already talks to (same UAPI-style
- * action=add call FreeServiceController makes) - but through its own settings namespace
- * (TelegramAutoViewsSettingsService), never the public GatewayService catalog, so this is never
- * reachable through the public /api/free-service/order endpoint. Expects the configured upstream
- * service id to itself be a drip-feed variant - this places a single order for the full quantity
- * and relies on the provider's own pacing to deliver it gradually, the same way an admin placing
- * that order by hand through the provider's own panel would.
+ * Reads a recent post's public counter and orders only the shortfall from the configured target,
+ * using the same UAPI-style upstream contract as FreeServiceController. The service id lives in
+ * a private Telegram settings namespace and is never published through the free-service catalog.
+ * A post-level delivery cool-down prevents repeatedly ordering the same shortfall before the
+ * upstream provider has had time to deliver the previous request.
  */
 class TelegramPostViewsService
 {
     public function __construct(
         private readonly TelegramAutoViewsSettingsService $settings,
         private readonly TelegramSettingsService $telegramSettings,
+        private readonly TelegramPostViewCountService $viewCounts,
     ) {}
 
-    public function orderViewsFor(TelegramPost $post): void
+    /** @return 'disabled'|'healthy'|'cooldown'|'ordered'|'failed' */
+    public function topUpViewsFor(TelegramPost $post): string
     {
         if (! $this->settings->isEnabled()) {
-            return;
+            return 'disabled';
         }
 
         $upstreamId = $this->settings->getUpstreamId();
@@ -36,7 +35,7 @@ class TelegramPostViewsService
         if (! $upstreamId || ! $serviceId) {
             $post->update(['views_order_error' => 'Automatic post views is enabled but not fully configured (Telegram Settings).']);
 
-            return;
+            return 'failed';
         }
 
         $link = $this->buildPostLink($post);
@@ -44,7 +43,7 @@ class TelegramPostViewsService
         if (! $link) {
             $post->update(['views_order_error' => 'Could not build a public link for this post - the configured Telegram channel id isn\'t a public @username channel.']);
 
-            return;
+            return 'failed';
         }
 
         $upstream = GatewayUpstream::query()->find($upstreamId);
@@ -52,7 +51,36 @@ class TelegramPostViewsService
         if (! $upstream || ! $upstream->is_active) {
             $post->update(['views_order_error' => 'The configured upstream provider (Telegram Settings) is missing or inactive.']);
 
-            return;
+            return 'failed';
+        }
+
+        try {
+            $currentViews = $this->viewCounts->get((string) $this->telegramSettings->getChannelId(), (int) $post->telegram_message_id);
+        } catch (\Throwable $e) {
+            $post->update([
+                'views_checked_at' => now(),
+                'views_order_error' => $e->getMessage(),
+            ]);
+
+            Log::warning('Telegram post views: counter check failed', ['post_id' => $post->id, 'error' => $e->getMessage()]);
+
+            return 'failed';
+        }
+
+        $post->update([
+            'observed_views' => $currentViews,
+            'views_checked_at' => now(),
+            'views_order_error' => null,
+        ]);
+
+        $quantity = $this->settings->getTarget() - $currentViews;
+
+        if ($quantity <= 0) {
+            return 'healthy';
+        }
+
+        if ($post->views_ordered_at?->greaterThan(now()->subHours($this->settings->getCooldownHours()))) {
+            return 'cooldown';
         }
 
         try {
@@ -61,14 +89,14 @@ class TelegramPostViewsService
                 'action' => 'add',
                 'service' => $serviceId,
                 'link' => $link,
-                'quantity' => $this->settings->getQuantity(),
+                'quantity' => $quantity,
             ]);
         } catch (\Throwable $e) {
             $post->update(['views_order_error' => $e->getMessage()]);
 
             Log::warning('Telegram post views: order request failed', ['post_id' => $post->id, 'error' => $e->getMessage()]);
 
-            return;
+            return 'failed';
         }
 
         $data = $response->json();
@@ -83,10 +111,23 @@ class TelegramPostViewsService
                 'body' => $response->body(),
             ]);
 
-            return;
+            return 'failed';
         }
 
-        $post->update(['views_ordered_at' => now(), 'views_order_error' => null]);
+        $post->update([
+            'views_ordered_at' => now(),
+            'views_order_error' => null,
+            'views_last_order_quantity' => $quantity,
+            'views_upstream_order_id' => isset($data['order']) ? (string) $data['order'] : null,
+        ]);
+
+        return 'ordered';
+    }
+
+    /** @deprecated Scheduled top-up checks should call topUpViewsFor(). */
+    public function orderViewsFor(TelegramPost $post): void
+    {
+        $this->topUpViewsFor($post);
     }
 
     // Only ever buildable for a public @username channel - a numeric chat_id has no public t.me

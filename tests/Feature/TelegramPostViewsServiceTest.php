@@ -35,7 +35,7 @@ class TelegramPostViewsServiceTest extends TestCase
             'name' => 'Provider 1', 'base_url' => 'https://provider.example.com/api/v2', 'api_key' => 'secret', 'is_active' => true,
         ]);
 
-        app(TelegramAutoViewsSettingsService::class)->setSettings(true, $upstream->id, '4512', 1000);
+        app(TelegramAutoViewsSettingsService::class)->setSettings(true, $upstream->id, '4512', 500);
 
         return $upstream;
     }
@@ -75,7 +75,10 @@ class TelegramPostViewsServiceTest extends TestCase
         $upstream = $this->configure();
         $post = $this->sentPost();
 
-        Http::fake(['*' => Http::response(['order' => 55123], 200)]);
+        Http::fake([
+            'https://t.me/*' => Http::response('<span class="tgme_widget_message_views">320</span>', 200),
+            'https://provider.example.com/*' => Http::response(['order' => 55123], 200),
+        ]);
 
         app(TelegramPostViewsService::class)->orderViewsFor($post);
 
@@ -84,12 +87,15 @@ class TelegramPostViewsServiceTest extends TestCase
                 && $request['action'] === 'add'
                 && $request['service'] === '4512'
                 && $request['link'] === 'https://t.me/testchannel/42'
-                && $request['quantity'] === 1000;
+                && $request['quantity'] === 180;
         });
 
         $post->refresh();
         $this->assertNotNull($post->views_ordered_at);
         $this->assertNull($post->views_order_error);
+        $this->assertSame(320, $post->observed_views);
+        $this->assertSame(180, $post->views_last_order_quantity);
+        $this->assertSame('55123', $post->views_upstream_order_id);
     }
 
     public function test_is_a_no_op_when_disabled(): void
@@ -108,7 +114,7 @@ class TelegramPostViewsServiceTest extends TestCase
     public function test_records_an_error_when_enabled_but_not_configured(): void
     {
         app(TelegramSettingsService::class)->setChannelId('@testchannel');
-        app(TelegramAutoViewsSettingsService::class)->setSettings(true, null, null, 1000);
+        app(TelegramAutoViewsSettingsService::class)->setSettings(true, null, null, 500);
         $post = $this->sentPost();
 
         Http::fake();
@@ -139,12 +145,45 @@ class TelegramPostViewsServiceTest extends TestCase
         $this->configure();
         $post = $this->sentPost();
 
-        Http::fake(['*' => Http::response(['error' => 'Not enough funds'], 200)]);
+        Http::fake([
+            'https://t.me/*' => Http::response('<span class="tgme_widget_message_views">100</span>', 200),
+            'https://provider.example.com/*' => Http::response(['error' => 'Not enough funds'], 200),
+        ]);
 
         app(TelegramPostViewsService::class)->orderViewsFor($post);
 
         $post->refresh();
         $this->assertNull($post->views_ordered_at);
         $this->assertStringContainsString('Not enough funds', $post->views_order_error);
+    }
+
+    public function test_does_not_order_when_the_post_is_already_at_target(): void
+    {
+        app(TelegramSettingsService::class)->setChannelId('@testchannel');
+        $this->configure();
+        $post = $this->sentPost();
+
+        Http::fake(['https://t.me/*' => Http::response('<span class="tgme_widget_message_views">501</span>', 200)]);
+
+        $result = app(TelegramPostViewsService::class)->topUpViewsFor($post);
+
+        $this->assertSame('healthy', $result);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'provider.example.com'));
+        $this->assertSame(501, $post->fresh()->observed_views);
+    }
+
+    public function test_cooldown_prevents_a_duplicate_order_while_delivery_is_pending(): void
+    {
+        app(TelegramSettingsService::class)->setChannelId('@testchannel');
+        $this->configure();
+        $post = $this->sentPost();
+        $post->update(['views_ordered_at' => now()->subHour()]);
+
+        Http::fake(['https://t.me/*' => Http::response('<span class="tgme_widget_message_views">250</span>', 200)]);
+
+        $result = app(TelegramPostViewsService::class)->topUpViewsFor($post);
+
+        $this->assertSame('cooldown', $result);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'provider.example.com'));
     }
 }

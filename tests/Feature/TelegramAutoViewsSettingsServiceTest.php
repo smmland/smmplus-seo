@@ -17,19 +17,25 @@ class TelegramAutoViewsSettingsServiceTest extends TestCase
         $this->assertFalse($settings->isEnabled());
         $this->assertNull($settings->getUpstreamId());
         $this->assertNull($settings->getServiceId());
-        $this->assertSame(1000, $settings->getQuantity());
+        $this->assertSame(500, $settings->getTarget());
+        $this->assertSame(30, $settings->getLookbackDays());
+        $this->assertSame(12, $settings->getCooldownHours());
+        $this->assertSame(20, $settings->getMaxPostsPerRun());
     }
 
     public function test_saves_and_reads_back_all_fields(): void
     {
         $settings = app(TelegramAutoViewsSettingsService::class);
 
-        $settings->setSettings(true, 3, '4512', 500);
+        $settings->setSettings(true, 3, '4512', 500, 14, 6, 10);
 
         $this->assertTrue($settings->isEnabled());
         $this->assertSame(3, $settings->getUpstreamId());
         $this->assertSame('4512', $settings->getServiceId());
-        $this->assertSame(500, $settings->getQuantity());
+        $this->assertSame(500, $settings->getTarget());
+        $this->assertSame(14, $settings->getLookbackDays());
+        $this->assertSame(6, $settings->getCooldownHours());
+        $this->assertSame(10, $settings->getMaxPostsPerRun());
     }
 
     public function test_disabling_after_enabling_is_read_back_correctly(): void

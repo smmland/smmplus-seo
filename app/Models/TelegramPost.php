@@ -57,7 +57,8 @@ class TelegramPost extends Model
         'type', 'lang', 'related_key', 'title', 'message_text', 'image_path', 'image_source',
         'image_generation_error', 'scheduled_at', 'preview_alert_sent_at', 'status', 'sent_at', 'telegram_message_id', 'error_message',
         'ai_provider', 'ai_model', 'input_tokens', 'output_tokens', 'estimated_cost_usd', 'image_cost_usd',
-        'views_ordered_at', 'views_order_error',
+        'views_ordered_at', 'views_order_error', 'views_checked_at', 'observed_views',
+        'views_last_order_quantity', 'views_upstream_order_id',
     ];
 
     protected function casts(): array
@@ -72,6 +73,9 @@ class TelegramPost extends Model
             'estimated_cost_usd' => 'decimal:6',
             'image_cost_usd' => 'decimal:6',
             'views_ordered_at' => 'datetime',
+            'views_checked_at' => 'datetime',
+            'observed_views' => 'integer',
+            'views_last_order_quantity' => 'integer',
         ];
     }
 

@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.30.0",
-    "notes": "Adds verified purchase and revenue analytics: paid-order counts, gross/refund/net revenue, average order value, purchase rate, currency-safe trends, acquisition-source and landing-page attribution, plus recent orders. Financial data is accepted only through an HMAC-signed server webhook with permanent event deduplication and stale-update protection. Run Update database after installation."
+    "version": "1.31.0",
+    "notes": "Adds automatic Telegram post view top-up. Every 15 minutes, recent public-channel posts below the configurable target (500 by default) receive only the missing quantity through the selected private upstream service. Includes delivery cooldown, lookback and per-run safety limits, visible counter/order/error history, and strict fixed-host public counter checks. Run Update database after installation."
 }

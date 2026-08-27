@@ -65,7 +65,10 @@ class TelegramSettings extends Page implements HasForms
             'autoViewsEnabled' => $autoViews->isEnabled(),
             'autoViewsUpstreamId' => $autoViews->getUpstreamId(),
             'autoViewsServiceId' => $autoViews->getServiceId(),
-            'autoViewsQuantity' => $autoViews->getQuantity(),
+            'autoViewsTarget' => $autoViews->getTarget(),
+            'autoViewsLookbackDays' => $autoViews->getLookbackDays(),
+            'autoViewsCooldownHours' => $autoViews->getCooldownHours(),
+            'autoViewsMaxPostsPerRun' => $autoViews->getMaxPostsPerRun(),
         ]);
     }
 
@@ -185,8 +188,8 @@ class TelegramSettings extends Page implements HasForms
                             ->extraInputAttributes(['class' => 'font-mono text-xs']),
                     ]),
 
-                Section::make('Automatic post views (optional)')
-                    ->description('Orders views from one of your Free Service Gateway upstream providers for every post as soon as it\'s actually sent to the channel. Uses its own service id entered directly below - not a Free Service Gateway catalog entry, so this is never reachable through the public free-service API. Point it at a drip-feed views service on the provider\'s side (one that paces delivery gradually on its own) rather than an instant one, since this places a single order for the full quantity each time.')
+                Section::make('Automatic post view top-up (optional)')
+                    ->description('Every 15 minutes, reads the visible counter of recent posts in your public channel. Posts below the target receive only the missing quantity. A per-post cool-down prevents duplicate orders while the provider is still delivering. This uses a private service id and never exposes it through the public free-service API.')
                     ->schema([
                         Toggle::make('autoViewsEnabled')
                             ->label('Enabled'),
@@ -202,12 +205,27 @@ class TelegramSettings extends Page implements HasForms
                             ->placeholder('e.g. 4512')
                             ->helperText('The upstream provider\'s own id for the views service to order - ideally a drip-feed variant.'),
 
-                        TextInput::make('autoViewsQuantity')
-                            ->label('Quantity per post')
+                        TextInput::make('autoViewsTarget')
+                            ->label('Target views')
                             ->numeric()
                             ->integer()
                             ->minValue(1)
-                            ->required(),
+                            ->required()
+                            ->helperText('Default: 500. If a post has 320 views, the order quantity will be 180.'),
+
+                        TextInput::make('autoViewsLookbackDays')
+                            ->label('Check posts from the last (days)')
+                            ->numeric()->integer()->minValue(1)->maxValue(365)->required(),
+
+                        TextInput::make('autoViewsCooldownHours')
+                            ->label('Delivery cool-down (hours)')
+                            ->numeric()->integer()->minValue(1)->maxValue(168)->required()
+                            ->helperText('No second order is placed for the same post during this period.'),
+
+                        TextInput::make('autoViewsMaxPostsPerRun')
+                            ->label('Maximum posts per check')
+                            ->numeric()->integer()->minValue(1)->maxValue(100)->required()
+                            ->helperText('Safety limit for Telegram and provider requests during one scheduler run.'),
                     ])
                     ->columns(2),
             ])
@@ -234,7 +252,10 @@ class TelegramSettings extends Page implements HasForms
             (bool) $data['autoViewsEnabled'],
             $data['autoViewsUpstreamId'] !== null && $data['autoViewsUpstreamId'] !== '' ? (int) $data['autoViewsUpstreamId'] : null,
             $data['autoViewsServiceId'] ?: null,
-            (int) ($data['autoViewsQuantity'] ?: 1000),
+            (int) ($data['autoViewsTarget'] ?: 500),
+            (int) ($data['autoViewsLookbackDays'] ?: 30),
+            (int) ($data['autoViewsCooldownHours'] ?: 12),
+            (int) ($data['autoViewsMaxPostsPerRun'] ?: 20),
         );
 
         // The typed token was only ever meant to reach storage (encrypted) - don't leave it

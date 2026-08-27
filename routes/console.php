@@ -125,6 +125,14 @@ Schedule::command('telegram:capture-channel-posts')
     ->withoutOverlapping()
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
 
+// Checks the public counters of recent channel posts and orders only their shortfall from the
+// configured target. The service keeps a delivery cool-down per post, while withoutOverlapping
+// prevents two scheduler ticks from placing the same order concurrently.
+Schedule::command('telegram:top-up-post-views')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(30)
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
 // Previews a post about to send, via personal DM (Telegram Channel > Alerts, no-op when that
 // specific event is turned off there) and via in-panel notification (always on, gated only by
 // the viewing admin's own Telegram-section access).

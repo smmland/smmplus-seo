@@ -34,7 +34,7 @@ class ListCatalogServices extends ListRecords
 
                     Notification::make()
                         ->title('Catalog synced')
-                        ->body("{$result['total']} service(s): {$result['added']} new, {$result['changed']} changed, {$result['unavailable']} no longer available.")
+                        ->body("{$result['total']} service(s): {$result['added']} new, {$result['changed']} changed, {$result['unavailable']} no longer available, {$result['seededTranslations']} newly seen by the translation pipeline (auto-translated into every active language on the next hourly translation run).")
                         ->success()
                         ->send();
                 }),

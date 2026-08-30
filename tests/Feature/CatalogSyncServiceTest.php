@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\CatalogService;
 use App\Models\GatewayUpstream;
+use App\Models\LandingServiceCategory;
+use App\Models\ServiceTranslation;
 use App\Services\CatalogSettingsService;
 use App\Services\CatalogSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -136,5 +138,67 @@ class CatalogSyncServiceTest extends TestCase
 
         $this->assertFalse($result['ok']);
         $this->assertSame('Invalid API key', $result['error']);
+    }
+
+    public function test_sync_seeds_a_default_language_translation_row_for_a_matched_service(): void
+    {
+        $this->selectUpstream();
+        LandingServiceCategory::create([
+            'slug' => 'premium_botstart', 'label' => 'Premium BotStart',
+            'match_field' => LandingServiceCategory::MATCH_FIELD_CATEGORY, 'match_text' => 'BotStart', 'is_active' => true,
+        ]);
+
+        Http::fake(['https://smm.plus/api/v2' => Http::response([
+            ['service' => 1, 'name' => 'شروع ربات پرمیوم', 'category' => 'Telegram Premium BotStart', 'rate' => '5', 'min' => '10', 'max' => '1000', 'refill' => true, 'cancel' => false],
+            ['service' => 2, 'name' => 'Instagram Followers', 'category' => 'Instagram', 'rate' => '1', 'min' => '10', 'max' => '1000', 'refill' => false, 'cancel' => false],
+        ], 200)]);
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertSame(1, $result['seededTranslations'], 'only the matched service should be seeded');
+
+        $row = ServiceTranslation::query()->where('service_key', '1')->where('lang', 'en')->first();
+        $this->assertNotNull($row);
+        $this->assertSame('شروع ربات پرمیوم', $row->title);
+        $this->assertSame('Telegram Premium BotStart', $row->category_title);
+
+        $this->assertNull(ServiceTranslation::query()->where('service_key', '2')->where('lang', 'en')->first(), 'the non-matched service is left alone');
+    }
+
+    public function test_sync_does_not_overwrite_an_already_scraped_translation_row(): void
+    {
+        $this->selectUpstream();
+        LandingServiceCategory::create([
+            'slug' => 'premium_botstart', 'label' => 'Premium BotStart',
+            'match_field' => LandingServiceCategory::MATCH_FIELD_CATEGORY, 'match_text' => 'BotStart', 'is_active' => true,
+        ]);
+        ServiceTranslation::create([
+            'service_key' => '1', 'lang' => 'en', 'title' => 'Already scraped title', 'description_text' => 'Already scraped description',
+        ]);
+
+        Http::fake(['https://smm.plus/api/v2' => Http::response([
+            ['service' => 1, 'name' => 'Different API name', 'category' => 'Telegram Premium BotStart', 'rate' => '5', 'min' => '10', 'max' => '1000', 'refill' => true, 'cancel' => false],
+        ], 200)]);
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertSame(0, $result['seededTranslations']);
+        $row = ServiceTranslation::query()->where('service_key', '1')->where('lang', 'en')->first();
+        $this->assertSame('Already scraped title', $row->title);
+        $this->assertSame('Already scraped description', $row->description_text);
+    }
+
+    public function test_sync_seeds_nothing_when_no_active_landing_category_matches(): void
+    {
+        $this->selectUpstream();
+
+        Http::fake(['https://smm.plus/api/v2' => Http::response([
+            ['service' => 1, 'name' => 'Followers', 'category' => 'Cat', 'rate' => '1', 'min' => '1', 'max' => '2', 'refill' => false, 'cancel' => false],
+        ], 200)]);
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertSame(0, $result['seededTranslations']);
+        $this->assertSame(0, ServiceTranslation::query()->count());
     }
 }

@@ -3,7 +3,11 @@
 namespace App\Services;
 
 use App\Models\CatalogService;
+use App\Models\Language;
+use App\Models\LandingServiceCategory;
+use App\Models\ServiceTranslation;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Syncs the cached retail catalog (catalog_services) from smm.plus's own customer-facing API -
@@ -13,6 +17,17 @@ use Illuminate\Support\Facades\Http;
  * Main" row with base_url https://smm.plus/api/v2) chosen on the SEO Settings page, rather than a
  * second copy of the same credentials typed here. Distinct from ServiceCatalogService, which
  * scrapes the HTML /services page for name/description only and has no pricing at all.
+ *
+ * The API returns "name" in only one language (whatever the upstream account is set to) with no
+ * per-language variant and no description at all - so after every sync, any service matched by an
+ * active LandingServiceCategory gets a default-language service_translations row seeded from that
+ * name if one doesn't already exist. That's the exact table/queue RefreshServiceCatalogCommand's
+ * hourly services:refresh-catalog run already scans (queueMissing()) to auto-queue AI translation
+ * into every active language - reusing it here means a brand-new, API-only service (never seen by
+ * the HTML scraper) still gets translated everywhere automatically, with no separate translation
+ * pipeline to build or pay for beyond the one that already exists. A service the scraper already
+ * knows about keeps its richer scraped title/description untouched (firstOrCreate never
+ * overwrites an existing row).
  */
 class CatalogSyncService
 {
@@ -21,7 +36,7 @@ class CatalogSyncService
     public function __construct(private readonly CatalogSettingsService $settings) {}
 
     /**
-     * @return array{ok: bool, error?: string, total?: int, added?: int, changed?: int, unavailable?: int}
+     * @return array{ok: bool, error?: string, total?: int, added?: int, changed?: int, unavailable?: int, seededTranslations?: int}
      */
     public function sync(): array
     {
@@ -102,12 +117,62 @@ class CatalogSyncService
             ->whereNotIn('service_id', $touchedIds)
             ->update(['available' => false]);
 
+        $seededTranslations = $this->seedTranslationsForLandingCategories();
+
         return [
             'ok' => true,
             'total' => count($touchedIds),
             'added' => $added,
             'changed' => $changed,
             'unavailable' => $unavailable,
+            'seededTranslations' => $seededTranslations,
         ];
+    }
+
+    /**
+     * Default-language-only - other languages are filled in by the existing AI translation queue
+     * (RefreshServiceCatalogCommand::queueMissing(), services:process-queue) on its normal hourly
+     * cadence, same as every other service. Limited to services matched by at least one active
+     * LandingServiceCategory - the only ones ever exposed through the public API - so this never
+     * queues (and pays AI translation cost for) the rest of a large upstream catalog nobody's
+     * landing pages actually use.
+     */
+    private function seedTranslationsForLandingCategories(): int
+    {
+        if (! Schema::hasTable('landing_service_categories') || ! Schema::hasTable('service_translations')) {
+            return 0;
+        }
+
+        $mappings = LandingServiceCategory::query()->where('is_active', true)->get();
+
+        if ($mappings->isEmpty()) {
+            return 0;
+        }
+
+        $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
+
+        $matched = CatalogService::query()->where('available', true)->get()
+            ->filter(fn (CatalogService $service) => $mappings->contains(fn (LandingServiceCategory $mapping) => $mapping->matches($service)));
+
+        $seeded = 0;
+
+        foreach ($matched as $service) {
+            $row = ServiceTranslation::query()->firstOrCreate(
+                ['service_key' => $service->service_id, 'lang' => $defaultLang],
+                [
+                    'category_title' => $service->category,
+                    'title' => $service->name,
+                    'checked_at' => now(),
+                    'first_seen_at' => now(),
+                    'last_seen_at' => now(),
+                ],
+            );
+
+            if ($row->wasRecentlyCreated) {
+                $seeded++;
+            }
+        }
+
+        return $seeded;
     }
 }

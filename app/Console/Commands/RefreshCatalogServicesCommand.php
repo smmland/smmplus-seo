@@ -26,7 +26,7 @@ class RefreshCatalogServicesCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info("Synced {$result['total']} service(s): {$result['added']} new, {$result['changed']} changed, {$result['unavailable']} no longer available.");
+        $this->info("Synced {$result['total']} service(s): {$result['added']} new, {$result['changed']} changed, {$result['unavailable']} no longer available, {$result['seededTranslations']} newly seen by the translation pipeline (will be auto-translated into every active language by the next services:refresh-catalog run).");
 
         return self::SUCCESS;
     }

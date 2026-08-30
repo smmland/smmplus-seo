@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CatalogService;
+use App\Models\GatewayUpstream;
 use App\Services\CatalogSettingsService;
 use App\Services\CatalogSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -10,30 +11,51 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 // CatalogSyncService is what keeps catalog_services (GET /api/services's data source) matching
-// smm.plus's own customer API (action=services on https://{host}/api/v2, per the documented
-// contract at https://smm.plus/api) - real retail price/min/max, not the HTML scraper's
-// name/description-only catalog.
+// smm.plus's own customer API (action=services, per the documented contract at
+// https://smm.plus/api) - real retail price/min/max, not the HTML scraper's
+// name/description-only catalog. The base URL/key come from an existing Free Service Gateway >
+// API Server (GatewayUpstream) the admin picks on SEO Settings, not a separate credential typed
+// here.
 class CatalogSyncServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function configureAndSetHost(string $host = 'smm.plus'): void
+    private function selectUpstream(string $baseUrl = 'https://smm.plus/api/v2', string $apiKey = 'secret-key'): void
     {
-        app(CatalogSettingsService::class)->setApiKey('secret-key');
-        app(CatalogSettingsService::class)->setHost($host);
+        $upstream = GatewayUpstream::create([
+            'name' => 'SMM Plus Main',
+            'base_url' => $baseUrl,
+            'api_key' => $apiKey,
+            'is_active' => true,
+        ]);
+
+        app(CatalogSettingsService::class)->setUpstreamId($upstream->id);
     }
 
-    public function test_sync_fails_without_an_api_key(): void
+    public function test_sync_fails_without_an_api_server_selected(): void
     {
         $result = app(CatalogSyncService::class)->sync();
 
         $this->assertFalse($result['ok']);
-        $this->assertStringContainsString('API key', $result['error']);
+        $this->assertStringContainsString('API server', $result['error']);
+    }
+
+    public function test_sync_fails_when_the_selected_upstream_is_inactive(): void
+    {
+        $upstream = GatewayUpstream::create([
+            'name' => 'Disabled', 'base_url' => 'https://smm.plus/api/v2', 'api_key' => 'k', 'is_active' => false,
+        ]);
+        app(CatalogSettingsService::class)->setUpstreamId($upstream->id);
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('API server', $result['error']);
     }
 
     public function test_sync_upserts_services_from_the_documented_response_shape(): void
     {
-        $this->configureAndSetHost();
+        $this->selectUpstream();
 
         Http::fake([
             'https://smm.plus/api/v2' => Http::response([
@@ -64,7 +86,7 @@ class CatalogSyncServiceTest extends TestCase
 
     public function test_a_service_missing_from_a_later_sync_is_marked_unavailable_not_deleted(): void
     {
-        $this->configureAndSetHost();
+        $this->selectUpstream();
 
         Http::fake(['https://smm.plus/api/v2' => Http::sequence()
             ->push([
@@ -88,7 +110,7 @@ class CatalogSyncServiceTest extends TestCase
 
     public function test_sync_reports_failure_without_touching_the_cache_on_an_empty_response(): void
     {
-        $this->configureAndSetHost();
+        $this->selectUpstream();
 
         Http::fake(['https://smm.plus/api/v2' => Http::sequence()
             ->push([
@@ -106,7 +128,7 @@ class CatalogSyncServiceTest extends TestCase
 
     public function test_sync_reports_failure_on_an_error_response(): void
     {
-        $this->configureAndSetHost();
+        $this->selectUpstream();
 
         Http::fake(['https://smm.plus/api/v2' => Http::response(['error' => 'Invalid API key'], 200)]);
 

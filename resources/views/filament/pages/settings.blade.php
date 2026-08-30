@@ -41,9 +41,9 @@
         </x-filament::button>
     </form>
 
-    <x-filament::section heading="smm.plus API (catalog pricing)" class="mt-6">
+    <x-filament::section heading="Catalog pricing sync" class="mt-6">
         <p class="text-sm text-gray-500 dark:text-gray-400">
-            Credentials smm.plus's own customer API (https://smm.plus/api) uses to keep GET /api/services's cached price/min/max fresh for landing pages.
+            Which API server GET /api/services reads its cached price/min/max from, kept fresh by a daily sync (or "Sync now" on Catalog Services).
         </p>
 
         <form wire:submit="saveCatalog" class="mt-4">

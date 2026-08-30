@@ -107,7 +107,7 @@ class CatalogServiceResource extends Resource
                     ->options(fn () => CatalogService::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category', 'category')),
             ])
             ->emptyStateHeading('No services synced yet')
-            ->emptyStateDescription('Add a smm.plus API key in SEO Settings, then run a sync.');
+            ->emptyStateDescription('Pick an API server in SEO Settings, then run a sync.');
     }
 
     public static function getPages(): array

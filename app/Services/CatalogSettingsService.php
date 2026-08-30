@@ -2,76 +2,50 @@
 
 namespace App\Services;
 
+use App\Models\GatewayUpstream;
 use App\Models\Setting;
-use Illuminate\Support\Facades\Crypt;
 
-// smm.plus's own customer-facing API credentials (https://smm.plus/api) - a single first-party
-// key, unlike GatewayUpstream's list of multiple wholesale suppliers, so it lives here as one
-// settings row rather than a table. Same encrypted-at-rest, never-pre-filled pattern as
-// AiSettingsService's provider API keys.
+// Which existing "API Server" (Free Service Gateway > API Servers, GatewayUpstream - name/base
+// URL/encrypted key, already used the same way by Telegram Settings' auto-views upstream picker)
+// CatalogSyncService should call for smm.plus's own customer API - reuses that list instead of
+// asking the admin to type a second copy of a key/URL they've likely already saved there (e.g.
+// an "SMM Plus Main" row with base_url https://smm.plus/api/v2).
 class CatalogSettingsService
 {
-    private const KEY_API_KEY = 'catalog_api_key';
-    private const KEY_HOST = 'catalog_api_host';
+    private const KEY_UPSTREAM_ID = 'catalog_upstream_id';
     private const KEY_CURRENCY_SYMBOL = 'catalog_currency_symbol';
 
     private const DEFAULT_CURRENCY_SYMBOL = '$';
 
-    public function hasApiKey(): bool
+    public function getUpstreamId(): ?int
     {
-        return $this->get(self::KEY_API_KEY) !== null;
+        $stored = $this->get(self::KEY_UPSTREAM_ID);
+
+        return $stored !== null ? (int) $stored : null;
     }
 
-    public function getApiKey(): ?string
+    public function setUpstreamId(?int $id): void
     {
-        $encrypted = $this->get(self::KEY_API_KEY);
+        if ($id === null) {
+            Setting::query()->where('key', self::KEY_UPSTREAM_ID)->delete();
 
-        if ($encrypted === null) {
-            return null;
-        }
-
-        try {
-            return Crypt::decryptString($encrypted);
-        } catch (\Throwable) {
-            // Undecryptable (e.g. APP_KEY rotated since it was saved) - treat as "no key set"
-            // rather than fatally erroring the sync or the settings page.
-            return null;
-        }
-    }
-
-    // Blank/null leaves the currently-stored key untouched - the form field is never pre-filled
-    // with the real secret, so "didn't type anything" must mean "keep it", not "clear it".
-    public function setApiKey(?string $key): void
-    {
-        if ($key === null || $key === '') {
             return;
         }
 
-        $this->set(self::KEY_API_KEY, Crypt::encryptString($key));
+        $this->set(self::KEY_UPSTREAM_ID, (string) $id);
     }
 
-    public function clearApiKey(): void
+    // Null when nothing's selected, or the selected row was deleted/deactivated since - the
+    // caller (CatalogSyncService) treats either the same way: "not configured yet".
+    public function getUpstream(): ?GatewayUpstream
     {
-        Setting::query()->where('key', self::KEY_API_KEY)->delete();
-    }
+        $id = $this->getUpstreamId();
 
-    // Defaults to the same host the HTML scraper (ServiceCatalogService/SettingsService) already
-    // points at - smm.plus's own customer API lives on that same domain - but is independently
-    // overridable in case the two ever need to diverge.
-    public function getHost(SettingsService $sitemapSettings): string
-    {
-        $stored = $this->get(self::KEY_HOST);
-
-        if ($stored !== null && $stored !== '') {
-            return $stored;
+        if ($id === null) {
+            return null;
         }
 
-        return (string) (parse_url($sitemapSettings->getSourceSitemapUrl(), PHP_URL_HOST) ?: '');
-    }
-
-    public function setHost(?string $host): void
-    {
-        $this->set(self::KEY_HOST, trim((string) $host));
+        return GatewayUpstream::query()->where('is_active', true)->find($id);
     }
 
     // Purely a display-formatting choice for the public API's rate_formatted convenience field -

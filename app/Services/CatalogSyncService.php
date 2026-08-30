@@ -7,42 +7,33 @@ use Illuminate\Support\Facades\Http;
 
 /**
  * Syncs the cached retail catalog (catalog_services) from smm.plus's own customer-facing API -
- * POST https://{host}/api/v2 with action=services - the real, currently-billed price/min/max
- * shown to real customers, per the documented contract at https://smm.plus/api. Distinct from
- * ServiceCatalogService, which scrapes the HTML /services page for name/description only and has
- * no pricing at all.
+ * POST {upstream base_url} with action=services - the real, currently-billed price/min/max shown
+ * to real customers, per the documented contract at https://smm.plus/api. The base URL and key
+ * come from an existing Free Service Gateway > API Server (GatewayUpstream, e.g. an "SMM Plus
+ * Main" row with base_url https://smm.plus/api/v2) chosen on the SEO Settings page, rather than a
+ * second copy of the same credentials typed here. Distinct from ServiceCatalogService, which
+ * scrapes the HTML /services page for name/description only and has no pricing at all.
  */
 class CatalogSyncService
 {
     private const FIELDS = ['name', 'type', 'category', 'rate', 'min', 'max', 'refill', 'cancel'];
 
-    public function __construct(
-        private readonly CatalogSettingsService $settings,
-        private readonly SettingsService $sitemapSettings,
-    ) {}
+    public function __construct(private readonly CatalogSettingsService $settings) {}
 
     /**
      * @return array{ok: bool, error?: string, total?: int, added?: int, changed?: int, unavailable?: int}
      */
     public function sync(): array
     {
-        $apiKey = $this->settings->getApiKey();
+        $upstream = $this->settings->getUpstream();
 
-        if (! $apiKey) {
-            return ['ok' => false, 'error' => 'No smm.plus API key configured yet.'];
+        if (! $upstream) {
+            return ['ok' => false, 'error' => 'No API server selected yet - pick one on SEO > Settings (managed on Free Service Gateway > API Servers).'];
         }
-
-        $host = $this->settings->getHost($this->sitemapSettings);
-
-        if (! $host) {
-            return ['ok' => false, 'error' => 'Could not determine smm.plus\'s domain.'];
-        }
-
-        $url = "https://{$host}/api/v2";
 
         try {
-            $response = Http::asForm()->timeout(30)->post($url, [
-                'key' => $apiKey,
+            $response = Http::asForm()->timeout(30)->post($upstream->base_url, [
+                'key' => $upstream->api_key,
                 'action' => 'services',
             ]);
         } catch (\Throwable $e) {
@@ -50,7 +41,7 @@ class CatalogSyncService
         }
 
         if (! $response->successful()) {
-            return ['ok' => false, 'error' => 'HTTP '.$response->status().' from '.$url];
+            return ['ok' => false, 'error' => 'HTTP '.$response->status().' from '.$upstream->base_url];
         }
 
         $data = $response->json();

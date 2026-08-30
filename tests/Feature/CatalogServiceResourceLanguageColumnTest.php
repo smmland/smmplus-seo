@@ -13,8 +13,9 @@ use Tests\TestCase;
 
 // The Catalog Services list has no per-language rows (catalog_services is language-agnostic) -
 // the Language filter instead just picks which language's Service Translation the
-// Name/Description/Status columns display for the same rows, per the admin's request to see
-// which language a service is actually translated into and switch between them.
+// Name/Category/Description/Status columns display for the same rows, per the admin's request to
+// see which language a service is actually translated into (category included) and switch
+// between them.
 class CatalogServiceResourceLanguageColumnTest extends TestCase
 {
     use RefreshDatabase;
@@ -24,14 +25,15 @@ class CatalogServiceResourceLanguageColumnTest extends TestCase
         $this->actingAs(User::factory()->create(['is_super_admin' => true]));
     }
 
-    public function test_the_name_column_shows_the_raw_catalog_name_for_the_default_language_by_default(): void
+    public function test_the_name_and_category_columns_show_the_raw_catalog_text_for_the_default_language_by_default(): void
     {
         $this->actingAsSuperAdmin();
         Language::create(['code' => 'en', 'name' => 'English', 'is_default' => true, 'is_active' => true]);
-        $service = CatalogService::create(['service_id' => '1', 'name' => 'Raw API Name', 'available' => true]);
+        $service = CatalogService::create(['service_id' => '1', 'name' => 'Raw API Name', 'category' => 'Raw API Category', 'available' => true]);
 
         Livewire::test(ListCatalogServices::class)
             ->assertTableColumnStateSet('name', 'Raw API Name', $service)
+            ->assertTableColumnStateSet('category', 'Raw API Category', $service)
             ->assertTableColumnStateSet('translation_status', 'Source', $service);
     }
 
@@ -40,29 +42,31 @@ class CatalogServiceResourceLanguageColumnTest extends TestCase
         $this->actingAsSuperAdmin();
         Language::create(['code' => 'en', 'name' => 'English', 'is_default' => true, 'is_active' => true]);
         Language::create(['code' => 'fa', 'name' => 'Persian', 'is_default' => false, 'is_active' => true]);
-        $service = CatalogService::create(['service_id' => '1', 'name' => 'Raw API Name', 'available' => true]);
+        $service = CatalogService::create(['service_id' => '1', 'name' => 'Raw API Name', 'category' => 'Raw API Category', 'available' => true]);
         ServiceTranslation::create([
-            'service_key' => '1', 'lang' => 'fa', 'title' => 'اسم فارسی', 'description_text' => 'توضیحات',
+            'service_key' => '1', 'lang' => 'fa', 'title' => 'اسم فارسی', 'category_title' => 'دسته فارسی', 'description_text' => 'توضیحات',
             'is_translated' => true, 'translated_at' => now(),
         ]);
 
         Livewire::test(ListCatalogServices::class)
             ->filterTable('lang', 'fa')
             ->assertTableColumnStateSet('name', 'اسم فارسی', $service)
+            ->assertTableColumnStateSet('category', 'دسته فارسی', $service)
             ->assertTableColumnStateSet('description', 'توضیحات', $service)
             ->assertTableColumnStateSet('translation_status', 'Translated', $service);
     }
 
-    public function test_a_language_with_no_translation_yet_falls_back_to_the_raw_name_and_flags_not_queued(): void
+    public function test_a_language_with_no_translation_yet_falls_back_to_the_raw_name_and_category_and_flags_not_queued(): void
     {
         $this->actingAsSuperAdmin();
         Language::create(['code' => 'en', 'name' => 'English', 'is_default' => true, 'is_active' => true]);
         Language::create(['code' => 'ar', 'name' => 'Arabic', 'is_default' => false, 'is_active' => true]);
-        $service = CatalogService::create(['service_id' => '1', 'name' => 'Raw API Name', 'available' => true]);
+        $service = CatalogService::create(['service_id' => '1', 'name' => 'Raw API Name', 'category' => 'Raw API Category', 'available' => true]);
 
         Livewire::test(ListCatalogServices::class)
             ->filterTable('lang', 'ar')
             ->assertTableColumnStateSet('name', 'Raw API Name', $service)
+            ->assertTableColumnStateSet('category', 'Raw API Category', $service)
             ->assertTableColumnStateSet('translation_status', 'Not queued', $service);
     }
 

@@ -21,9 +21,9 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * The Language filter doesn't filter rows out (catalog_services has no lang column - one row per
  * service, language-agnostic) - it just picks which language's Service Translation the
- * Name/Description/Status columns display, via getStateUsing() reading the live filter state off
- * the table's own Livewire component. Every language's translations are eager-loaded once
- * (getEloquentQuery()) so switching the filter never re-queries per row.
+ * Name/Category/Description/Status columns display, via getStateUsing() reading the live filter
+ * state off the table's own Livewire component. Every language's translations are eager-loaded
+ * once (getEloquentQuery()) so switching the filter never re-queries per row.
  */
 class CatalogServiceResource extends Resource
 {
@@ -127,6 +127,11 @@ class CatalogServiceResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('category')
+                    ->getStateUsing(function (CatalogService $record, $livewire) {
+                        $translation = $record->translations->firstWhere('lang', static::selectedLang($livewire));
+
+                        return $translation?->category_title ?: $record->category;
+                    })
                     ->searchable()
                     ->sortable()
                     ->toggleable(),

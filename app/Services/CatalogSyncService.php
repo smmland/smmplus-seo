@@ -151,8 +151,18 @@ class CatalogSyncService
 
         $defaultLang = Language::query()->where('is_default', true)->value('code') ?? 'en';
 
+        // No translation exists yet for a service seen here for the first time - matching can
+        // only use the raw, single-language text the pricing API just returned. Once this seed
+        // row exists and gets AI-translated, LandingServicesController's own matching switches to
+        // the translated default-language text instead (see its referenceTexts()).
         $matched = CatalogService::query()->where('available', true)->get()
-            ->filter(fn (CatalogService $service) => $mappings->contains(fn (LandingServiceCategory $mapping) => $mapping->matches($service)));
+            ->filter(function (CatalogService $service) use ($mappings) {
+                return $mappings->contains(function (LandingServiceCategory $mapping) use ($service) {
+                    $raw = $mapping->matchField() === LandingServiceCategory::MATCH_FIELD_NAME ? $service->name : $service->category;
+
+                    return $mapping->matchesAny([$raw]);
+                });
+            });
 
         $seeded = 0;
 

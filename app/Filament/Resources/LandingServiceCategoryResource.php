@@ -13,10 +13,12 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Admin-managed mapping from a landing page's ?category= slug to a substring match against the
- * real, synced catalog_services.category/name text (CatalogServiceResource is where the admin
- * goes to see what that real text actually is) - built this way instead of any hardcoded guess at
- * smm.plus's real category labels or GEO/non-GEO wording.
+ * Admin-managed mapping from a landing page's ?category= slug to a substring match against a
+ * service's English/site-default-language category or name text (LandingServicesController
+ * always matches on that pair, never on whatever single language the pricing API's raw sync
+ * happens to return, so match_text stays reliable regardless of which language the upstream
+ * API account is set to) - built this way instead of any hardcoded guess at smm.plus's real
+ * category labels or GEO/non-GEO wording.
  */
 class LandingServiceCategoryResource extends Resource
 {
@@ -75,11 +77,11 @@ class LandingServiceCategoryResource extends Resource
             Forms\Components\TextInput::make('match_text')
                 ->required()
                 ->maxLength(255)
-                ->helperText('Case-insensitive substring checked against every synced service\'s category/name (see Catalog Services for the real values).'),
+                ->helperText('Case-insensitive substring, checked ONLY against each service\'s English and site-default-language category/name (not whatever language the pricing sync happens to return) - type it in English, or your site\'s default language, whichever the service is actually translated into (see Catalog Services / Service Translation for the real values).'),
 
             Forms\Components\TextInput::make('geo_keyword')
                 ->maxLength(255)
-                ->helperText('Optional. Substring that marks a matched service as GEO/country-targeted (checked against the same field above) - e.g. "GEO". Leave blank if this category has no GEO/non-GEO split.'),
+                ->helperText('Optional. Same English/default-language-only matching as above - substring that marks a matched service as GEO/country-targeted (checked against the same field above) - e.g. "GEO". Leave blank if this category has no GEO/non-GEO split.'),
 
             Forms\Components\Toggle::make('is_active')
                 ->default(true)

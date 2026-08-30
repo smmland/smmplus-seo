@@ -17,9 +17,10 @@ use Illuminate\Http\Request;
  * ID/min/max (e.g. /telegram-premium-bot-start) - serves the cached copy of smm.plus's own retail
  * catalog (CatalogSyncService) filtered down to one admin-configured logical category
  * (LandingServiceCategory), instead of every page hardcoding numbers that drift out of date.
- * index() (GET /api/services?category=...) lists a whole category; show() (GET
- * /api/services/{id}) looks up one already-known service id directly - both return services in
- * the exact same field shape.
+ * index() (GET /api/services?category=...) lists one curated landing-page category; show() (GET
+ * /api/services/{id}) looks up one already-known, currently-available service id directly without
+ * requiring it to belong to any LandingServiceCategory - both return services in the exact same
+ * field shape.
  *
  * Matching a service against a LandingServiceCategory's match_text is deliberately independent of
  * the response language (?lang=): the pricing API's raw category/name text is in whatever single
@@ -112,12 +113,13 @@ class LandingServicesController extends Controller
 
     /**
      * One service by its real service id - for a page that already knows which specific
-     * service it wants (e.g. a checkout/order-confirmation page), rather than fetching the whole
-     * category list to find it. Same public/curated boundary as index(): only a service currently
-     * matched by at least one active LandingServiceCategory is exposed here, and "not found" is
-     * returned identically whether the id doesn't exist, is unavailable, or simply isn't wired up
-     * to any landing category yet - callers can't distinguish "no such service" from "not public"
-     * by response shape alone.
+     * service it wants (e.g. a checkout/order-confirmation page), rather than fetching a whole
+     * category list to find it. Unlike index(), NOT restricted to services matched by a
+     * LandingServiceCategory - any currently-available synced service can be looked up here, since
+     * a page with an id already in hand isn't necessarily browsing by landing-page category.
+     * "category"/"is_geo" in the response are still populated on a best-effort basis when the
+     * service happens to match an active LandingServiceCategory (useful context), null otherwise -
+     * they're just no longer a requirement to be found at all.
      */
     public function show(Request $request, string $id): JsonResponse
     {
@@ -125,10 +127,8 @@ class LandingServicesController extends Controller
 
         $service = CatalogService::query()->where('service_id', $id)->where('available', true)->first();
 
-        $notFound = fn () => $this->respond(['ok' => false, 'error' => 'Service not found.'], 404, $origin);
-
         if (! $service) {
-            return $notFound();
+            return $this->respond(['ok' => false, 'error' => 'Service not found.'], 404, $origin);
         }
 
         $defaultLang = $this->defaultLang();
@@ -148,20 +148,16 @@ class LandingServicesController extends Controller
             ->get()
             ->first(fn (LandingServiceCategory $candidate) => $candidate->matchesAny($this->referenceTexts($candidate, $service, $referenceTranslations)));
 
-        if (! $mapping) {
-            return $notFound();
-        }
+        $isGeo = $mapping?->isGeoAny($this->referenceTexts($mapping, $service, $referenceTranslations));
 
         $translation = ServiceTranslation::query()
             ->where('service_key', $service->service_id)
             ->where('lang', $lang)
             ->first();
 
-        $isGeo = $mapping->isGeoAny($this->referenceTexts($mapping, $service, $referenceTranslations));
-
         return $this->respond([
             'ok' => true,
-            'category' => $mapping->slug,
+            'category' => $mapping?->slug,
             'lang' => $lang,
             'synced_at' => optional($service->synced_at)->toIso8601String(),
             'service' => $this->buildServicePayload($service, $translation, $isGeo, $this->catalogSettings->getCurrencySymbol()),

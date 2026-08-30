@@ -10,8 +10,9 @@ use Tests\TestCase;
 
 // GET /api/services/{id} - a single already-known service by its real id (e.g. a
 // checkout/order-confirmation page that only has the id, not the category slug it belongs to).
-// Same field shape and public/curated boundary as GET /api/services (index): only ever exposes a
-// service currently matched by at least one active LandingServiceCategory.
+// Same field shape as GET /api/services (index), but NOT restricted to services matched by a
+// LandingServiceCategory - any currently-available synced service can be looked up here; category
+// matching is only used, best-effort, to fill in "category"/"is_geo" when applicable.
 class LandingServiceShowApiTest extends TestCase
 {
     use RefreshDatabase;
@@ -84,27 +85,40 @@ class LandingServiceShowApiTest extends TestCase
         $response->assertStatus(404);
     }
 
-    public function test_a_service_not_matched_by_any_active_landing_category_returns_404(): void
+    public function test_a_service_not_matched_by_any_landing_category_is_still_returned(): void
     {
         $this->makeCatalogService(['category' => 'Instagram Followers']);
         $this->makeMapping(); // matches "Premium BotStart", not "Instagram Followers"
 
         $response = $this->getJson('/api/services/1');
 
-        $response->assertStatus(404);
+        $response->assertOk();
+        $this->assertNull($response->json('category'));
+        $this->assertNull($response->json('service.is_geo'));
     }
 
-    public function test_an_inactive_landing_category_does_not_expose_the_service(): void
+    public function test_a_service_with_no_landing_categories_configured_at_all_is_still_returned(): void
+    {
+        $this->makeCatalogService();
+
+        $response = $this->getJson('/api/services/1');
+
+        $response->assertOk();
+        $this->assertNull($response->json('category'));
+    }
+
+    public function test_an_inactive_landing_category_is_ignored_but_the_service_is_still_returned(): void
     {
         $this->makeMapping(['is_active' => false]);
         $this->makeCatalogService();
 
         $response = $this->getJson('/api/services/1');
 
-        $response->assertStatus(404);
+        $response->assertOk();
+        $this->assertNull($response->json('category'));
     }
 
-    public function test_geo_detection_matches_the_index_endpoint(): void
+    public function test_a_matched_service_still_reports_its_landing_category_and_geo_status(): void
     {
         $this->makeMapping();
         $this->makeCatalogService(['category' => 'Telegram Premium BotStart GEO']);
@@ -112,6 +126,7 @@ class LandingServiceShowApiTest extends TestCase
         $response = $this->getJson('/api/services/1');
 
         $response->assertOk();
+        $this->assertSame('premium_botstart', $response->json('category'));
         $this->assertTrue($response->json('service.is_geo'));
     }
 

@@ -17,6 +17,9 @@ use Illuminate\Http\Request;
  * ID/min/max (e.g. /telegram-premium-bot-start) - serves the cached copy of smm.plus's own retail
  * catalog (CatalogSyncService) filtered down to one admin-configured logical category
  * (LandingServiceCategory), instead of every page hardcoding numbers that drift out of date.
+ * index() (GET /api/services?category=...) lists a whole category; show() (GET
+ * /api/services/{id}) looks up one already-known service id directly - both return services in
+ * the exact same field shape.
  *
  * Matching a service against a LandingServiceCategory's match_text is deliberately independent of
  * the response language (?lang=): the pricing API's raw category/name text is in whatever single
@@ -87,32 +90,11 @@ class LandingServicesController extends Controller
 
         $services = $matched
             ->map(function (CatalogService $service) use ($mapping, $translations, $referenceTranslations, $currency) {
-                $translation = $translations->get($service->service_id);
                 $isGeo = $mapping->isGeoAny($this->referenceTexts($mapping, $service, $referenceTranslations));
 
                 return [
                     'is_geo' => $isGeo,
-                    'payload' => [
-                        'id' => $service->service_id,
-                        'name' => $translation?->title ?: $service->name,
-                        'description' => $translation?->description_text,
-                        'rate' => $service->rate,
-                        'rate_formatted' => $service->rate !== null ? $currency.number_format((float) $service->rate, 2).' / 1000' : null,
-                        'min' => $service->min,
-                        'max' => $service->max,
-                        'refill' => $service->refill,
-                        'cancel' => $service->cancel,
-                        'is_geo' => $isGeo,
-                        // Admin-typed only (Catalog Services list) - never inferred, since
-                        // neither smm.plus's API nor the scraped HTML says where a service's
-                        // delivery actually originates. Null unless an admin has explicitly set
-                        // it (e.g. exactly "Telegram Search").
-                        'start_source' => $service->source_label,
-                        // No real data source anywhere for this (not in smm.plus's API, not in
-                        // the HTML scrape) - omitted rather than guessed. Set source_label-style
-                        // admin overrides if this needs to be real in the future.
-                        // 'average_time' intentionally left out.
-                    ],
+                    'payload' => $this->buildServicePayload($service, $translations->get($service->service_id), $isGeo, $currency),
                 ];
             })
             ->when($geoFilter !== null, fn ($rows) => $rows->filter(fn (array $row) => $row['is_geo'] === $geoFilter))
@@ -126,6 +108,92 @@ class LandingServicesController extends Controller
             'synced_at' => optional($matched->max('synced_at'))->toIso8601String(),
             'services' => $services,
         ], 200, $origin);
+    }
+
+    /**
+     * One service by its real service id - for a page that already knows which specific
+     * service it wants (e.g. a checkout/order-confirmation page), rather than fetching the whole
+     * category list to find it. Same public/curated boundary as index(): only a service currently
+     * matched by at least one active LandingServiceCategory is exposed here, and "not found" is
+     * returned identically whether the id doesn't exist, is unavailable, or simply isn't wired up
+     * to any landing category yet - callers can't distinguish "no such service" from "not public"
+     * by response shape alone.
+     */
+    public function show(Request $request, string $id): JsonResponse
+    {
+        $origin = $request->headers->get('Origin');
+
+        $service = CatalogService::query()->where('service_id', $id)->where('available', true)->first();
+
+        $notFound = fn () => $this->respond(['ok' => false, 'error' => 'Service not found.'], 404, $origin);
+
+        if (! $service) {
+            return $notFound();
+        }
+
+        $defaultLang = $this->defaultLang();
+        $lang = trim((string) $request->query('lang', '')) ?: $defaultLang;
+
+        $referenceLangs = array_values(array_unique(array_filter(['en', $defaultLang])));
+
+        $referenceTranslations = ServiceTranslation::query()
+            ->where('service_key', $service->service_id)
+            ->whereIn('lang', $referenceLangs)
+            ->get()
+            ->groupBy('service_key');
+
+        $mapping = LandingServiceCategory::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->first(fn (LandingServiceCategory $candidate) => $candidate->matchesAny($this->referenceTexts($candidate, $service, $referenceTranslations)));
+
+        if (! $mapping) {
+            return $notFound();
+        }
+
+        $translation = ServiceTranslation::query()
+            ->where('service_key', $service->service_id)
+            ->where('lang', $lang)
+            ->first();
+
+        $isGeo = $mapping->isGeoAny($this->referenceTexts($mapping, $service, $referenceTranslations));
+
+        return $this->respond([
+            'ok' => true,
+            'category' => $mapping->slug,
+            'lang' => $lang,
+            'synced_at' => optional($service->synced_at)->toIso8601String(),
+            'service' => $this->buildServicePayload($service, $translation, $isGeo, $this->catalogSettings->getCurrencySymbol()),
+        ], 200, $origin);
+    }
+
+    /**
+     * @return array{id: string, name: string, description: ?string, rate: ?string, rate_formatted: ?string, min: ?int, max: ?int, refill: bool, cancel: bool, is_geo: ?bool, start_source: ?string}
+     */
+    private function buildServicePayload(CatalogService $service, ?ServiceTranslation $translation, ?bool $isGeo, string $currency): array
+    {
+        return [
+            'id' => $service->service_id,
+            'name' => $translation?->title ?: $service->name,
+            'description' => $translation?->description_text,
+            'rate' => $service->rate,
+            'rate_formatted' => $service->rate !== null ? $currency.number_format((float) $service->rate, 2).' / 1000' : null,
+            'min' => $service->min,
+            'max' => $service->max,
+            'refill' => $service->refill,
+            'cancel' => $service->cancel,
+            'is_geo' => $isGeo,
+            // Admin-typed only (Catalog Services list) - never inferred, since neither
+            // smm.plus's API nor the scraped HTML says where a service's delivery actually
+            // originates. Null unless an admin has explicitly set it (e.g. exactly "Telegram
+            // Search").
+            'start_source' => $service->source_label,
+            // No real data source anywhere for this (not in smm.plus's API, not in the HTML
+            // scrape) - omitted rather than guessed. Set source_label-style admin overrides if
+            // this needs to be real in the future.
+            // 'average_time' intentionally left out.
+        ];
     }
 
     /**

@@ -50,6 +50,11 @@ Route::match(['POST', 'OPTIONS'], '/reviews', [ReviewsController::class, 'store'
 // triggers a CORS preflight, so no OPTIONS entry/middleware is needed here.
 Route::get('/services', [LandingServicesController::class, 'index']);
 
+// One already-known service by its real id (e.g. a checkout/order-confirmation page that only
+// has the id, not the category slug) - same public/CORS boundary as the GET above, only ever
+// returns a service currently matched by at least one active LandingServiceCategory.
+Route::get('/services/{id}', [LandingServicesController::class, 'show'])->where('id', '[0-9]+');
+
 // Public gateway called directly from browser JS on smm.plus - protected by CORS origin
 // allowlist and per-IP/per-target rate limiting instead of a bearer token, since a secret
 // token can't be kept safe in client-side code.

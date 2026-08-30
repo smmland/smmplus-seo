@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FreeServiceController;
 use App\Http\Controllers\Api\GiveawayController;
+use App\Http\Controllers\Api\LandingServicesController;
 use App\Http\Controllers\Api\ReviewsController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SyncController;
@@ -28,6 +29,13 @@ Route::get('/reviews/summary', [ReviewsController::class, 'summary']);
 // abuse-protection stack as the other public POST endpoints below.
 Route::match(['POST', 'OPTIONS'], '/reviews', [ReviewsController::class, 'store'])
     ->middleware('gateway.cors');
+
+// Public, read-only cached copy of smm.plus's own retail service catalog, filtered to one
+// landing page's category (?category=..., see LandingServiceCategory) - unlike the GET routes
+// above this carries real pricing/service IDs, so it's restricted to the CORS allowlist
+// (Security Settings) instead of open to any origin. A GET with no custom headers never
+// triggers a CORS preflight, so no OPTIONS entry/middleware is needed here.
+Route::get('/services', [LandingServicesController::class, 'index']);
 
 // Public gateway called directly from browser JS on smm.plus - protected by CORS origin
 // allowlist and per-IP/per-target rate limiting instead of a bearer token, since a secret

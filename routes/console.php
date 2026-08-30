@@ -127,3 +127,11 @@ Schedule::command('telegram:alert-post-previews')
     ->everyMinute()
     ->withoutOverlapping()
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Re-syncs the cached retail price/min/max catalog (CatalogSyncService, smm.plus's own customer
+// API) GET /api/services reads from - daily is plenty since pricing rarely changes intraday, and
+// the admin has a "Sync now" action on the Catalog Services page for anything more urgent.
+Schedule::command('catalog:refresh-services')
+    ->daily()
+    ->withoutOverlapping()
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());

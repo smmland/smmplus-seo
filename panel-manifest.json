@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.27.29",
-    "notes": "Adds configurable Google reCAPTCHA v2 protection to panel and API login after repeated failures, with encrypted secret storage and IP/email-based failure tracking. Also extends Reviews search to include the full review description in both the main list and moderation queue. No database migration is required."
+    "version": "1.27.30",
+    "notes": "Adds a public GET /api/services endpoint (restricted to the smm.plus CORS origin) that serves a cached copy of smm.plus's own retail service catalog (price/min/max, synced daily from https://smm.plus/api/v2) filtered by an admin-configured landing-page category slug, with optional geo/lang filtering - for SEO landing pages that currently hardcode pricing. New SEO > Catalog Services (synced list, manual sync action, admin-set source label) and SEO > Landing Categories (slug-to-category mapping) admin pages, plus an smm.plus API key/host/currency field on SEO Settings. Requires 'Update database' for two new tables (catalog_services, landing_service_categories)."
 }

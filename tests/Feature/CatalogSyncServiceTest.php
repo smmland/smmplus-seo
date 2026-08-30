@@ -1,0 +1,118 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\CatalogService;
+use App\Services\CatalogSettingsService;
+use App\Services\CatalogSyncService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
+
+// CatalogSyncService is what keeps catalog_services (GET /api/services's data source) matching
+// smm.plus's own customer API (action=services on https://{host}/api/v2, per the documented
+// contract at https://smm.plus/api) - real retail price/min/max, not the HTML scraper's
+// name/description-only catalog.
+class CatalogSyncServiceTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function configureAndSetHost(string $host = 'smm.plus'): void
+    {
+        app(CatalogSettingsService::class)->setApiKey('secret-key');
+        app(CatalogSettingsService::class)->setHost($host);
+    }
+
+    public function test_sync_fails_without_an_api_key(): void
+    {
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('API key', $result['error']);
+    }
+
+    public function test_sync_upserts_services_from_the_documented_response_shape(): void
+    {
+        $this->configureAndSetHost();
+
+        Http::fake([
+            'https://smm.plus/api/v2' => Http::response([
+                ['service' => 1, 'name' => 'Followers', 'type' => 'Default', 'category' => 'First Category', 'rate' => '0.90', 'min' => '50', 'max' => '10000', 'refill' => true, 'cancel' => true],
+                ['service' => 2, 'name' => 'Comments', 'type' => 'Custom Comments', 'category' => 'Second Category', 'rate' => '8', 'min' => '10', 'max' => '1500', 'refill' => false, 'cancel' => true],
+            ], 200),
+        ]);
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(2, $result['total']);
+        $this->assertSame(2, $result['added']);
+        $this->assertSame(0, $result['changed']);
+
+        $service = CatalogService::query()->where('service_id', '1')->first();
+        $this->assertSame('Followers', $service->name);
+        $this->assertSame('First Category', $service->category);
+        $this->assertSame('0.90', $service->rate);
+        $this->assertSame(50, $service->min);
+        $this->assertSame(10000, $service->max);
+        $this->assertTrue($service->refill);
+        $this->assertTrue($service->cancel);
+        $this->assertTrue($service->available);
+
+        Http::assertSent(fn ($request) => $request['action'] === 'services' && $request['key'] === 'secret-key');
+    }
+
+    public function test_a_service_missing_from_a_later_sync_is_marked_unavailable_not_deleted(): void
+    {
+        $this->configureAndSetHost();
+
+        Http::fake(['https://smm.plus/api/v2' => Http::sequence()
+            ->push([
+                ['service' => 1, 'name' => 'Followers', 'category' => 'Cat', 'rate' => '1', 'min' => '1', 'max' => '2', 'refill' => false, 'cancel' => false],
+                ['service' => 2, 'name' => 'Comments', 'category' => 'Cat', 'rate' => '1', 'min' => '1', 'max' => '2', 'refill' => false, 'cancel' => false],
+            ], 200)
+            ->push([
+                ['service' => 1, 'name' => 'Followers', 'category' => 'Cat', 'rate' => '1', 'min' => '1', 'max' => '2', 'refill' => false, 'cancel' => false],
+            ], 200),
+        ]);
+        app(CatalogSyncService::class)->sync();
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(1, $result['unavailable']);
+        $this->assertTrue(CatalogService::query()->where('service_id', '1')->value('available'));
+        $this->assertFalse((bool) CatalogService::query()->where('service_id', '2')->value('available'));
+        $this->assertSame(2, CatalogService::query()->count(), 'the unavailable row is kept, not deleted');
+    }
+
+    public function test_sync_reports_failure_without_touching_the_cache_on_an_empty_response(): void
+    {
+        $this->configureAndSetHost();
+
+        Http::fake(['https://smm.plus/api/v2' => Http::sequence()
+            ->push([
+                ['service' => 1, 'name' => 'Followers', 'category' => 'Cat', 'rate' => '1', 'min' => '1', 'max' => '2', 'refill' => false, 'cancel' => false],
+            ], 200)
+            ->push([], 200),
+        ]);
+        app(CatalogSyncService::class)->sync();
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertFalse($result['ok']);
+        $this->assertTrue(CatalogService::query()->where('service_id', '1')->value('available'));
+    }
+
+    public function test_sync_reports_failure_on_an_error_response(): void
+    {
+        $this->configureAndSetHost();
+
+        Http::fake(['https://smm.plus/api/v2' => Http::response(['error' => 'Invalid API key'], 200)]);
+
+        $result = app(CatalogSyncService::class)->sync();
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('Invalid API key', $result['error']);
+    }
+}

@@ -40,4 +40,18 @@
             Save
         </x-filament::button>
     </form>
+
+    <x-filament::section heading="smm.plus API (catalog pricing)" class="mt-6">
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+            Credentials smm.plus's own customer API (https://smm.plus/api) uses to keep GET /api/services's cached price/min/max fresh for landing pages.
+        </p>
+
+        <form wire:submit="saveCatalog" class="mt-4">
+            {{ $this->catalogForm }}
+
+            <x-filament::button type="submit" class="mt-4">
+                Save catalog API settings
+            </x-filament::button>
+        </form>
+    </x-filament::section>
 </x-filament-panels::page>

@@ -36,7 +36,7 @@ class TelegramPostSenderServiceViewsHookTest extends TestCase
         app(TelegramAutoViewsSettingsService::class)->setSettings(true, $upstream->id, '4512', 1000);
     }
 
-    public function test_a_successful_send_triggers_a_views_order(): void
+    public function test_a_successful_send_is_left_for_the_scheduled_view_checker(): void
     {
         $this->configureChannelAndBot();
         $this->configureAutoViews();
@@ -44,15 +44,13 @@ class TelegramPostSenderServiceViewsHookTest extends TestCase
 
         Http::fake([
             '*api.telegram.org*' => Http::response(['ok' => true, 'result' => ['message_id' => 99]], 200),
-            'https://provider.example.com/*' => Http::response(['order' => 1], 200),
         ]);
 
         app(TelegramPostSenderService::class)->sendNow($post);
 
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'provider.example.com')
-            && $request['link'] === 'https://t.me/testchannel/99');
-
-        $this->assertNotNull($post->fresh()->views_ordered_at);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'provider.example.com'));
+        $this->assertSame(99, $post->fresh()->telegram_message_id);
+        $this->assertNull($post->fresh()->views_ordered_at);
     }
 
     public function test_a_failed_send_does_not_trigger_a_views_order(): void

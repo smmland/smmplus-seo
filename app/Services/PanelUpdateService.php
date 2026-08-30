@@ -266,6 +266,7 @@ class PanelUpdateService
     {
         Artisan::call('view:clear');
         Artisan::call('config:clear');
+        Artisan::call('route:clear');
         Artisan::call('cache:clear');
 
         if (function_exists('opcache_reset')) {

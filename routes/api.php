@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AnalyticsController;
+use App\Http\Controllers\Api\AnalyticsPurchaseController;
 use App\Http\Controllers\Api\FreeServiceController;
 use App\Http\Controllers\Api\GiveawayController;
 use App\Http\Controllers\Api\LandingServicesController;
@@ -11,6 +13,17 @@ use App\Http\Controllers\Api\UrlsController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+
+// Lightweight first-party, SEO-focused analytics endpoint used by the global smm.plus layout.
+// Browser code cannot safely hold a bearer token, so origin validation, payload limits and a
+// dedicated high-enough analytics rate limit protect it instead.
+Route::match(['POST', 'OPTIONS'], '/analytics/collect', [AnalyticsController::class, 'store'])
+    ->middleware('analytics.cors');
+
+// Financial values must only come from the trusted ordering backend. Unlike browser telemetry,
+// this endpoint has no CORS access and authenticates the exact raw JSON body with an HMAC.
+Route::post('/analytics/purchases', [AnalyticsPurchaseController::class, 'store'])
+    ->middleware(['analytics.purchase.signature', 'throttle:120,1']);
 
 // Public, read-only, open to any origin - see ReviewsController for why it skips the
 // gateway.cors stack the mutating public endpoints below use.

@@ -264,6 +264,7 @@
                                 <th class="p-2 text-start text-sm font-semibold">Image</th>
                                 <th class="p-2 text-start text-sm font-semibold">Post</th>
                                 <th class="p-2 text-start text-sm font-semibold">Sent</th>
+                                <th class="p-2 text-start text-sm font-semibold">Views</th>
                                 <th class="p-2 text-start text-sm font-semibold">Actions</th>
                             </tr>
                         </thead>
@@ -284,6 +285,20 @@
                                     </td>
                                     <td class="p-2 text-sm text-gray-600 dark:text-gray-300">
                                         {{ $post->sent_at?->diffForHumans() }}
+                                    </td>
+                                    <td class="p-2 text-sm text-gray-600 dark:text-gray-300" style="min-width: 110px;">
+                                        @if ($post->observed_views !== null)
+                                            <div>{{ number_format($post->observed_views) }}</div>
+                                            <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">checked {{ $post->views_checked_at?->diffForHumans() }}</div>
+                                        @else
+                                            <span class="text-gray-400">Not checked</span>
+                                        @endif
+                                        @if ($post->views_last_order_quantity)
+                                            <div class="mt-1 text-xs text-success-600 dark:text-success-400">+{{ number_format($post->views_last_order_quantity) }} ordered</div>
+                                        @endif
+                                        @if ($post->views_order_error)
+                                            <div class="mt-1 text-xs text-danger-600 dark:text-danger-400" title="{{ $post->views_order_error }}">{{ \Illuminate\Support\Str::limit($post->views_order_error, 55) }}</div>
+                                        @endif
                                     </td>
                                     <td class="p-2">
                                         <x-filament::icon-button

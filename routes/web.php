@@ -1,11 +1,17 @@
 <?php
 
+use App\Http\Controllers\AnalyticsTrackerController;
 use App\Http\Controllers\BlogContentAssetController;
 use App\Http\Controllers\EditorAssetController;
 use App\Http\Controllers\SitemapController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => response()->json(['app' => config('app.name'), 'status' => 'ok']));
+
+// Some cPanel deployments forward every request to Laravel while keeping the app's `public`
+// directory outside the virtual host document root. Serve the tracker through Laravel too, so
+// the global website snippet works on both conventional and those legacy deployments.
+Route::get('/analytics/tracker.js', AnalyticsTrackerController::class);
 
 Route::get('/sitemap_index.xml', [SitemapController::class, 'index']);
 Route::get('/sitemap-{category}.xml', [SitemapController::class, 'category']);

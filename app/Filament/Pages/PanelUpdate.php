@@ -70,6 +70,10 @@ class PanelUpdate extends Page
 
     public function runMigrations(): void
     {
+        // Route files can change in an update even when no migration is pending. Clearing here
+        // also gives cPanel-only admins a post-install way to activate a newly-added route when
+        // the previous version of PanelUpdateService was still loaded during the file swap.
+        Artisan::call('route:clear');
         Artisan::call('migrate', ['--force' => true]);
         $output = trim(Artisan::output());
 

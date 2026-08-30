@@ -25,6 +25,11 @@ Schedule::command('sitemap:sync')->everyFifteenMinutes()->withoutOverlapping();
 // unbounded on a busy gateway.
 Schedule::command('gateway:prune-logs')->daily();
 
+// Raw visitor events are useful for detailed SEO analysis, but retaining them forever would
+// make dashboard queries and backups needlessly expensive. Aggregated insight over the most
+// recent six months is the useful window for this first-party dashboard.
+Schedule::command('analytics:prune --days=180')->daily()->withoutOverlapping();
+
 // Detects IPs over the configurable daily request threshold and blocks them with an
 // escalating cool-down (gated on Gateway Settings: auto_block_enabled).
 Schedule::command('gateway:auto-block-ips')->everyFiveMinutes()->withoutOverlapping();
@@ -118,6 +123,14 @@ Schedule::command('telegram:send-queue')
 Schedule::command('telegram:capture-channel-posts')
     ->everyMinute()
     ->withoutOverlapping()
+    ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
+
+// Checks the public counters of recent channel posts and orders only their shortfall from the
+// configured target. The service keeps a delivery cool-down per post, while withoutOverlapping
+// prevents two scheduler ticks from placing the same order concurrently.
+Schedule::command('telegram:top-up-post-views')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(30)
     ->skip(fn () => app(SettingsService::class)->isPanelUpdateInProgress());
 
 // Previews a post about to send, via personal DM (Telegram Channel > Alerts, no-op when that

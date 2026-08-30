@@ -48,6 +48,48 @@ Public, unauthenticated (what Google actually fetches):
 
 - `GET /sitemap_index.xml`
 - `GET /sitemap-pages.xml`, `/sitemap-blog.xml`, `/sitemap-landing.xml`, `/sitemap-other.xml`
+- `POST /api/analytics/collect` — origin-checked, rate-limited first-party analytics beacon
+
+## First-party SEO analytics
+
+Load `/analytics/tracker.js` from the shared website layout. It records page views, sessions,
+active engagement, scroll depth, landing attribution, internal/outbound clicks, key conversions,
+404 visits, browser errors and Core Web Vitals without storing raw IP addresses. The Filament
+**Analytics → Website Statistics** page provides time/language/device/audience filters and
+actionable SEO tables. The layout supplies only `guest`, `authenticated`, or opt-in `internal`
+status—never a user ID, email, or account attribute. Raw events are pruned after 180 days.
+
+Paid orders and refunds use a separate trusted endpoint: `POST /api/analytics/purchases`. The
+ordering backend sends an `X-SMM-Timestamp` Unix timestamp and an `X-SMM-Signature` equal to
+`sha256=` plus `HMAC-SHA256(timestamp + "." + exact_raw_json_body, ANALYTICS_PURCHASE_WEBHOOK_SECRET)`.
+The JSON contract is:
+
+```json
+{
+  "site_id": "smm-plus",
+  "event_id": "a-new-uuid-for-every-order-update",
+  "order_id": "ORD-1001",
+  "status": "paid",
+  "gross_amount": "24.50",
+  "refunded_amount": "0",
+  "currency": "USD",
+  "visitor_id": "optional-tracker-uuid",
+  "session_id": "optional-tracker-uuid",
+  "paid_at": "2026-08-26T12:00:00Z",
+  "updated_at": "2026-08-26T12:00:00Z"
+}
+```
+
+Valid statuses are `paid`, `partially_refunded`, `refunded`, and `cancelled`. A fresh `event_id`
+is required for each update, while `order_id` stays stable. Replays are permanently deduplicated,
+older updates cannot undo newer refunds, and currency totals are never combined. The anonymous
+tracker IDs are available through `window.smmAnalytics.context()` so checkout can attach them to
+the server-side order; the amount and status must always come from the trusted order database.
+
+The collection endpoint treats all browser telemetry as untrusted: it enforces an exact CORS
+origin allowlist, a strict event schema, request and event budgets, payload-size limits, trusted
+Cloudflare proxy ranges, and server-side sensitive-value redaction. The tracker supports SHA-384
+Subresource Integrity; never put an API secret in the public script because it would not be secret.
 
 ## Notes
 

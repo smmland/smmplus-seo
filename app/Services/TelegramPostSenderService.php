@@ -16,7 +16,6 @@ class TelegramPostSenderService
     public function __construct(
         private readonly TelegramBotService $bot,
         private readonly TelegramSettingsService $settings,
-        private readonly TelegramPostViewsService $postViews,
     ) {}
 
     /**
@@ -41,9 +40,6 @@ class TelegramPostSenderService
                 'error_message' => null,
             ]);
 
-            // No-ops entirely unless configured (TelegramAutoViewsSettingsService) - best-effort,
-            // never lets a views-ordering hiccup affect the send result this method returns.
-            $this->postViews->orderViewsFor($post);
         } else {
             $post->update(['status' => TelegramPost::STATUS_FAILED, 'error_message' => $result['message']]);
         }

@@ -121,12 +121,17 @@ class LandingServicesApiTest extends TestCase
         $this->makeMapping(['geo_keyword' => null]);
         $this->makeCatalogService(['service_id' => '1', 'category' => 'Telegram Premium BotStart']);
 
-        $response = $this->getJson('/api/services?category=premium_botstart&geo=true');
+        // is_geo is null (not applicable) for this mapping - a ?geo= filter can only exclude a
+        // row confirmed true/false, so it has no effect here and every ?geo= value (or none at
+        // all) returns the same, full result.
+        $default = $this->getJson('/api/services?category=premium_botstart');
+        $geoTrue = $this->getJson('/api/services?category=premium_botstart&geo=true');
+        $geoFalse = $this->getJson('/api/services?category=premium_botstart&geo=false');
 
-        // is_geo is null (not applicable) for this mapping, so it never matches a true/false
-        // filter - nothing is wrongly included or excluded because of it.
-        $this->assertCount(0, $response->json('services'));
-        $this->assertNull($this->getJson('/api/services?category=premium_botstart')->json('services.0.is_geo'));
+        $this->assertCount(1, $default->json('services'));
+        $this->assertCount(1, $geoTrue->json('services'));
+        $this->assertCount(1, $geoFalse->json('services'));
+        $this->assertNull($default->json('services.0.is_geo'));
     }
 
     public function test_name_and_description_use_the_requested_languages_translation_when_available(): void

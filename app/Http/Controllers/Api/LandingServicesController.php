@@ -98,7 +98,11 @@ class LandingServicesController extends Controller
                     'payload' => $this->buildServicePayload($service, $translations->get($service->service_id), $isGeo, $currency),
                 ];
             })
-            ->when($geoFilter !== null, fn ($rows) => $rows->filter(fn (array $row) => $row['is_geo'] === $geoFilter))
+            // A row whose is_geo is null (this mapping has no geo_keyword configured, so the
+            // geo/non-geo distinction doesn't apply to it at all) always passes through - a
+            // ?geo= filter can only ever exclude a row that's confirmed true/false, never one
+            // where the concept isn't applicable in the first place.
+            ->when($geoFilter !== null, fn ($rows) => $rows->filter(fn (array $row) => $row['is_geo'] === null || $row['is_geo'] === $geoFilter))
             ->map(fn (array $row) => $row['payload'])
             ->values();
 

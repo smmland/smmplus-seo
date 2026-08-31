@@ -1,5 +1,5 @@
 {
     "app": "smmplus-seo-panel",
-    "version": "1.31.8",
-    "notes": "Fixes GET /api/services/{id} wrongly 404ing for real, available catalog services that just aren't wired up to a Landing Category yet - it no longer requires a Landing Category match at all (that restriction, added in 1.31.7, was more than intended). Any currently-available synced service can now be looked up by id; \"category\"/\"is_geo\" in the response are still filled in when the service happens to match an active Landing Category (null otherwise), but that's no longer required for the lookup to succeed. GET /api/services (the category list endpoint) is unaffected. Requires 'Update database' for two new tables (catalog_services, landing_service_categories) if not already applied."
+    "version": "1.31.9",
+    "notes": "Fixes GET /api/services?category=...&geo=... wrongly returning zero results whenever a Landing Category has no Geo keyword set and the caller still passed ?geo=true or ?geo=false - a category with no geo/non-geo split now correctly ignores the geo parameter entirely and returns its full result either way, instead of being filtered down to nothing. Also fixes GET /api/services/{id} wrongly 404ing for real, available catalog services that just aren't wired up to a Landing Category yet. Requires 'Update database' for two new tables (catalog_services, landing_service_categories) if not already applied."
 }
